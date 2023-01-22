@@ -2,7 +2,9 @@
 
 from trame.app import get_server, Server
 
-import cyclone as cy
+from .scene import Scene
+from .logic import Logic
+from .ui import UI
 
 def main(server = None, **kwargs):
 
@@ -15,10 +17,10 @@ def main(server = None, **kwargs):
     server.cli.add_argument("--config", help="TOML configutation file.", dest="cfg_file", required=True)
     args = server.cli.parse_args()
 
-    scene = cy.Scene(args.cfg_file)
+    scene = Scene(args.cfg_file)
 
-    cy.Logic(server, scene)
-    cy.UI(server, scene)
+    Logic(server, scene)
+    UI(server, scene)
     
     server.start(open_browser=False)
 
