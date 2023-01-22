@@ -1,14 +1,11 @@
-import os
 import logging
+import os
 
 from vtkmodules.vtkIOGeometry import vtkOBJReader
-from vtkmodules.vtkRenderingCore import (
-    vtkActor,
-    vtkPolyDataMapper,
-    vtkRenderer,
-)
+from vtkmodules.vtkRenderingCore import vtkActor, vtkPolyDataMapper, vtkRenderer
 
 from . import Object
+
 
 class Mesh(Object):
     def __init__(self, cfg: str, renderer: vtkRenderer):

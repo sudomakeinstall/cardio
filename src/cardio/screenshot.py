@@ -1,9 +1,8 @@
-from vtkmodules.vtkRenderingCore import vtkWindowToImageFilter
 from vtkmodules.vtkIOImage import vtkPNGWriter
+from vtkmodules.vtkRenderingCore import vtkRenderWindow, vtkWindowToImageFilter
 
-from vtkmodules.vtkRenderingCore import vtkRenderWindow
 
-class Screenshot():
+class Screenshot:
     def __init__(self, renderWindow: vtkRenderWindow):
         self.windowToImageFilter = vtkWindowToImageFilter()
         self.windowToImageFilter.SetInput(renderWindow)

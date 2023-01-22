@@ -1,21 +1,21 @@
-from . import Object
-
-import os
 import logging
+import os
 
-import numpy as np
 import itk
-
+import numpy as np
+from vtkmodules.vtkCommonDataModel import vtkPiecewiseFunction
 from vtkmodules.vtkIOGeometry import vtkOBJReader
 from vtkmodules.vtkRenderingCore import (
     vtkColorTransferFunction,
+    vtkRenderer,
     vtkVolume,
     vtkVolumeProperty,
-    vtkRenderer,
 )
 from vtkmodules.vtkRenderingVolume import vtkGPUVolumeRayCastMapper
 from vtkmodules.vtkRenderingVolumeOpenGL2 import vtkOpenGLRayCastImageDisplayHelper
-from vtkmodules.vtkCommonDataModel import vtkPiecewiseFunction
+
+from . import Object
+
 
 def reset_direction(image):
     origin = np.asarray(itk.origin(image))
@@ -23,7 +23,7 @@ def reset_direction(image):
     size = np.asarray(itk.size(image))
     direction = np.asarray(image.GetDirection())
 
-    direction[direction==1] = 0
+    direction[direction == 1] = 0
     origin += np.dot(size, np.dot(np.diag(spacing), direction))
     direction = np.identity(3)
 
@@ -40,9 +40,10 @@ def reset_direction(image):
         output_spacing=spacing,
         output_origin=origin,
         output_direction=direction,
-        )
+    )
 
     return output
+
 
 class Volume(Object):
     def __init__(self, cfg: str, renderer: vtkRenderer):
@@ -90,19 +91,19 @@ class Volume(Object):
         opacityTransferFunction.AddPoint(b, 0.15)
         opacityTransferFunction.AddPoint(c, 0.15)
         opacityTransferFunction.AddPoint(d, 0.85)
-    
+
         # Create transfer mapping scalar value to color.
         colorTransferFunction = vtkColorTransferFunction()
         colorTransferFunction.AddRGBPoint(a, 0.0, 0.0, 0.0)
         colorTransferFunction.AddRGBPoint(b, 1.0, 0.5, 0.3)
         colorTransferFunction.AddRGBPoint(c, 1.0, 0.5, 0.3)
         colorTransferFunction.AddRGBPoint(d, 1.0, 1.0, 0.9)
-    
+
         volumeGradientOpacity = vtkPiecewiseFunction()
-        volumeGradientOpacity.AddPoint(0,   0.0)
-        volumeGradientOpacity.AddPoint(90,  0.5)
+        volumeGradientOpacity.AddPoint(0, 0.0)
+        volumeGradientOpacity.AddPoint(90, 0.5)
         volumeGradientOpacity.AddPoint(100, 1.0)
-    
+
         # The property describes how the data will look.
         self.property = vtkVolumeProperty()
         self.property.SetColor(colorTransferFunction)

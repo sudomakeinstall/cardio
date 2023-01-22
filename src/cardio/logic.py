@@ -4,6 +4,7 @@ from trame.app import asynchronous
 
 from . import Scene
 
+
 class Logic:
     def __init__(self, server, scene: Scene):
         self.server = server
@@ -11,7 +12,9 @@ class Logic:
 
         self.server.state.change("frame")(self.update_frame)
         self.server.state.change("playing")(self.play)
-        self.server.state.change(*[f"mesh_visibility_{m.label}" for m in self.scene.meshes])(self.sync_mesh_visibility)
+        self.server.state.change(
+            *[f"mesh_visibility_{m.label}" for m in self.scene.meshes]
+        )(self.sync_mesh_visibility)
 
         self.server.controller.increment_frame = self.increment_frame
         self.server.controller.decrement_frame = self.decrement_frame
@@ -35,7 +38,7 @@ class Logic:
                     deg = 360 / (self.scene.nframes * state.bpr)
                     self.scene.renderer.GetActiveCamera().Azimuth(deg)
                 self.server.controller.view_update()
-            await asyncio.sleep(1/state.bpm*60/self.scene.nframes)
+            await asyncio.sleep(1 / state.bpm * 60 / self.scene.nframes)
 
     def sync_mesh_visibility(self, **kwargs):
         for m in self.scene.meshes:
@@ -47,34 +50,39 @@ class Logic:
         if not self.server.state.playing:
             self.server.state.frame = (self.server.state.frame + 1) % self.scene.nframes
             self.server.controller.view_update()
-    
+
     def decrement_frame(self):
         if not self.server.state.playing:
             self.server.state.frame = (self.server.state.frame - 1) % self.scene.nframes
             self.server.controller.view_update()
-    
+
     @asynchronous.task
     async def screenshot(self):
         dr = dt.datetime.now().strftime(self.scene.screenshot_subdirectory_format)
         dr = f"{self.scene.screenshot_directory}/{dr}"
         os.makedirs(dr)
-    
+
         if not (self.server.state.incrementing or self.server.state.rotating):
             ss = cy.Screenshot(self.scene.renderWindow)
             ss.save(f"{dr}/0.png")
         else:
             n = self.scene.nframes
-            if self.server.state.rotating: n *= self.server.state.bpr
+            if self.server.state.rotating:
+                n *= self.server.state.bpr
             deg = 360 / (self.scene.nframes * self.server.state.bpr)
             for i in range(n):
                 with self.server.state:
-                    if self.server.state.rotating: self.scene.renderer.GetActiveCamera().Azimuth(deg)
-                    if self.server.state.incrementing: self.increment_frame()
+                    if self.server.state.rotating:
+                        self.scene.renderer.GetActiveCamera().Azimuth(deg)
+                    if self.server.state.incrementing:
+                        self.increment_frame()
                     self.server.controller.view_update()
                     ss = cy.Screenshot(self.scene.renderWindow)
                     ss.save(f"{dr}/{i}.png")
-                    await asyncio.sleep(1/self.server.state.bpm*60/self.scene.nframes)
-    
+                    await asyncio.sleep(
+                        1 / self.server.state.bpm * 60 / self.scene.nframes
+                    )
+
     def reset_all(self):
         self.server.state.frame = 0
         self.server.state.playing = False

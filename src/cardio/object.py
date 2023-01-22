@@ -1,5 +1,6 @@
 from vtkmodules.vtkRenderingCore import vtkRenderer
 
+
 class Object:
     def __init__(self, cfg: str, renderer: vtkRenderer):
         self.label: str = cfg["label"]

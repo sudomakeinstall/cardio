@@ -1,27 +1,26 @@
-from . import Mesh, Volume
-
 import logging
 
 import tomlkit as tk
 
 # noinspection PyUnresolvedReferences
 import vtkmodules.vtkInteractionStyle
-# noinspection PyUnresolvedReferences
-import vtkmodules.vtkRenderingOpenGL2
-
-from vtkmodules.vtkIOGeometry import vtkOBJReader
-from vtkmodules.vtkRenderingCore import (
-    vtkRenderWindow,
-    vtkRenderWindowInteractor,
-    vtkRenderer,
-)
-
-# Required for interactor initialization
-from vtkmodules.vtkInteractionStyle import vtkInteractorStyleSwitch  # noqa
 
 # Required for rendering initialization, not necessary for
 # local rendering, but doesn't hurt to include it
+# noinspection PyUnresolvedReferences
 import vtkmodules.vtkRenderingOpenGL2  # noqa
+
+# Required for interactor initialization
+from vtkmodules.vtkInteractionStyle import vtkInteractorStyleSwitch  # noqa
+from vtkmodules.vtkIOGeometry import vtkOBJReader
+from vtkmodules.vtkRenderingCore import (
+    vtkRenderer,
+    vtkRenderWindow,
+    vtkRenderWindowInteractor,
+)
+
+from . import Mesh, Volume
+
 
 class Scene:
     def __init__(self, cfg_file: str):
@@ -30,7 +29,9 @@ class Scene:
         self.nframes: int = None
         self.renderer: vtkRenderer = vtkRenderer()
         self.renderWindow: vtkRenderWindow = vtkRenderWindow()
-        self.renderWindowInteractor: vtkRenderWindowInteractor = vtkRenderWindowInteractor()
+        self.renderWindowInteractor: vtkRenderWindowInteractor = (
+            vtkRenderWindowInteractor()
+        )
         self.renderWindowInteractor.GetInteractorStyle().SetCurrentStyleToTrackballCamera()
 
         with open(cfg_file, mode="rt", encoding="utf-8") as fp:
@@ -59,29 +60,32 @@ class Scene:
     def set_nframes(self):
         for mesh in self.meshes:
             n = len(mesh.actors)
-            assert(n != 0)
+            assert n != 0
             if self.nframes is None:
                 self.nframes = n
             else:
-                assert(n == self.nframes)
-        assert(self.nframes is not None)
+                assert n == self.nframes
+        assert self.nframes is not None
 
     def setup_rendering(self):
-        self.renderer.SetBackground(self.background_r, self.background_g, self.background_b)
+        self.renderer.SetBackground(
+            self.background_r, self.background_g, self.background_b
+        )
         self.renderWindow.AddRenderer(self.renderer)
         self.renderWindowInteractor.SetRenderWindow(self.renderWindow)
 
     def hide_all_frames(self):
-      for a in self.renderer.GetActors():
-          a.SetVisibility(False)
+        for a in self.renderer.GetActors():
+            a.SetVisibility(False)
 
     def show_frame(self, frame: int):
-      for mesh in self.meshes:
-        if mesh.visible:
-            mesh.actors[frame].SetVisibility(True)
+        for mesh in self.meshes:
+            if mesh.visible:
+                mesh.actors[frame].SetVisibility(True)
+
 
 if __name__ == "__main__":
-    logging.basicConfig(level = logging.DEBUG)
+    logging.basicConfig(level=logging.DEBUG)
     s = Scene("./viz.toml")
     s.renderWindowInteractor.Initialize()
     s.renderer.ResetCamera()
