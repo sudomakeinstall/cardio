@@ -1,27 +1,13 @@
-# Cyclone
+# Cardio
 
-A simple application for visualizing cine data.
-
-## Setting Up the Environment
-
-```bash
-python -m venv .venv
-source ./.venv/bin/activate
-python -m pip install --upgrade pip
-pip install "trame>=2.0.0"
-pip install "vtk>=9.1.0"
-pip install "tomlkit>=0.11.6"
-```
+A simple web-based viewer for 4D ('cine') medical imaging data.
 
 ## Running
 
 ```bash
-./app.py --config ./cfg-example.toml
+cardio --config ./examples/cfg-example.toml
+
+App running at:
+ - Local:   http://localhost:8080/
+ - Network: http://127.0.0.1:8080/
 ```
-
-## Useful Links for Developers
-
-- https://materialdesignicons.com/
-- https://vimeo.com/761096621/af2287747f
-- https://kitware.github.io/trame/docs/index.html
-- https://trame.readthedocs.io/en/latest/index.html
