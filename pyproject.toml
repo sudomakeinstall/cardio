@@ -38,15 +38,14 @@ maintainers = [
 readme = "README.md"
 requires-python = ">=3.10"
 
+[project.optional-dependencies]
+dev = ["black", "isort", "pip-tools", "pytest"]
+
 [project.gui-scripts]
 cardio = "cardio.app:main"
 
 [project.urls]
 repository = "https://github.com/dvigneault/cardio"
 
-#[options]
-#packages = find:
-#
-#[options.packages.find]
-#where = ["src"]
-#
+[tool.isort]
+profile = "black"
