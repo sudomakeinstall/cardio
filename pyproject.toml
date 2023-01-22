@@ -1,3 +1,52 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>61.0.0"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "cardio"
+version = "2023.01.21"
+authors = [
+    {name = "Davis Marc Vigneault", email = "davis.vigneault@gmail.com"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: JavaScript",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = [
+    "trame",
+    "vtk",
+    "itk",
+    "tomlkit",
+    "numpy",
+]
+description = "A simple web-based viewer for 4D ('cine') medical imaging data."
+keywords = ["Medical", "Imaging", "4D", "Visualization"]
+license = {file = "LICENSE"}
+maintainers = [
+    {name = "Davis Marc Vigneault", email = "davis.vigneault@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.10"
+
+[project.gui-scripts]
+cardio = "cardio.app:main"
+
+[project.urls]
+repository = "https://github.com/dvigneault/cardio"
+
+#[options]
+#packages = find:
+#
+#[options.packages.find]
+#where = ["src"]
+#
