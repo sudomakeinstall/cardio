@@ -1,5 +1,6 @@
 import logging
 
+import numpy as np
 import tomlkit as tk
 
 # noinspection PyUnresolvedReferences
@@ -58,14 +59,13 @@ class Scene:
             volume.setup_pipeline(self.current_frame)
 
     def set_nframes(self):
-        for mesh in self.meshes:
-            n = len(mesh.actors)
-            assert n != 0
-            if self.nframes is None:
-                self.nframes = n
-            else:
-                assert n == self.nframes
-        assert self.nframes is not None
+        ns = []
+        ns += [len(m.actors) for m in self.meshes]
+        ns += [len(v.actors) for v in self.volumes]
+        ns = np.array(ns)
+        assert len(ns) > 0
+        assert np.all(ns == ns[0])
+        self.nframes = int(ns[0])
 
     def setup_rendering(self):
         self.renderer.SetBackground(
