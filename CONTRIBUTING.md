@@ -4,14 +4,15 @@ Contributions are welcome!  Here are the instructions for setting up a developme
 
 ## Setting Up a Development Environment
 
+Clone the repo, setup a virtual environment, and install the package locally:
+
 ```bash
 git clone git@github.com:DVigneault/cardio.git
 cd cardio
 python -m venv .venv
 . ./.venv/bin/activate
 pip install --upgrade pip
-pip install -e .
-cardio --config ./examples/cfg-example.toml
+pip install --editable ".[dev]"
 ```
 
 ## Useful Links for Developers
