@@ -77,17 +77,13 @@ class Scene:
     def hide_all_frames(self):
         for a in self.renderer.GetActors():
             a.SetVisibility(False)
+        for a in self.renderer.GetVolumes():
+            a.SetVisibility(False)
 
     def show_frame(self, frame: int):
         for mesh in self.meshes:
             if mesh.visible:
                 mesh.actors[frame].SetVisibility(True)
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    s = Scene("./viz.toml")
-    s.renderWindowInteractor.Initialize()
-    s.renderer.ResetCamera()
-    s.renderWindow.Render()
-    s.renderWindowInteractor.Start()
+        for volume in self.volumes:
+            if volume.visible:
+                volume.actors[frame].SetVisibility(True)

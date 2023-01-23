@@ -15,6 +15,9 @@ class Logic:
         self.server.state.change(
             *[f"mesh_visibility_{m.label}" for m in self.scene.meshes]
         )(self.sync_mesh_visibility)
+        self.server.state.change(
+            *[f"volume_visibility_{v.label}" for v in self.scene.volumes]
+        )(self.sync_volume_visibility)
 
         self.server.controller.increment_frame = self.increment_frame
         self.server.controller.decrement_frame = self.decrement_frame
@@ -44,6 +47,12 @@ class Logic:
         for m in self.scene.meshes:
             m.visible = self.server.state[f"mesh_visibility_{m.label}"]
             m.actors[self.server.state.frame].SetVisibility(m.visible)
+        self.server.controller.view_update()
+
+    def sync_volume_visibility(self, **kwargs):
+        for v in self.scene.volumes:
+            v.visible = self.server.state[f"volume_visibility_{v.label}"]
+            v.actors[self.server.state.frame].SetVisibility(v.visible)
         self.server.controller.view_update()
 
     def increment_frame(self):

@@ -185,3 +185,14 @@ class UI:
                         dense=True,
                         label=m.label,
                     )
+
+                for i, v in enumerate(self.scene.volumes):
+                    vuetify.VCheckbox(
+                        v_model=(f"volume_visibility_{v.label}", v.visible),
+                        on_icon="mdi-eye",
+                        off_icon="mdi-eye-off",
+                        classes="mx-1",
+                        hide_details=True,
+                        dense=True,
+                        label=v.label,
+                    )
