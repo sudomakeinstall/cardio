@@ -19,7 +19,8 @@ pip install --editable ".[dev]"
 
 ### Python Packaging
 
-- https://packaging.python.org/en/latest/specifications/declaring-project-metadata/
+- https://packaging.python.org/en/latest/
+- https://setuptools.pypa.io/en/latest/
 - https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
 - https://realpython.com/pypi-publish-python-package/
 
