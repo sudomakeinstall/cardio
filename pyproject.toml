@@ -37,10 +37,9 @@ maintainers = [
 ]
 readme = "README.md"
 requires-python = ">=3.10"
-dynamic = ["version"]
 
 [project.optional-dependencies]
-dev = ["black", "isort", "pip-tools", "pytest", "bumpver"]
+dev = ["black", "isort", "pip-tools", "pytest", "bumpver", "build", "twine"]
 
 [project.gui-scripts]
 cardio = "cardio.app:main"
