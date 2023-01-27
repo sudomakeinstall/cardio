@@ -15,6 +15,19 @@ pip install --upgrade pip
 pip install --editable ".[dev]"
 ```
 
+## Uploading to PyPI
+
+```bash
+. ./.venv/bin/activate
+black .
+git commit -m "STYLE: Blacken"
+bumpver update
+python -m build
+twine check dist/*
+twine upload -r testpypi dist/*
+twine upload -r pypi dist/*
+```
+
 ## Useful Links for Developers
 
 ### Python Packaging
