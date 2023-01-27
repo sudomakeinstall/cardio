@@ -64,3 +64,6 @@ push = false
     'current_version = "{version}"',
     'version = "{version}"',
 ]
+"src/cardio/__init__.py" = [
+    '__version__ = "{version}"',
+]
