@@ -47,7 +47,7 @@ dev = ["black", "isort", "pip-tools", "pytest", "bumpver", "build", "twine"]
 cardio = "cardio.app:main"
 
 [project.urls]
-repository = "https://github.com/dvigneault/cardio"
+repository = "https://github.com/sudomakeinstall/cardio"
 
 [tool.isort]
 profile = "black"
