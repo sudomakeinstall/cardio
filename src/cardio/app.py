@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from trame.app import Server, get_server
+from trame.app import get_server
 
 from .logic import Logic
 from .scene import Scene
@@ -10,7 +10,7 @@ from .ui import UI
 def main(server=None, **kwargs):
 
     if server is None:
-        server = get_server()
+        server = get_server(client_type="vue2")
 
     if isinstance(server, str):
         server = get_server(server)
