@@ -6,7 +6,6 @@ from .logic import Logic
 from .ui import UI
 from .screenshot import Screenshot
 from .transfer_functions import (
-    get_preset_transfer_functions,
     load_preset,
     list_available_presets,
 )
@@ -19,7 +18,6 @@ __all__ = [
     "Screenshot",
     "UI",
     "Logic",
-    "get_preset_transfer_functions",
     "load_preset",
     "list_available_presets",
 ]

@@ -206,24 +206,6 @@ def load_preset(preset_name: str) -> VolumePropertyConfig:
         raise ValueError(f"Invalid preset file '{preset_name}.toml': {e}") from e
 
 
-def get_preset_transfer_functions(
-    preset_name: str,
-) -> list[tuple[vtkPiecewiseFunction, vtkColorTransferFunction]]:
-    """
-    Get VTK transfer functions for a named preset.
-
-    Args:
-        preset_name: Name of the preset (e.g., 'cardiac', 'bone')
-
-    Returns:
-        List of (opacity_function, color_function) tuples
-
-    Raises:
-        KeyError: If preset_name is not found
-        ValueError: If preset file is invalid
-    """
-    preset = load_preset(preset_name)
-    return [tf.vtk_functions for tf in preset.transfer_functions]
 
 
 def list_available_presets() -> dict[str, str]:
