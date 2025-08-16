@@ -18,82 +18,6 @@ from . import Object
 from .transfer_functions import load_preset
 
 
-
-
-def blend_transfer_functions(tfs, scalar_range=(-2000, 2000), num_samples=512):
-    """
-    Blend multiple transfer functions using volume rendering emission-absorption model.
-
-    The volume rendering integral: I = ∫ C(s) * μ(s) * T(s) ds
-    where C(s) = emission color, μ(s) = opacity, T(s) = transmission
-
-    For discrete transfer functions, this becomes:
-    - Total emission = Σ(color_i * opacity_i)
-    - Total absorption = Σ(opacity_i)
-    - Final color = total_emission / total_absorption
-    """
-    if len(tfs) == 1:
-        return tfs[0]
-
-    sample_points = np.linspace(
-        start=scalar_range[0],
-        stop=scalar_range[1],
-        num=num_samples,
-    )
-
-    # Initialize arrays to store blended values
-    blended_opacity = []
-    blended_color = []
-
-    for scalar_val in sample_points:
-        # Accumulate emission and absorption for volume rendering
-        total_emission = [0.0, 0.0, 0.0]
-        total_absorption = 0.0
-
-        for otf, ctf in tfs:
-            # Get opacity and color for this scalar value
-            layer_opacity = otf.GetValue(scalar_val)
-            layer_color = [0.0, 0.0, 0.0]
-            ctf.GetColor(scalar_val, layer_color)
-
-            # Volume rendering accumulation:
-            # Emission = color * opacity (additive)
-            # Absorption = opacity (multiplicative through transmission)
-            for i in range(3):
-                total_emission[i] += layer_color[i] * layer_opacity
-
-            total_absorption += layer_opacity
-
-        # Clamp values to reasonable ranges
-        total_absorption = min(total_absorption, 1.0)
-        for i in range(3):
-            total_emission[i] = min(total_emission[i], 1.0)
-
-        # For the final color, normalize emission by absorption if absorption > 0
-        if total_absorption > 0.001:  # Avoid division by zero
-            final_color = [total_emission[i] / total_absorption for i in range(3)]
-        else:
-            final_color = [0.0, 0.0, 0.0]
-
-        # Clamp final colors
-        final_color = [min(c, 1.0) for c in final_color]
-
-        blended_opacity.append(total_absorption)
-        blended_color.append(final_color)
-
-    # Create new VTK transfer functions with blended values
-    blended_otf = vtkPiecewiseFunction()
-    blended_ctf = vtkColorTransferFunction()
-
-    for i, scalar_val in enumerate(sample_points):
-        blended_otf.AddPoint(scalar_val, blended_opacity[i])
-        blended_ctf.AddRGBPoint(
-            scalar_val, blended_color[i][0], blended_color[i][1], blended_color[i][2]
-        )
-
-    return blended_otf, blended_ctf
-
-
 def reset_direction(image):
     origin = np.asarray(itk.origin(image))
     spacing = np.asarray(itk.spacing(image))
@@ -151,13 +75,11 @@ class Volume(Object):
             self.actors += [actor]
             frame += 1
 
-        self.setup_property()
-
     def setup_pipeline(self, frame: int):
         for a in self.actors:
             self.renderer.AddVolume(a)
             a.SetVisibility(False)
-            a.SetProperty(self.property)
+            a.SetProperty(self.preset.vtk_property)
         if self.visible:
             self.actors[frame].SetVisibility(True)
 
@@ -165,21 +87,6 @@ class Volume(Object):
         self.setup_clipping()
 
         self.renderer.ResetCamera()
-
-    def setup_property(self):
-        tfs = [tf.vtk_functions for tf in self.preset.transfer_functions]
-
-        # Blend all transfer functions into a single composite
-        blended_otf, blended_ctf = blend_transfer_functions(tfs)
-
-        self.property = vtkVolumeProperty()
-        self.property.SetScalarOpacity(blended_otf)
-        self.property.SetColor(blended_ctf)
-        self.property.ShadeOn()
-        self.property.SetInterpolationTypeToLinear()
-        self.property.SetAmbient(self.preset.ambient)
-        self.property.SetDiffuse(self.preset.diffuse)
-        self.property.SetSpecular(self.preset.specular)
 
     def setup_clipping(self):
         """Set up volume clipping planes."""
