@@ -145,13 +145,8 @@ class Volume(Object):
         super().__init__(cfg, renderer)
         self.actors: list[vtkVolume] = []
 
-        # Load transfer functions and lighting parameters from preset
-        preset = load_preset(cfg["transfer_function_preset"])
-
-        self.transfer_functions = [tf.model_dump() for tf in preset.transfer_functions]
-        self.ambient: float = preset.ambient
-        self.diffuse: float = preset.diffuse
-        self.specular: float = preset.specular
+        # Load preset configuration
+        self.preset = load_preset(cfg["transfer_function_preset"])
 
         # Clipping configuration
         self.clipping_enabled: bool = cfg["clipping_enabled"]
@@ -190,7 +185,10 @@ class Volume(Object):
         self.renderer.ResetCamera()
 
     def setup_property(self):
-        tfs = [build_transfer_functions(**tf) for tf in self.transfer_functions]
+        tfs = [
+            build_transfer_functions(**tf.model_dump())
+            for tf in self.preset.transfer_functions
+        ]
 
         # Blend all transfer functions into a single composite
         blended_otf, blended_ctf = blend_transfer_functions(tfs)
@@ -200,9 +198,9 @@ class Volume(Object):
         self.property.SetColor(blended_ctf)
         self.property.ShadeOn()
         self.property.SetInterpolationTypeToLinear()
-        self.property.SetAmbient(self.ambient)
-        self.property.SetDiffuse(self.diffuse)
-        self.property.SetSpecular(self.specular)
+        self.property.SetAmbient(self.preset.ambient)
+        self.property.SetDiffuse(self.preset.diffuse)
+        self.property.SetSpecular(self.preset.specular)
 
     def setup_clipping(self):
         """Set up volume clipping planes."""
