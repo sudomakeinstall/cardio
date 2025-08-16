@@ -48,9 +48,18 @@ class Scene:
         self.screenshot_directory = self.cfg["screenshot_directory"]
         self.screenshot_subdirectory_format = self.cfg["screenshot_subdirectory_format"]
         self.rotation_factor = self.cfg["rotation_factor"]
-        self.background_r = self.cfg["background_r"]
-        self.background_g = self.cfg["background_g"]
-        self.background_b = self.cfg["background_b"]
+        # Load light and dark background colors from config
+        bg_config = self.cfg["background"]
+        self.background_light = [
+            bg_config["light"]["r"],
+            bg_config["light"]["g"],
+            bg_config["light"]["b"],
+        ]
+        self.background_dark = [
+            bg_config["dark"]["r"],
+            bg_config["dark"]["g"],
+            bg_config["dark"]["b"],
+        ]
 
         self.setup_rendering()
         for mesh in self.meshes:
@@ -68,9 +77,8 @@ class Scene:
         self.nframes = int(ns[0])
 
     def setup_rendering(self):
-        self.renderer.SetBackground(
-            self.background_r, self.background_g, self.background_b
-        )
+        # Use light background by default
+        self.renderer.SetBackground(*self.background_light)
         self.renderWindow.AddRenderer(self.renderer)
         self.renderWindowInteractor.SetRenderWindow(self.renderWindow)
 

@@ -36,13 +36,14 @@ class UI:
                 #            )
 
                 vuetify.VCheckbox(
-                    v_model="$vuetify.theme.dark",
+                    v_model=("dark_mode", False),
                     on_icon="mdi-lightbulb-outline",
                     off_icon="mdi-lightbulb-off-outline",
                     classes="mx-1",
                     hide_details=True,
                     dense=True,
                     outlined=True,
+                    change="$vuetify.theme.dark = $event",
                 )
 
                 with vuetify.VBtn(icon=True, click=self.server.controller.reset_all):

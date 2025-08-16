@@ -15,6 +15,7 @@ class Logic:
 
         self.server.state.change("frame")(self.update_frame)
         self.server.state.change("playing")(self.play)
+        self.server.state.change("dark_mode")(self.sync_background_color)
         self.server.state.change(
             *[f"mesh_visibility_{m.label}" for m in self.scene.meshes]
         )(self.sync_mesh_visibility)
@@ -144,6 +145,16 @@ class Logic:
         self.server.state.rotating = False
         self.server.state.bpm = 60
         self.server.state.bpr = 5
+        self.server.controller.view_update()
+
+    def sync_background_color(self, dark_mode, **kwargs):
+        """Sync VTK renderer background with dark mode."""
+        if dark_mode:
+            # Dark mode: use dark background from config
+            self.scene.renderer.SetBackground(*self.scene.background_dark)
+        else:
+            # Light mode: use light background from config
+            self.scene.renderer.SetBackground(*self.scene.background_light)
         self.server.controller.view_update()
 
     def _initialize_clipping_state(self):
