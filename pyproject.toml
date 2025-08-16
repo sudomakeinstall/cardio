@@ -30,6 +30,7 @@ dependencies = [
     "vtk>=9.5.0",
     "tomlkit>=0.13.3",
     "numpy>=2.2.6",
+    "pydantic>=2.11.7",
 ]
 description = "A simple web-based viewer for 4D ('cine') medical imaging data."
 keywords = ["Medical", "Imaging", "4D", "Visualization"]

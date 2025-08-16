@@ -3,9 +3,60 @@
 import pathlib as pl
 import typing as ty
 import tomlkit as tk
+import pydantic as pc
 
 
-def load_preset(preset_name: str) -> dict[str, ty.Any]:
+class TransferFunctionConfig(pc.BaseModel):
+    """Configuration for a single transfer function."""
+
+    window: float = pc.Field(gt=0, description="Window width for transfer function")
+    level: float = pc.Field(description="Window level for transfer function")
+    locolor: list[float] = pc.Field(
+        min_length=3, max_length=3, description="RGB color for low values"
+    )
+    hicolor: list[float] = pc.Field(
+        min_length=3, max_length=3, description="RGB color for high values"
+    )
+    opacity: float = pc.Field(ge=0, le=1, description="Maximum opacity value")
+    shape: str = pc.Field(description="Transfer function shape")
+
+    @pc.field_validator("locolor", "hicolor")
+    @classmethod
+    def validate_rgb_values(cls, v: list[float]) -> list[float]:
+        """Validate RGB values are in [0, 1] range."""
+        for val in v:
+            if not (0 <= val <= 1):
+                raise ValueError(f"RGB values must be in range [0, 1], got {val}")
+        return v
+
+    @pc.field_validator("shape")
+    @classmethod
+    def validate_shape(cls, v: str) -> str:
+        """Validate transfer function shape."""
+        valid_shapes = {"rightskew", "leftskew", "linear", "sigmoid"}
+        if v not in valid_shapes:
+            raise ValueError(f"Shape must be one of {valid_shapes}, got {v}")
+        return v
+
+
+class VolumePropertyConfig(pc.BaseModel):
+    """Configuration for volume rendering properties and transfer functions."""
+
+    name: str = pc.Field(description="Display name of the preset")
+    description: str = pc.Field(description="Description of the preset")
+
+    # Lighting parameters
+    ambient: float = pc.Field(ge=0, le=1, description="Ambient lighting coefficient")
+    diffuse: float = pc.Field(ge=0, le=1, description="Diffuse lighting coefficient")
+    specular: float = pc.Field(ge=0, le=1, description="Specular lighting coefficient")
+
+    # Transfer functions
+    transfer_functions: list[TransferFunctionConfig] = pc.Field(
+        min_length=1, description="List of transfer functions to blend"
+    )
+
+
+def load_preset(preset_name: str) -> VolumePropertyConfig:
     """Load a specific preset from its individual file."""
     assets_dir = pl.Path(__file__).parent / "assets"
     preset_file = assets_dir / f"{preset_name}.toml"
@@ -18,36 +69,12 @@ def load_preset(preset_name: str) -> dict[str, ty.Any]:
         )
 
     with preset_file.open("rt", encoding="utf-8") as fp:
-        return tk.load(fp)
+        raw_data = tk.load(fp)
 
-
-def get_preset_data(
-    preset_name: str,
-) -> tuple[list[dict[str, ty.Any]], dict[str, float]]:
-    """
-    Get transfer functions and lighting parameters for a named preset.
-
-    Args:
-        preset_name: Name of the preset (e.g., 'cardiac', 'bone')
-
-    Returns:
-        Tuple of (transfer_functions, lighting_params)
-        - transfer_functions: List of transfer function dictionaries
-        - lighting_params: Dict with 'ambient', 'diffuse', 'specular' keys
-
-    Raises:
-        KeyError: If preset_name is not found
-    """
-    preset = load_preset(preset_name)
-
-    transfer_functions = preset["transfer_functions"]
-    lighting_params = {
-        "ambient": preset["ambient"],
-        "diffuse": preset["diffuse"],
-        "specular": preset["specular"],
-    }
-
-    return transfer_functions, lighting_params
+    try:
+        return VolumePropertyConfig.model_validate(raw_data)
+    except pc.ValidationError as e:
+        raise ValueError(f"Invalid preset file '{preset_name}.toml': {e}") from e
 
 
 def get_preset_transfer_functions(preset_name: str) -> list[dict[str, ty.Any]]:
@@ -62,9 +89,10 @@ def get_preset_transfer_functions(preset_name: str) -> list[dict[str, ty.Any]]:
 
     Raises:
         KeyError: If preset_name is not found
+        ValueError: If preset file is invalid
     """
-    transfer_functions, _ = get_preset_data(preset_name)
-    return transfer_functions
+    preset = load_preset(preset_name)
+    return [tf.model_dump() for tf in preset.transfer_functions]
 
 
 def list_available_presets() -> dict[str, str]:

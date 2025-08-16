@@ -7,7 +7,7 @@ from .ui import UI
 from .screenshot import Screenshot
 from .transfer_functions import (
     get_preset_transfer_functions,
-    get_preset_data,
+    load_preset,
     list_available_presets,
 )
 
@@ -20,7 +20,7 @@ __all__ = [
     "UI",
     "Logic",
     "get_preset_transfer_functions",
-    "get_preset_data",
+    "load_preset",
     "list_available_presets",
 ]
 

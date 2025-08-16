@@ -15,7 +15,7 @@ from vtkmodules.vtkRenderingVolume import vtkGPUVolumeRayCastMapper
 from vtkmodules.vtkRenderingVolumeOpenGL2 import vtkOpenGLRayCastImageDisplayHelper
 
 from . import Object
-from .transfer_functions import get_preset_data
+from .transfer_functions import load_preset
 
 
 def build_transfer_functions(
@@ -146,13 +146,12 @@ class Volume(Object):
         self.actors: list[vtkVolume] = []
 
         # Load transfer functions and lighting parameters from preset
-        self.transfer_functions, lighting_params = get_preset_data(
-            cfg["transfer_function_preset"]
-        )
+        preset = load_preset(cfg["transfer_function_preset"])
 
-        self.ambient: float = lighting_params["ambient"]
-        self.diffuse: float = lighting_params["diffuse"]
-        self.specular: float = lighting_params["specular"]
+        self.transfer_functions = [tf.model_dump() for tf in preset.transfer_functions]
+        self.ambient: float = preset.ambient
+        self.diffuse: float = preset.diffuse
+        self.specular: float = preset.specular
 
         # Clipping configuration
         self.clipping_enabled: bool = cfg["clipping_enabled"]
