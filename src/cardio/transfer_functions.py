@@ -4,6 +4,8 @@ import pathlib as pl
 import typing as ty
 import tomlkit as tk
 import pydantic as pc
+from vtkmodules.vtkCommonDataModel import vtkPiecewiseFunction
+from vtkmodules.vtkRenderingCore import vtkColorTransferFunction
 
 
 class TransferFunctionConfig(pc.BaseModel):
@@ -37,6 +39,32 @@ class TransferFunctionConfig(pc.BaseModel):
         if v not in valid_shapes:
             raise ValueError(f"Shape must be one of {valid_shapes}, got {v}")
         return v
+
+    @property
+    def vtk_functions(self) -> tuple[vtkPiecewiseFunction, vtkColorTransferFunction]:
+        """Create VTK transfer functions from this configuration."""
+        # Create opacity transfer function
+        otf = vtkPiecewiseFunction()
+        otf.AddPoint(self.level - self.window * 0.50, 0.0)
+        otf.AddPoint(self.level + self.window * 0.14, self.opacity)
+        otf.AddPoint(self.level + self.window * 0.50, 0.0)
+
+        # Create color transfer function
+        ctf = vtkColorTransferFunction()
+        ctf.AddRGBPoint(
+            self.level - self.window / 2,
+            self.locolor[0],
+            self.locolor[1],
+            self.locolor[2],
+        )
+        ctf.AddRGBPoint(
+            self.level + self.window / 2,
+            self.hicolor[0],
+            self.hicolor[1],
+            self.hicolor[2],
+        )
+
+        return otf, ctf
 
 
 class VolumePropertyConfig(pc.BaseModel):
@@ -77,22 +105,22 @@ def load_preset(preset_name: str) -> VolumePropertyConfig:
         raise ValueError(f"Invalid preset file '{preset_name}.toml': {e}") from e
 
 
-def get_preset_transfer_functions(preset_name: str) -> list[dict[str, ty.Any]]:
+def get_preset_transfer_functions(preset_name: str) -> list[tuple[vtkPiecewiseFunction, vtkColorTransferFunction]]:
     """
-    Get transfer functions for a named preset.
+    Get VTK transfer functions for a named preset.
 
     Args:
         preset_name: Name of the preset (e.g., 'cardiac', 'bone')
 
     Returns:
-        List of transfer function dictionaries
+        List of (opacity_function, color_function) tuples
 
     Raises:
         KeyError: If preset_name is not found
         ValueError: If preset file is invalid
     """
     preset = load_preset(preset_name)
-    return [tf.model_dump() for tf in preset.transfer_functions]
+    return [tf.vtk_functions for tf in preset.transfer_functions]
 
 
 def list_available_presets() -> dict[str, str]:

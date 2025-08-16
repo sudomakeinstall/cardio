@@ -18,24 +18,6 @@ from . import Object
 from .transfer_functions import load_preset
 
 
-def build_transfer_functions(
-    window: float,
-    level: float,
-    locolor: [float],
-    hicolor: [float],
-    opacity: float,
-    shape: str,
-):
-    otf = vtkPiecewiseFunction()
-    otf.AddPoint(level - window * 0.50, 0.0)
-    otf.AddPoint(level + window * 0.14, opacity)
-    otf.AddPoint(level + window * 0.50, 0.0)
-
-    ctf = vtkColorTransferFunction()
-    ctf.AddRGBPoint(level - window / 2, locolor[0], locolor[1], locolor[2])
-    ctf.AddRGBPoint(level + window / 2, hicolor[0], hicolor[1], hicolor[2])
-
-    return otf, ctf
 
 
 def blend_transfer_functions(tfs, scalar_range=(-2000, 2000), num_samples=512):
@@ -185,10 +167,7 @@ class Volume(Object):
         self.renderer.ResetCamera()
 
     def setup_property(self):
-        tfs = [
-            build_transfer_functions(**tf.model_dump())
-            for tf in self.preset.transfer_functions
-        ]
+        tfs = [tf.vtk_functions for tf in self.preset.transfer_functions]
 
         # Blend all transfer functions into a single composite
         blended_otf, blended_ctf = blend_transfer_functions(tfs)
