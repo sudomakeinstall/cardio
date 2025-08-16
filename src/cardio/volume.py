@@ -17,6 +17,26 @@ from vtkmodules.vtkRenderingVolumeOpenGL2 import vtkOpenGLRayCastImageDisplayHel
 from . import Object
 
 
+def build_transfer_functions(
+    window: float,
+    level: float,
+    locolor: [float],
+    hicolor: [float],
+    opacity: float,
+    shape: str,
+):
+    otf = vtkPiecewiseFunction()
+    otf.AddPoint(level - window * 0.50, 0.0)
+    otf.AddPoint(level + window * 0.14, opacity)
+    otf.AddPoint(level + window * 0.50, 0.0)
+
+    ctf = vtkColorTransferFunction()
+    ctf.AddRGBPoint(level - window / 2, locolor[0], locolor[1], locolor[2])
+    ctf.AddRGBPoint(level + window / 2, hicolor[0], hicolor[1], hicolor[2])
+
+    return otf, ctf
+
+
 def reset_direction(image):
     origin = np.asarray(itk.origin(image))
     spacing = np.asarray(itk.spacing(image))
@@ -53,6 +73,7 @@ class Volume(Object):
         self.ambient: float = cfg["ambient"]
         self.diffuse: float = cfg["diffuse"]
         self.specular: float = cfg["specular"]
+        self.transfer_functions = cfg["transfer_functions"]
 
         # Clipping configuration
         self.clipping_enabled: bool = cfg["clipping_enabled"]
@@ -61,13 +82,17 @@ class Volume(Object):
         frame = 0
         while os.path.exists(self.path_for_frame(frame)):
             logging.info(f"{self.label}: Loading frame {frame}.")
-            mapper = vtkGPUVolumeRayCastMapper()
-            actor = vtkVolume()
+
             image = itk.imread(self.path_for_frame(frame))
             image = reset_direction(image)
             image = itk.vtk_image_from_image(image)
+
+            mapper = vtkGPUVolumeRayCastMapper()
             mapper.SetInputData(image)
+
+            actor = vtkVolume()
             actor.SetMapper(mapper)
+
             self.actors += [actor]
             frame += 1
 
@@ -87,35 +112,15 @@ class Volume(Object):
         self.renderer.ResetCamera()
 
     def setup_property(self):
-        a = 0
-        b = 500
-        c = 1000
-        d = 1150
+        tfs = [build_transfer_functions(**tf) for tf in self.transfer_functions]
 
-        # Create transfer mapping scalar value to opacity.
-        opacityTransferFunction = vtkPiecewiseFunction()
-        opacityTransferFunction.AddPoint(a, 0.00)
-        opacityTransferFunction.AddPoint(b, 0.15)
-        opacityTransferFunction.AddPoint(c, 0.15)
-        opacityTransferFunction.AddPoint(d, 0.85)
+        otf0, ctf0 = build_transfer_functions(
+            **self.transfer_functions[0],
+        )
 
-        # Create transfer mapping scalar value to color.
-        colorTransferFunction = vtkColorTransferFunction()
-        colorTransferFunction.AddRGBPoint(a, 0.0, 0.0, 0.0)
-        colorTransferFunction.AddRGBPoint(b, 1.0, 0.5, 0.3)
-        colorTransferFunction.AddRGBPoint(c, 1.0, 0.5, 0.3)
-        colorTransferFunction.AddRGBPoint(d, 1.0, 1.0, 0.9)
-
-        volumeGradientOpacity = vtkPiecewiseFunction()
-        volumeGradientOpacity.AddPoint(0, 0.0)
-        volumeGradientOpacity.AddPoint(90, 0.5)
-        volumeGradientOpacity.AddPoint(100, 1.0)
-
-        # The property describes how the data will look.
         self.property = vtkVolumeProperty()
-        self.property.SetColor(colorTransferFunction)
-        self.property.SetScalarOpacity(opacityTransferFunction)
-        self.property.SetGradientOpacity(volumeGradientOpacity)
+        self.property.SetScalarOpacity(tfs[0][0])
+        self.property.SetColor(tfs[0][1])
         self.property.ShadeOn()
         self.property.SetInterpolationTypeToLinear()
         self.property.SetAmbient(self.ambient)
