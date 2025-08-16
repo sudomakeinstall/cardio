@@ -5,7 +5,11 @@ from .scene import Scene
 from .logic import Logic
 from .ui import UI
 from .screenshot import Screenshot
-from .transfer_functions import get_preset_transfer_functions, list_available_presets
+from .transfer_functions import (
+    get_preset_transfer_functions,
+    get_preset_data,
+    list_available_presets,
+)
 
 __all__ = [
     "Object",
@@ -16,6 +20,7 @@ __all__ = [
     "UI",
     "Logic",
     "get_preset_transfer_functions",
+    "get_preset_data",
     "list_available_presets",
 ]
 

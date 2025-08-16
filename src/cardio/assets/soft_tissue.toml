@@ -1,0 +1,15 @@
+name = "Soft Tissue"
+description = "Transfer function for soft tissue visualization"
+
+# Lighting parameters
+ambient = 0.5
+diffuse = 0.5
+specular = 0.1
+
+[[transfer_functions]]
+window = 350
+level = 50
+locolor = [0.8, 0.6, 0.4]
+hicolor = [1.0, 0.8, 0.6]
+opacity = 0.6
+shape = "rightskew"

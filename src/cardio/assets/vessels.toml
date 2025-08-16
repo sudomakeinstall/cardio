@@ -1,0 +1,15 @@
+name = "Vessels"
+description = "Transfer function optimized for vascular structures"
+
+# Lighting parameters
+ambient = 0.2
+diffuse = 0.6
+specular = 0.5
+
+[[transfer_functions]]
+window = 400
+level = 150
+locolor = [0.0, 0.0, 1.0]
+hicolor = [0.0, 1.0, 1.0]
+opacity = 0.9
+shape = "rightskew"
