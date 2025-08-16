@@ -57,6 +57,9 @@ class Scene:
             mesh.setup_pipeline(self.current_frame)
         for volume in self.volumes:
             volume.setup_pipeline(self.current_frame)
+        
+        # Enable widget interaction after everything is set up
+        self.enable_widget_interactions()
 
     def set_nframes(self):
         ns = []
@@ -87,3 +90,9 @@ class Scene:
         for volume in self.volumes:
             if volume.visible:
                 volume.actors[frame].SetVisibility(True)
+
+    def enable_widget_interactions(self):
+        """Enable widget interactions for volumes after scene setup."""
+        for volume in self.volumes:
+            if hasattr(volume, 'enable_widget_interaction'):
+                volume.enable_widget_interaction()

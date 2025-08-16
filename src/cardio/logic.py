@@ -1,8 +1,11 @@
 import asyncio
+import datetime as dt
+import os
 
 from trame.app import asynchronous
 
 from . import Scene
+from .screenshot import Screenshot
 
 
 class Logic:
@@ -19,10 +22,24 @@ class Logic:
             *[f"volume_visibility_{v.label}" for v in self.scene.volumes]
         )(self.sync_volume_visibility)
 
+        clipping_controls = []
+        for v in self.scene.volumes:
+            clipping_controls.extend([
+                f"volume_clipping_{v.label}",
+                f"clip_x_{v.label}",
+                f"clip_y_{v.label}",
+                f"clip_z_{v.label}"
+            ])
+        if clipping_controls:
+            self.server.state.change(*clipping_controls)(self.sync_volume_clipping)
+
         self.server.controller.increment_frame = self.increment_frame
         self.server.controller.decrement_frame = self.decrement_frame
         self.server.controller.screenshot = self.screenshot
         self.server.controller.reset_all = self.reset_all
+
+        # Initialize clipping state variables
+        self._initialize_clipping_state()
 
     def update_frame(self, frame, **kwargs):
         self.scene.hide_all_frames()
@@ -55,6 +72,25 @@ class Logic:
             v.actors[self.server.state.frame].SetVisibility(v.visible)
         self.server.controller.view_update()
 
+    def sync_volume_clipping(self, **kwargs):
+        """Update volume clipping based on UI controls."""
+        for v in self.scene.volumes:
+            # Toggle clipping on/off
+            clipping_enabled = self.server.state[f"volume_clipping_{v.label}"]
+            v.toggle_clipping(clipping_enabled)
+
+            # Update clipping bounds if enabled
+            if clipping_enabled:
+                x_range = self.server.state[f"clip_x_{v.label}"]
+                y_range = self.server.state[f"clip_y_{v.label}"]
+                z_range = self.server.state[f"clip_z_{v.label}"]
+
+                if x_range and y_range and z_range:
+                    bounds = [x_range[0], x_range[1], y_range[0], y_range[1], z_range[0], z_range[1]]
+                    v.update_clipping_bounds(bounds)
+
+        self.server.controller.view_update()
+
     def increment_frame(self):
         if not self.server.state.playing:
             self.server.state.frame = (self.server.state.frame + 1) % self.scene.nframes
@@ -72,7 +108,7 @@ class Logic:
         os.makedirs(dr)
 
         if not (self.server.state.incrementing or self.server.state.rotating):
-            ss = cy.Screenshot(self.scene.renderWindow)
+            ss = Screenshot(self.scene.renderWindow)
             ss.save(f"{dr}/0.png")
         else:
             n = self.scene.nframes
@@ -86,7 +122,7 @@ class Logic:
                     if self.server.state.incrementing:
                         self.increment_frame()
                     self.server.controller.view_update()
-                    ss = cy.Screenshot(self.scene.renderWindow)
+                    ss = Screenshot(self.scene.renderWindow)
                     ss.save(f"{dr}/{i}.png")
                     await asyncio.sleep(
                         1 / self.server.state.bpm * 60 / self.scene.nframes
@@ -100,3 +136,20 @@ class Logic:
         self.server.state.bpm = 60
         self.server.state.bpr = 5
         self.server.controller.view_update()
+
+    def _initialize_clipping_state(self):
+        """Initialize clipping state variables for all volumes."""
+        for v in self.scene.volumes:
+            if hasattr(v, 'clipping_enabled'):
+                # Initialize clipping checkbox state
+                setattr(self.server.state, f"volume_clipping_{v.label}", v.clipping_enabled)
+
+                # Initialize panel state
+                setattr(self.server.state, f"clip_panel_{v.label}", [])
+
+                # Initialize range sliders with volume bounds if available
+                if v.actors:
+                    bounds = v.actors[0].GetBounds()
+                    setattr(self.server.state, f"clip_x_{v.label}", [bounds[0], bounds[1]])
+                    setattr(self.server.state, f"clip_y_{v.label}", [bounds[2], bounds[3]])
+                    setattr(self.server.state, f"clip_z_{v.label}", [bounds[4], bounds[5]])
