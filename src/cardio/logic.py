@@ -24,12 +24,14 @@ class Logic:
 
         clipping_controls = []
         for v in self.scene.volumes:
-            clipping_controls.extend([
-                f"volume_clipping_{v.label}",
-                f"clip_x_{v.label}",
-                f"clip_y_{v.label}",
-                f"clip_z_{v.label}"
-            ])
+            clipping_controls.extend(
+                [
+                    f"volume_clipping_{v.label}",
+                    f"clip_x_{v.label}",
+                    f"clip_y_{v.label}",
+                    f"clip_z_{v.label}",
+                ]
+            )
         if clipping_controls:
             self.server.state.change(*clipping_controls)(self.sync_volume_clipping)
 
@@ -86,7 +88,14 @@ class Logic:
                 z_range = self.server.state[f"clip_z_{v.label}"]
 
                 if x_range and y_range and z_range:
-                    bounds = [x_range[0], x_range[1], y_range[0], y_range[1], z_range[0], z_range[1]]
+                    bounds = [
+                        x_range[0],
+                        x_range[1],
+                        y_range[0],
+                        y_range[1],
+                        z_range[0],
+                        z_range[1],
+                    ]
                     v.update_clipping_bounds(bounds)
 
         self.server.controller.view_update()
@@ -140,9 +149,11 @@ class Logic:
     def _initialize_clipping_state(self):
         """Initialize clipping state variables for all volumes."""
         for v in self.scene.volumes:
-            if hasattr(v, 'clipping_enabled'):
+            if hasattr(v, "clipping_enabled"):
                 # Initialize clipping checkbox state
-                setattr(self.server.state, f"volume_clipping_{v.label}", v.clipping_enabled)
+                setattr(
+                    self.server.state, f"volume_clipping_{v.label}", v.clipping_enabled
+                )
 
                 # Initialize panel state
                 setattr(self.server.state, f"clip_panel_{v.label}", [])
@@ -150,6 +161,12 @@ class Logic:
                 # Initialize range sliders with volume bounds if available
                 if v.actors:
                     bounds = v.actors[0].GetBounds()
-                    setattr(self.server.state, f"clip_x_{v.label}", [bounds[0], bounds[1]])
-                    setattr(self.server.state, f"clip_y_{v.label}", [bounds[2], bounds[3]])
-                    setattr(self.server.state, f"clip_z_{v.label}", [bounds[4], bounds[5]])
+                    setattr(
+                        self.server.state, f"clip_x_{v.label}", [bounds[0], bounds[1]]
+                    )
+                    setattr(
+                        self.server.state, f"clip_y_{v.label}", [bounds[2], bounds[3]]
+                    )
+                    setattr(
+                        self.server.state, f"clip_z_{v.label}", [bounds[4], bounds[5]]
+                    )

@@ -13,7 +13,6 @@ class UI:
         self.setup()
 
     def setup(self):
-
         self.server.state.trame__title = self.scene.project_name
 
         with SinglePageWithDrawerLayout(self.server) as layout:
@@ -61,7 +60,6 @@ class UI:
                     fluid=True,
                     classes="pa-0 fill-height",
                 ):
-
                     view = vtk_widgets.VtkRemoteView(
                         self.scene.renderWindow, interactive_ratio=1
                     )
@@ -77,7 +75,6 @@ class UI:
                     self.server.controller.on_server_ready.add(view.update)
 
             with layout.drawer:
-
                 with vuetify.VBtn(
                     icon=True,
                     click=self.server.controller.decrement_frame,
@@ -225,7 +222,10 @@ class UI:
                                     with vuetify.VExpansionPanelContent():
                                         # X bounds
                                         vuetify.VRangeSlider(
-                                            v_model=(f"clip_x_{v.label}", [bounds[0], bounds[1]]),
+                                            v_model=(
+                                                f"clip_x_{v.label}",
+                                                [bounds[0], bounds[1]],
+                                            ),
                                             label="X Range",
                                             min=bounds[0],
                                             max=bounds[1],
@@ -236,7 +236,10 @@ class UI:
                                         )
                                         # Y bounds
                                         vuetify.VRangeSlider(
-                                            v_model=(f"clip_y_{v.label}", [bounds[2], bounds[3]]),
+                                            v_model=(
+                                                f"clip_y_{v.label}",
+                                                [bounds[2], bounds[3]],
+                                            ),
                                             label="Y Range",
                                             min=bounds[2],
                                             max=bounds[3],
@@ -247,7 +250,10 @@ class UI:
                                         )
                                         # Z bounds
                                         vuetify.VRangeSlider(
-                                            v_model=(f"clip_z_{v.label}", [bounds[4], bounds[5]]),
+                                            v_model=(
+                                                f"clip_z_{v.label}",
+                                                [bounds[4], bounds[5]],
+                                            ),
                                             label="Z Range",
                                             min=bounds[4],
                                             max=bounds[5],

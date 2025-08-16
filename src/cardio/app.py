@@ -8,7 +8,6 @@ from .ui import UI
 
 
 def main(server=None, **kwargs):
-
     if server is None:
         server = get_server(client_type="vue2")
 
