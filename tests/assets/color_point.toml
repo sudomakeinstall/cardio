@@ -1,0 +1,5 @@
+# Test data for ColorTransferFunctionPoint
+x = 200.0
+r = 0.8
+g = 0.4
+b = 0.2

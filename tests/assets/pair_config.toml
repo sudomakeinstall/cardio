@@ -1,0 +1,25 @@
+# Test data for TransferFunctionPairConfig
+
+# Opacity transfer function
+[opacity]
+[[opacity.points]]
+x = 0.0
+y = 0.0
+
+[[opacity.points]]
+x = 500.0
+y = 0.5
+
+# Color transfer function
+[color]
+[[color.points]]
+x = 0.0
+r = 1.0
+g = 0.0
+b = 0.0
+
+[[color.points]]
+x = 500.0
+r = 0.0
+g = 1.0
+b = 0.0

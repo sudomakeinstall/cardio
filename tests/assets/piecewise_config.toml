@@ -1,0 +1,12 @@
+# Test data for PiecewiseFunctionConfig
+[[points]]
+x = -1000.0
+y = 0.0
+
+[[points]]
+x = 0.0
+y = 0.8
+
+[[points]]
+x = 1000.0
+y = 0.0

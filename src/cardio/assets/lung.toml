@@ -1,5 +1,5 @@
-name = "Bone"
-description = "Bone"
+name = "Lung"
+description = "Lung"
 
 # Lighting parameters
 ambient = 0.0
@@ -12,7 +12,7 @@ specular = 0.0
 # Opacity transfer function - constant opacity of 1.0
 [transfer_functions.opacity]
 [[transfer_functions.opacity.points]]
-x = -500.0
+x = -1350.0
 y = 1.0
 
 [[transfer_functions.opacity.points]]
@@ -22,19 +22,13 @@ y = 1.0
 # Color transfer function - black to white across window
 [transfer_functions.color]
 [[transfer_functions.color.points]]
-x = -1024.0
+x = -1350.0
 r = 0.0
 g = 0.0
 b = 0.0
 
 [[transfer_functions.color.points]]
-x = -500.0
-r = 0.0
-g = 0.0
-b = 0.0
-
-[[transfer_functions.color.points]]
-x = 1300.0
+x = 150.0
 r = 1.0
 g = 1.0
 b = 1.0

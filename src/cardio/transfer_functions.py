@@ -88,8 +88,52 @@ def blend_transfer_functions(tfs, scalar_range=(-2000, 2000), num_samples=512):
     return blended_otf, blended_ctf
 
 
+class PiecewiseFunctionPoint(pc.BaseModel):
+    """A single point in a piecewise function."""
+    x: float = pc.Field(description="Scalar value")
+    y: float = pc.Field(ge=0, le=1, description="Opacity value")
+
+
+class ColorTransferFunctionPoint(pc.BaseModel):
+    """A single point in a color transfer function."""
+    x: float = pc.Field(description="Scalar value")
+    r: float = pc.Field(ge=0, le=1, description="Red component")
+    g: float = pc.Field(ge=0, le=1, description="Green component")
+    b: float = pc.Field(ge=0, le=1, description="Blue component")
+
+
+class PiecewiseFunctionConfig(pc.BaseModel):
+    """Configuration for a VTK piecewise function (opacity)."""
+    points: list[PiecewiseFunctionPoint] = pc.Field(
+        min_length=1, description="Points defining the piecewise function"
+    )
+
+    @property
+    def vtk_function(self) -> vtkPiecewiseFunction:
+        """Create VTK piecewise function from this configuration."""
+        otf = vtkPiecewiseFunction()
+        for point in self.points:
+            otf.AddPoint(point.x, point.y)
+        return otf
+
+
+class ColorTransferFunctionConfig(pc.BaseModel):
+    """Configuration for a VTK color transfer function."""
+    points: list[ColorTransferFunctionPoint] = pc.Field(
+        min_length=1, description="Points defining the color transfer function"
+    )
+
+    @property
+    def vtk_function(self) -> vtkColorTransferFunction:
+        """Create VTK color transfer function from this configuration."""
+        ctf = vtkColorTransferFunction()
+        for point in self.points:
+            ctf.AddRGBPoint(point.x, point.r, point.g, point.b)
+        return ctf
+
+
 class TransferFunctionConfig(pc.BaseModel):
-    """Configuration for a single transfer function."""
+    """Configuration for a single transfer function (legacy format for compatibility)."""
 
     window: float = pc.Field(gt=0, description="Window width for transfer function")
     level: float = pc.Field(description="Window level for transfer function")
@@ -100,7 +144,6 @@ class TransferFunctionConfig(pc.BaseModel):
         min_length=3, max_length=3, description="RGB color for high values"
     )
     opacity: float = pc.Field(ge=0, le=1, description="Maximum opacity value")
-    shape: str = pc.Field(description="Transfer function shape")
 
     @pc.field_validator("locolor", "hicolor")
     @classmethod
@@ -109,15 +152,6 @@ class TransferFunctionConfig(pc.BaseModel):
         for val in v:
             if not (0 <= val <= 1):
                 raise ValueError(f"RGB values must be in range [0, 1], got {val}")
-        return v
-
-    @pc.field_validator("shape")
-    @classmethod
-    def validate_shape(cls, v: str) -> str:
-        """Validate transfer function shape."""
-        valid_shapes = {"rightskew", "leftskew", "linear", "sigmoid"}
-        if v not in valid_shapes:
-            raise ValueError(f"Shape must be one of {valid_shapes}, got {v}")
         return v
 
     @property
@@ -147,6 +181,17 @@ class TransferFunctionConfig(pc.BaseModel):
         return otf, ctf
 
 
+class TransferFunctionPairConfig(pc.BaseModel):
+    """Configuration for a pair of opacity and color transfer functions."""
+    opacity: PiecewiseFunctionConfig = pc.Field(description="Opacity transfer function configuration")
+    color: ColorTransferFunctionConfig = pc.Field(description="Color transfer function configuration")
+
+    @property
+    def vtk_functions(self) -> tuple[vtkPiecewiseFunction, vtkColorTransferFunction]:
+        """Create VTK transfer functions from this pair configuration."""
+        return self.opacity.vtk_function, self.color.vtk_function
+
+
 class VolumePropertyConfig(pc.BaseModel):
     """Configuration for volume rendering properties and transfer functions."""
 
@@ -159,15 +204,15 @@ class VolumePropertyConfig(pc.BaseModel):
     specular: float = pc.Field(ge=0, le=1, description="Specular lighting coefficient")
 
     # Transfer functions
-    transfer_functions: list[TransferFunctionConfig] = pc.Field(
-        min_length=1, description="List of transfer functions to blend"
+    transfer_functions: list[TransferFunctionPairConfig] = pc.Field(
+        min_length=1, description="List of transfer function pairs to blend"
     )
 
     @property
     def vtk_property(self) -> vtkVolumeProperty:
         """Create a fully configured VTK volume property from this configuration."""
-        # Get VTK transfer functions from each config
-        tfs = [tf.vtk_functions for tf in self.transfer_functions]
+        # Get VTK transfer functions from each pair config
+        tfs = [pair.vtk_functions for pair in self.transfer_functions]
 
         # Blend all transfer functions into a single composite
         blended_otf, blended_ctf = blend_transfer_functions(tfs)
