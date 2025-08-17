@@ -195,123 +195,132 @@ class UI:
 
                 vuetify.VSubheader("Appearance and Visibility")
 
-                for i, m in enumerate(self.scene.meshes):
-                    vuetify.VCheckbox(
-                        v_model=(f"mesh_visibility_{m.label}", m.visible),
-                        on_icon="mdi-eye",
-                        off_icon="mdi-eye-off",
-                        classes="mx-1",
-                        hide_details=True,
-                        dense=True,
-                        label=m.label,
-                    )
-
-                for i, v in enumerate(self.scene.volumes):
-                    vuetify.VCheckbox(
-                        v_model=(f"volume_visibility_{v.label}", v.visible),
-                        on_icon="mdi-eye",
-                        off_icon="mdi-eye-off",
-                        classes="mx-1",
-                        hide_details=True,
-                        dense=True,
-                        label=v.label,
-                    )
-
-                    # Preset selection in collapsible panel
-                    available_presets = list_available_presets()
-                    current_preset = getattr(v, "_preset_key", "cardiac")
-                    current_desc = available_presets.get(current_preset, current_preset)
-
-                    with vuetify.VExpansionPanels(
-                        v_model=f"preset_panel_{v.label}",
-                        flat=True,
-                        classes="ml-4",
-                        dense=True,
-                        style="max-width: 270px;",
-                    ):
-                        with vuetify.VExpansionPanel():
-                            vuetify.VExpansionPanelHeader("Transfer Function")
-                            with vuetify.VExpansionPanelContent():
-                                with vuetify.VRadioGroup(
-                                    v_model=(
-                                        f"volume_preset_{v.label}",
-                                        current_preset,
-                                    ),
-                                    dense=True,
-                                ):
-                                    for (
-                                        preset_key,
-                                        preset_desc,
-                                    ) in available_presets.items():
-                                        vuetify.VRadio(
-                                            label=preset_desc, value=preset_key
-                                        )
-
-                    # Add clipping controls for volumes
-                    if v.clipping_enabled:
+                if self.scene.meshes:
+                    vuetify.VSubheader("Meshes", classes="text-caption pl-4")
+                    for i, m in enumerate(self.scene.meshes):
                         vuetify.VCheckbox(
-                            v_model=(f"volume_clipping_{v.label}", v.clipping_enabled),
-                            on_icon="mdi-cube-outline",
-                            off_icon="mdi-cube-off-outline",
-                            classes="mx-1 ml-4",
+                            v_model=(f"mesh_visibility_{m.label}", m.visible),
+                            on_icon="mdi-eye",
+                            off_icon="mdi-eye-off",
+                            classes="mx-1",
                             hide_details=True,
                             dense=True,
-                            label=f"{v.label} Clipping",
+                            label=m.label,
                         )
 
-                        # Get initial volume bounds for sliders
-                        if v.actors:
-                            bounds = v.actors[0].GetBounds()
-                            with vuetify.VExpansionPanels(
-                                v_model=f"clip_panel_{v.label}",
-                                multiple=True,
-                                flat=True,
-                                classes="ml-4",
+                if self.scene.volumes:
+                    vuetify.VSubheader("Volumes", classes="text-caption pl-4")
+                    for i, v in enumerate(self.scene.volumes):
+                        vuetify.VCheckbox(
+                            v_model=(f"volume_visibility_{v.label}", v.visible),
+                            on_icon="mdi-eye",
+                            off_icon="mdi-eye-off",
+                            classes="mx-1",
+                            hide_details=True,
+                            dense=True,
+                            label=v.label,
+                        )
+
+                        # Preset selection in collapsible panel
+                        available_presets = list_available_presets()
+                        current_preset = getattr(v, "_preset_key", "cardiac")
+                        current_desc = available_presets.get(
+                            current_preset, current_preset
+                        )
+
+                        with vuetify.VExpansionPanels(
+                            v_model=f"preset_panel_{v.label}",
+                            flat=True,
+                            classes="ml-4",
+                            dense=True,
+                            style="max-width: 270px;",
+                        ):
+                            with vuetify.VExpansionPanel():
+                                vuetify.VExpansionPanelHeader("Transfer Function")
+                                with vuetify.VExpansionPanelContent():
+                                    with vuetify.VRadioGroup(
+                                        v_model=(
+                                            f"volume_preset_{v.label}",
+                                            current_preset,
+                                        ),
+                                        dense=True,
+                                    ):
+                                        for (
+                                            preset_key,
+                                            preset_desc,
+                                        ) in available_presets.items():
+                                            vuetify.VRadio(
+                                                label=preset_desc, value=preset_key
+                                            )
+
+                        # Add clipping controls for volumes
+                        if v.clipping_enabled:
+                            vuetify.VCheckbox(
+                                v_model=(
+                                    f"volume_clipping_{v.label}",
+                                    v.clipping_enabled,
+                                ),
+                                on_icon="mdi-cube-outline",
+                                off_icon="mdi-cube-off-outline",
+                                classes="mx-1 ml-4",
+                                hide_details=True,
                                 dense=True,
-                                style="max-width: 270px;",
-                            ):
-                                with vuetify.VExpansionPanel():
-                                    vuetify.VExpansionPanelHeader("Clip Bounds")
-                                    with vuetify.VExpansionPanelContent():
-                                        # X bounds
-                                        vuetify.VRangeSlider(
-                                            v_model=(
-                                                f"clip_x_{v.label}",
-                                                [bounds[0], bounds[1]],
-                                            ),
-                                            label="X Range",
-                                            min=bounds[0],
-                                            max=bounds[1],
-                                            step=(bounds[1] - bounds[0]) / 100,
-                                            hide_details=True,
-                                            dense=True,
-                                            thumb_label=False,
-                                        )
-                                        # Y bounds
-                                        vuetify.VRangeSlider(
-                                            v_model=(
-                                                f"clip_y_{v.label}",
-                                                [bounds[2], bounds[3]],
-                                            ),
-                                            label="Y Range",
-                                            min=bounds[2],
-                                            max=bounds[3],
-                                            step=(bounds[3] - bounds[2]) / 100,
-                                            hide_details=True,
-                                            dense=True,
-                                            thumb_label=False,
-                                        )
-                                        # Z bounds
-                                        vuetify.VRangeSlider(
-                                            v_model=(
-                                                f"clip_z_{v.label}",
-                                                [bounds[4], bounds[5]],
-                                            ),
-                                            label="Z Range",
-                                            min=bounds[4],
-                                            max=bounds[5],
-                                            step=(bounds[5] - bounds[4]) / 100,
-                                            hide_details=True,
-                                            dense=True,
-                                            thumb_label=False,
-                                        )
+                                label=f"{v.label} Clipping",
+                            )
+
+                            # Get initial volume bounds for sliders
+                            if v.actors:
+                                bounds = v.actors[0].GetBounds()
+                                with vuetify.VExpansionPanels(
+                                    v_model=f"clip_panel_{v.label}",
+                                    multiple=True,
+                                    flat=True,
+                                    classes="ml-4",
+                                    dense=True,
+                                    style="max-width: 270px;",
+                                ):
+                                    with vuetify.VExpansionPanel():
+                                        vuetify.VExpansionPanelHeader("Clip Bounds")
+                                        with vuetify.VExpansionPanelContent():
+                                            # X bounds
+                                            vuetify.VRangeSlider(
+                                                v_model=(
+                                                    f"clip_x_{v.label}",
+                                                    [bounds[0], bounds[1]],
+                                                ),
+                                                label="X Range",
+                                                min=bounds[0],
+                                                max=bounds[1],
+                                                step=(bounds[1] - bounds[0]) / 100,
+                                                hide_details=True,
+                                                dense=True,
+                                                thumb_label=False,
+                                            )
+                                            # Y bounds
+                                            vuetify.VRangeSlider(
+                                                v_model=(
+                                                    f"clip_y_{v.label}",
+                                                    [bounds[2], bounds[3]],
+                                                ),
+                                                label="Y Range",
+                                                min=bounds[2],
+                                                max=bounds[3],
+                                                step=(bounds[3] - bounds[2]) / 100,
+                                                hide_details=True,
+                                                dense=True,
+                                                thumb_label=False,
+                                            )
+                                            # Z bounds
+                                            vuetify.VRangeSlider(
+                                                v_model=(
+                                                    f"clip_z_{v.label}",
+                                                    [bounds[4], bounds[5]],
+                                                ),
+                                                label="Z Range",
+                                                min=bounds[4],
+                                                max=bounds[5],
+                                                step=(bounds[5] - bounds[4]) / 100,
+                                                hide_details=True,
+                                                dense=True,
+                                                thumb_label=False,
+                                            )
