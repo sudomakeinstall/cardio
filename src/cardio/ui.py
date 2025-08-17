@@ -47,8 +47,16 @@ class UI:
                     change="$vuetify.theme.dark = $event",
                 )
 
-                with vuetify.VBtn(icon=True, click=self.server.controller.reset_all):
-                    vuetify.VIcon("mdi-undo-variant")
+                # NOTE: Reset button should be VBtn, but using VCheckbox for consistent sizing/spacing
+                vuetify.VCheckbox(
+                    value=False,
+                    on_icon="mdi-undo-variant",
+                    off_icon="mdi-undo-variant",
+                    hide_details=True,
+                    title="Reset All",
+                    click=self.server.controller.reset_all,
+                    readonly=True,
+                )
 
                 vuetify.VProgressLinear(
                     indeterminate=True,
@@ -77,63 +85,68 @@ class UI:
                     self.server.controller.on_server_ready.add(view.update)
 
             with layout.drawer:
-                with vuetify.VBtn(
-                    icon=True,
-                    click=self.server.controller.decrement_frame,
-                    title="Previous",
-                ):
-                    vuetify.VIcon("mdi-skip-previous-circle")
+                vuetify.VSubheader("Playback Controls")
 
-                with vuetify.VBtn(
-                    icon=True,
-                    click=self.server.controller.increment_frame,
-                    title="Next",
-                ):
-                    vuetify.VIcon("mdi-skip-next-circle")
+                with vuetify.VToolbar(dense=True, flat=True):
+                    # NOTE: Previous/Next controls should be VBtn components, but we use
+                    # VCheckbox for consistent sizing/spacing with the other controls.
+                    # This may be easier to fix in Vuetify 3.
+                    vuetify.VCheckbox(
+                        value=False,
+                        on_icon="mdi-skip-previous-circle",
+                        off_icon="mdi-skip-previous-circle",
+                        hide_details=True,
+                        title="Previous",
+                        click=self.server.controller.decrement_frame,
+                        readonly=True,
+                    )
 
-                vuetify.VCheckbox(
-                    v_model=("playing", False),
-                    on_icon="mdi-pause-circle",
-                    off_icon="mdi-play-circle",
-                    classes="mx-1",
-                    hide_details=True,
-                    dense=True,
-                    title="Play/Pause",
-                )
+                    vuetify.VSpacer()
 
-                vuetify.VCheckbox(
-                    v_model=("incrementing", True),
-                    on_icon="mdi-movie-open-outline",
-                    off_icon="mdi-movie-open-off-outline",
-                    classes="mx-1",
-                    hide_details=True,
-                    dense=True,
-                    label="Incrementing",
-                    title="Incrementing",
-                )
+                    vuetify.VCheckbox(
+                        value=False,
+                        on_icon="mdi-skip-next-circle",
+                        off_icon="mdi-skip-next-circle",
+                        hide_details=True,
+                        title="Next",
+                        click=self.server.controller.increment_frame,
+                        readonly=True,
+                    )
 
-                vuetify.VCheckbox(
-                    v_model=("rotating", False),
-                    on_icon="mdi-autorenew",
-                    off_icon="mdi-autorenew-off",
-                    classes="mx-1",
-                    hide_details=True,
-                    dense=True,
-                    label="Rotating",
-                    title="Rotating",
-                )
+                    vuetify.VSpacer()
 
-                with vuetify.VBtn(
-                    icon=True,
-                    click=self.server.controller.screenshot,
-                    title="Save Screenshot",
-                    label="Take Screenshot",
-                ):
-                    vuetify.VIcon("mdi-image")
+                    vuetify.VCheckbox(
+                        v_model=("playing", False),
+                        on_icon="mdi-pause-circle",
+                        off_icon="mdi-play-circle",
+                        title="Play/Pause",
+                        hide_details=True,
+                    )
+
+                    vuetify.VSpacer()
+
+                    vuetify.VCheckbox(
+                        v_model=("incrementing", True),
+                        on_icon="mdi-movie-open-outline",
+                        off_icon="mdi-movie-open-off-outline",
+                        hide_details=True,
+                        title="Incrementing",
+                    )
+
+                    vuetify.VSpacer()
+
+                    vuetify.VCheckbox(
+                        v_model=("rotating", False),
+                        on_icon="mdi-autorenew",
+                        off_icon="mdi-autorenew-off",
+                        hide_details=True,
+                        title="Rotating",
+                    )
 
                 vuetify.VSlider(
                     v_model=("frame", self.scene.current_frame),
-                    label="Frame",
+                    hint="Phase",
+                    persistent_hint=True,
                     min=0,
                     max=self.scene.nframes - 1,
                     step=1,
@@ -146,8 +159,7 @@ class UI:
 
                 vuetify.VSlider(
                     v_model=("bpm", 60),
-                    label="BPM",
-                    hint="Beats Per Minute",
+                    hint="Cycles/Minute",
                     persistent_hint=True,
                     min=40,
                     max=160,
@@ -161,8 +173,7 @@ class UI:
 
                 vuetify.VSlider(
                     v_model=("bpr", 3),
-                    label="BPR",
-                    hint="Beats Per Rotation",
+                    hint="Cycles/Rotation",
                     persistent_hint=True,
                     min=1,
                     max=25,
@@ -173,6 +184,16 @@ class UI:
                     ticks=True,
                     thumb_label=True,
                 )
+
+                with vuetify.VRow(justify="center", classes="my-3"):
+                    vuetify.VBtn(
+                        f"Capture Cine",
+                        small=True,
+                        click=self.server.controller.screenshot,
+                        title=f"Capture cine to {self.scene.screenshot_directory}",
+                    )
+
+                vuetify.VSubheader("Appearance and Visibility")
 
                 for i, m in enumerate(self.scene.meshes):
                     vuetify.VCheckbox(
@@ -206,6 +227,7 @@ class UI:
                         flat=True,
                         classes="ml-4",
                         dense=True,
+                        style="max-width: 270px;",
                     ):
                         with vuetify.VExpansionPanel():
                             vuetify.VExpansionPanelHeader("Transfer Function")
@@ -246,6 +268,7 @@ class UI:
                                 flat=True,
                                 classes="ml-4",
                                 dense=True,
+                                style="max-width: 270px;",
                             ):
                                 with vuetify.VExpansionPanel():
                                     vuetify.VExpansionPanelHeader("Clip Bounds")
