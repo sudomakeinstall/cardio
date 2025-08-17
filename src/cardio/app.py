@@ -1,30 +1,29 @@
 #!/usr/bin/env python
 
-from trame.app import get_server
+import trame as tm
 
 from .logic import Logic
 from .scene import Scene
 from .ui import UI
 
 
-def main(server=None, **kwargs):
-    if server is None:
-        server = get_server(client_type="vue2")
+class CardioApp(tm.app.TrameApp):
+    def __init__(self, name=None):
+        super().__init__(server=name, client_type="vue2")
 
-    if isinstance(server, str):
-        server = get_server(server)
+        self.server.cli.add_argument(
+            "--config", help="TOML configutation file.", dest="cfg_file", required=True
+        )
+        args = self.server.cli.parse_args()
 
-    server.cli.add_argument(
-        "--config", help="TOML configutation file.", dest="cfg_file", required=True
-    )
-    args = server.cli.parse_args()
+        scene = Scene(args.cfg_file)
+        Logic(self.server, scene)
+        UI(self.server, scene)
 
-    scene = Scene(args.cfg_file)
 
-    Logic(server, scene)
-    UI(server, scene)
-
-    server.start(open_browser=False)
+def main():
+    app = CardioApp()
+    app.server.start(open_browser=False)
 
 
 if __name__ == "__main__":
