@@ -1,5 +1,5 @@
 name = "Cardiac CT"
-description = "Two-component transfer function for cardiac CT data"
+description = "Cardiac"
 
 # Lighting parameters
 ambient = 0.4

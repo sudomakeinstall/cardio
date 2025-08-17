@@ -1,5 +1,5 @@
 name = "Vessels"
-description = "Transfer function optimized for vascular structures"
+description = "Vessels"
 
 # Lighting parameters
 ambient = 0.2

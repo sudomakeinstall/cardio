@@ -3,6 +3,7 @@ from trame.widgets import vtk as vtk_widgets
 from trame.widgets import vuetify
 
 from . import Scene
+from .transfer_functions import list_available_presets
 
 
 class UI:
@@ -195,6 +196,35 @@ class UI:
                         label=v.label,
                     )
 
+                    # Preset selection in collapsible panel
+                    available_presets = list_available_presets()
+                    current_preset = getattr(v, "_preset_key", "cardiac")
+                    current_desc = available_presets.get(current_preset, current_preset)
+
+                    with vuetify.VExpansionPanels(
+                        v_model=f"preset_panel_{v.label}",
+                        flat=True,
+                        classes="ml-4",
+                        dense=True,
+                    ):
+                        with vuetify.VExpansionPanel():
+                            vuetify.VExpansionPanelHeader("Transfer Function")
+                            with vuetify.VExpansionPanelContent():
+                                with vuetify.VRadioGroup(
+                                    v_model=(
+                                        f"volume_preset_{v.label}",
+                                        current_preset,
+                                    ),
+                                    dense=True,
+                                ):
+                                    for (
+                                        preset_key,
+                                        preset_desc,
+                                    ) in available_presets.items():
+                                        vuetify.VRadio(
+                                            label=preset_desc, value=preset_key
+                                        )
+
                     # Add clipping controls for volumes
                     if v.clipping_enabled:
                         vuetify.VCheckbox(
@@ -218,8 +248,7 @@ class UI:
                                 dense=True,
                             ):
                                 with vuetify.VExpansionPanel():
-                                    with vuetify.VExpansionPanelHeader():
-                                        "Clip Bounds"
+                                    vuetify.VExpansionPanelHeader("Clip Bounds")
                                     with vuetify.VExpansionPanelContent():
                                         # X bounds
                                         vuetify.VRangeSlider(

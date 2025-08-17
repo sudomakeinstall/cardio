@@ -22,6 +22,9 @@ class Logic:
         self.server.state.change(
             *[f"volume_visibility_{v.label}" for v in self.scene.volumes]
         )(self.sync_volume_visibility)
+        self.server.state.change(
+            *[f"volume_preset_{v.label}" for v in self.scene.volumes]
+        )(self.sync_volume_presets)
 
         clipping_controls = []
         for v in self.scene.volumes:
@@ -73,6 +76,16 @@ class Logic:
         for v in self.scene.volumes:
             v.visible = self.server.state[f"volume_visibility_{v.label}"]
             v.actors[self.server.state.frame].SetVisibility(v.visible)
+        self.server.controller.view_update()
+
+    def sync_volume_presets(self, **kwargs):
+        """Update volume transfer function presets based on UI selection."""
+        for v in self.scene.volumes:
+            state_key = f"volume_preset_{v.label}"
+            if hasattr(self.server.state, state_key):
+                current_preset = getattr(self.server.state, state_key)
+                if current_preset != v._preset_key:
+                    v.set_preset(current_preset)
         self.server.controller.view_update()
 
     def sync_volume_clipping(self, **kwargs):
@@ -160,6 +173,12 @@ class Logic:
     def _initialize_clipping_state(self):
         """Initialize clipping state variables for all volumes."""
         for v in self.scene.volumes:
+            # Initialize preset selection state
+            preset_key = getattr(v, "_preset_key", "cardiac")
+            setattr(self.server.state, f"volume_preset_{v.label}", preset_key)
+
+            # Initialize preset panel state (collapsed by default)
+            setattr(self.server.state, f"preset_panel_{v.label}", [])
             if hasattr(v, "clipping_enabled"):
                 # Initialize clipping checkbox state
                 setattr(

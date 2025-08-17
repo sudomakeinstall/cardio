@@ -1,5 +1,5 @@
 name = "Soft Tissue"
-description = "Transfer function for soft tissue visualization"
+description = "Soft Tissue"
 
 # Lighting parameters
 ambient = 0.5

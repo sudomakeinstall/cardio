@@ -1,5 +1,5 @@
 name = "Bone"
-description = "Single transfer function optimized for bone visualization"
+description = "Bone"
 
 # Lighting parameters
 ambient = 0.3
@@ -7,9 +7,9 @@ diffuse = 0.7
 specular = 0.4
 
 [[transfer_functions]]
-window = 1000
+window = 1800
 level = 400
-locolor = [1.0, 1.0, 0.9]
+locolor = [0.0, 0.0, 0.0]
 hicolor = [1.0, 1.0, 1.0]
-opacity = 0.8
+opacity = 1.0
 shape = "rightskew"

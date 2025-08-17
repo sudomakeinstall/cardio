@@ -52,7 +52,8 @@ class Volume(Object):
         self.actors: list[vtkVolume] = []
 
         # Load preset configuration
-        self.preset = load_preset(cfg["transfer_function_preset"])
+        self._preset_key = cfg["transfer_function_preset"]
+        self.preset = load_preset(self._preset_key)
 
         # Clipping configuration
         self.clipping_enabled: bool = cfg["clipping_enabled"]
@@ -171,3 +172,12 @@ class Volume(Object):
             for actor in self.actors:
                 mapper = actor.GetMapper()
                 mapper.SetClippingPlanes(self.clipping_planes)
+
+    def set_preset(self, preset_name: str):
+        """Change the transfer function preset for this volume."""
+        self._preset_key = preset_name
+        self.preset = load_preset(preset_name)
+
+        # Apply the new preset to all actors
+        for actor in self.actors:
+            actor.SetProperty(self.preset.vtk_property)
