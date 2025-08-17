@@ -1,0 +1,62 @@
+name = "Vascular_Open"
+description = "Vascular (Open)"
+
+ambient = 0.7
+diffuse = 0.4
+specular = 1.0
+
+[[transfer_functions]]
+
+[transfer_functions.opacity]
+[[transfer_functions.opacity.points]]
+x = -96.5
+y = 0.0
+
+[[transfer_functions.opacity.points]]
+x = 269.0
+y = 0.05
+
+[[transfer_functions.opacity.points]]
+x = 474.5
+y = 0.0
+
+[transfer_functions.color]
+[[transfer_functions.color.points]]
+x = -96.5
+r = 1.0
+g = 1.0
+b = 1.0
+
+[[transfer_functions.color.points]]
+x = 474.5
+r = 1.0
+g = 1.0
+b = 1.0
+
+[[transfer_functions]]
+
+[transfer_functions.opacity]
+[[transfer_functions.opacity.points]]
+x = 117
+y = 0.0
+
+[[transfer_functions.opacity.points]]
+x = 246.0
+y = 0.87
+
+[[transfer_functions.opacity.points]]
+x = 319
+y = 0.0
+
+[transfer_functions.color]
+[[transfer_functions.color.points]]
+x = 117
+r = 1.0
+g = 0.0
+b = 0.0
+
+[[transfer_functions.color.points]]
+x = 319
+r = 1.0
+g = 1.0
+b = 0.0

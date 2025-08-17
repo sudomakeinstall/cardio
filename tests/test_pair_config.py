@@ -14,10 +14,10 @@ def test_pair_config_from_toml():
     toml_path = pl.Path(__file__).parent / "assets" / "pair_config.toml"
     with toml_path.open("rt", encoding="utf-8") as fp:
         data = tk.load(fp)
-    
+
     # Create pair config from TOML data
     pair = TransferFunctionPairConfig.model_validate(data)
-    
+
     # Verify structure
     assert len(pair.opacity.points) == 2
     assert len(pair.color.points) == 2
@@ -32,14 +32,14 @@ def test_pair_config_vtk_functions():
     toml_path = pl.Path(__file__).parent / "assets" / "pair_config.toml"
     with toml_path.open("rt", encoding="utf-8") as fp:
         data = tk.load(fp)
-    
+
     pair = TransferFunctionPairConfig.model_validate(data)
     otf, ctf = pair.vtk_functions
-    
+
     # Verify types
     assert isinstance(otf, vtkPiecewiseFunction)
     assert isinstance(ctf, vtkColorTransferFunction)
-    
+
     # Verify they have the expected number of points
     assert otf.GetSize() == 2
     assert ctf.GetSize() == 2
@@ -49,12 +49,8 @@ def test_pair_config_validation():
     """Test TransferFunctionPairConfig validation."""
     # Valid config
     data = {
-        "opacity": {
-            "points": [{"x": 0.0, "y": 0.0}]
-        },
-        "color": {
-            "points": [{"x": 0.0, "r": 1.0, "g": 0.0, "b": 0.0}]
-        }
+        "opacity": {"points": [{"x": 0.0, "y": 0.0}]},
+        "color": {"points": [{"x": 0.0, "r": 1.0, "g": 0.0, "b": 0.0}]},
     }
     pair = TransferFunctionPairConfig.model_validate(data)
     assert len(pair.opacity.points) == 1

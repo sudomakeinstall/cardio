@@ -90,12 +90,14 @@ def blend_transfer_functions(tfs, scalar_range=(-2000, 2000), num_samples=512):
 
 class PiecewiseFunctionPoint(pc.BaseModel):
     """A single point in a piecewise function."""
+
     x: float = pc.Field(description="Scalar value")
     y: float = pc.Field(ge=0, le=1, description="Opacity value")
 
 
 class ColorTransferFunctionPoint(pc.BaseModel):
     """A single point in a color transfer function."""
+
     x: float = pc.Field(description="Scalar value")
     r: float = pc.Field(ge=0, le=1, description="Red component")
     g: float = pc.Field(ge=0, le=1, description="Green component")
@@ -104,6 +106,7 @@ class ColorTransferFunctionPoint(pc.BaseModel):
 
 class PiecewiseFunctionConfig(pc.BaseModel):
     """Configuration for a VTK piecewise function (opacity)."""
+
     points: list[PiecewiseFunctionPoint] = pc.Field(
         min_length=1, description="Points defining the piecewise function"
     )
@@ -119,6 +122,7 @@ class PiecewiseFunctionConfig(pc.BaseModel):
 
 class ColorTransferFunctionConfig(pc.BaseModel):
     """Configuration for a VTK color transfer function."""
+
     points: list[ColorTransferFunctionPoint] = pc.Field(
         min_length=1, description="Points defining the color transfer function"
     )
@@ -183,8 +187,13 @@ class TransferFunctionConfig(pc.BaseModel):
 
 class TransferFunctionPairConfig(pc.BaseModel):
     """Configuration for a pair of opacity and color transfer functions."""
-    opacity: PiecewiseFunctionConfig = pc.Field(description="Opacity transfer function configuration")
-    color: ColorTransferFunctionConfig = pc.Field(description="Color transfer function configuration")
+
+    opacity: PiecewiseFunctionConfig = pc.Field(
+        description="Opacity transfer function configuration"
+    )
+    color: ColorTransferFunctionConfig = pc.Field(
+        description="Color transfer function configuration"
+    )
 
     @property
     def vtk_functions(self) -> tuple[vtkPiecewiseFunction, vtkColorTransferFunction]:

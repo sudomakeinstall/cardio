@@ -1,9 +1,37 @@
-name = "Cardiac"
-description = "Cardiac"
+name = "Vascular_Closed"
+description = "Vascular (Closed)"
 
-ambient = 0.4
-diffuse = 0.6
-specular = 0.2
+ambient = 0.7
+diffuse = 0.4
+specular = 1.0
+
+[[transfer_functions]]
+
+[transfer_functions.opacity]
+[[transfer_functions.opacity.points]]
+x = 150
+y = 0.0
+
+[[transfer_functions.opacity.points]]
+x = 650
+y = 1.0
+
+[[transfer_functions.opacity.points]]
+x = 3071
+y = 1.0
+
+[transfer_functions.color]
+[[transfer_functions.color.points]]
+x = 150
+r = 1.0
+g = 1.0
+b = 1.0
+
+[[transfer_functions.color.points]]
+x = 3071
+r = 1.0
+g = 1.0
+b = 1.0
 
 [[transfer_functions]]
 
@@ -37,26 +65,26 @@ b = 1.0
 
 [transfer_functions.opacity]
 [[transfer_functions.opacity.points]]
-x = 117
+x = 120
 y = 0.0
 
 [[transfer_functions.opacity.points]]
-x = 246.0
-y = 0.87
+x = 258.0
+y = 0.8
 
 [[transfer_functions.opacity.points]]
-x = 319
+x = 320
 y = 0.0
 
 [transfer_functions.color]
 [[transfer_functions.color.points]]
-x = 117
+x = 120
 r = 1.0
 g = 0.0
 b = 0.0
 
 [[transfer_functions.color.points]]
-x = 319
+x = 320
 r = 1.0
 g = 1.0
 b = 0.0
