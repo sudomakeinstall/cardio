@@ -206,8 +206,6 @@ def load_preset(preset_name: str) -> VolumePropertyConfig:
         raise ValueError(f"Invalid preset file '{preset_name}.toml': {e}") from e
 
 
-
-
 def list_available_presets() -> dict[str, str]:
     """
     List all available transfer function presets.
