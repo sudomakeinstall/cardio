@@ -16,18 +16,41 @@ g = 0.0
 b = 0.0
 
 [[meshes]]
-label = "Aorta"
-directory = "./data/meshes"
+label = "BL_Dense"
+directory = "./data/obj-bl-dense"
 suffix = "obj"
 visible = true
-color_r = 1.0
-color_g = 0.0
-color_b = 0.0
+
+[meshes.property]
+representation = 2
+r = 1.0
+g = 0.0
+b = 0.0
+edge_visibility = false
+vertex_visibility = false
+shading = true
+interpolation = 1
+
+[[meshes]]
+label = "BL_Simplified"
+directory = "./data/obj-bl"
+suffix = "obj"
+visible = true
+
+[meshes.property]
+representation = 2
+r = 1.0
+g = 0.5
+b = 0.5
+edge_visibility = true
+vertex_visibility = false
+shading = false
+interpolation = 0
 
 [[volumes]]
-label="Volume"
-directory="./data/images"
+label="BL"
+directory="./data/img-bl"
 suffix="nii.gz"
 visible=true
+transfer_function_preset="vascular_closed"
 clipping_enabled=true
-transfer_function_preset="bone"

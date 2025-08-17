@@ -5,6 +5,7 @@ from vtkmodules.vtkIOGeometry import vtkOBJReader
 from vtkmodules.vtkRenderingCore import vtkActor, vtkPolyDataMapper, vtkRenderer
 
 from . import Object
+from .property_config import PropertyConfig
 
 
 class Mesh(Object):
@@ -12,9 +13,7 @@ class Mesh(Object):
         super().__init__(cfg, renderer)
         self.actors: list[vtkActor] = []
 
-        self.color_r: float = cfg["color_r"]
-        self.color_g: float = cfg["color_g"]
-        self.color_b: float = cfg["color_b"]
+        self.property_config = PropertyConfig.model_validate(cfg["property"])
 
         frame = 0
         while os.path.exists(self.path_for_frame(frame)):
@@ -33,7 +32,7 @@ class Mesh(Object):
         for a in self.actors:
             self.renderer.AddActor(a)
             a.SetVisibility(False)
-            a.GetProperty().SetColor(self.color_r, self.color_g, self.color_b)
+            a.SetProperty(self.property_config.vtk_property)
         if self.visible:
             self.actors[frame].SetVisibility(True)
         self.renderer.ResetCamera()

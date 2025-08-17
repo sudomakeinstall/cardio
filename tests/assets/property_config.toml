@@ -1,0 +1,9 @@
+# Test data for PropertyConfig
+representation = 1
+r = 0.8
+g = 0.4
+b = 0.2
+edge_visibility = true
+vertex_visibility = false
+shading = false
+interpolation = 2
