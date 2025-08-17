@@ -159,10 +159,10 @@ class UI:
 
                 vuetify.VSlider(
                     v_model=("bpm", 60),
-                    hint="Cycles/Minute",
+                    hint="Speed",
                     persistent_hint=True,
                     min=40,
-                    max=160,
+                    max=1024,
                     step=1,
                     hide_details=False,
                     dense=True,
@@ -176,7 +176,7 @@ class UI:
                     hint="Cycles/Rotation",
                     persistent_hint=True,
                     min=1,
-                    max=25,
+                    max=360,
                     step=1,
                     hide_details=False,
                     dense=True,
