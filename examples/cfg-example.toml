@@ -1,5 +1,5 @@
 project_name = "Cardio"
-current_frame = 5
+current_frame = 0
 screenshot_directory = "./data/screenshots"
 screenshot_subdirectory_format = "%Y-%m-%d-%H-%M-%S"
 rotation_factor = 3
@@ -29,41 +29,5 @@ label="Volume"
 directory="./data/images"
 suffix="nii.gz"
 visible=true
-ambient=0.4
-diffuse=0.6
-specular=0.2
 clipping_enabled=true
-
-[[volumes.transfer_functions]]
-window = 571
-level = 189
-locolor = [1.0, 1.0, 1.0]
-hicolor = [1.0, 1.0, 1.0]
-opacity = 0.05
-shape = "rightskew"
-
-[[volumes]]
-label="Volume2"
-directory="./data/images"
-suffix="nii.gz"
-visible=true
-ambient=0.4
-diffuse=0.6
-specular=0.2
-clipping_enabled=true
-
-[[volumes.transfer_functions]]
-window = 202
-level = 218
-locolor = [1.0, 0.0, 0.0]
-hicolor = [1.0, 1.0, 0.0]
-opacity = 0.87
-shape = "rightskew"
-
-[[volumes.transfer_functions]]
-window = 400
-level = 150
-locolor = [0.0, 0.0, 1.0]
-hicolor = [0.0, 1.0, 1.0]
-opacity = 0.1
-shape = "rightskew"
+transfer_function_preset="bone"
