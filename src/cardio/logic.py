@@ -69,13 +69,13 @@ class Logic:
     def sync_mesh_visibility(self, **kwargs):
         for m in self.scene.meshes:
             m.visible = self.server.state[f"mesh_visibility_{m.label}"]
-            m.actors[self.server.state.frame].SetVisibility(m.visible)
+            m.actors[self.server.state.frame % len(m.actors)].SetVisibility(m.visible)
         self.server.controller.view_update()
 
     def sync_volume_visibility(self, **kwargs):
         for v in self.scene.volumes:
             v.visible = self.server.state[f"volume_visibility_{v.label}"]
-            v.actors[self.server.state.frame].SetVisibility(v.visible)
+            v.actors[self.server.state.frame % len(v.actors)].SetVisibility(v.visible)
         self.server.controller.view_update()
 
     def sync_volume_presets(self, **kwargs):

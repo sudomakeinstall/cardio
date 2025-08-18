@@ -71,10 +71,11 @@ class Scene:
         ns = []
         ns += [len(m.actors) for m in self.meshes]
         ns += [len(v.actors) for v in self.volumes]
-        ns = np.array(ns)
         assert len(ns) > 0
-        assert np.all(ns == ns[0])
-        self.nframes = int(ns[0])
+        self.nframes = int(max(ns))
+        ns = np.array(ns)
+        if not np.all(ns == ns[0]):
+            print(f"WARNING: Unequal number of frames: {ns}.")
 
     def setup_rendering(self):
         # Use light background by default
@@ -91,7 +92,7 @@ class Scene:
     def show_frame(self, frame: int):
         for mesh in self.meshes:
             if mesh.visible:
-                mesh.actors[frame].SetVisibility(True)
+                mesh.actors[frame % len(mesh.actors)].SetVisibility(True)
         for volume in self.volumes:
             if volume.visible:
-                volume.actors[frame].SetVisibility(True)
+                volume.actors[frame % len(volume.actors)].SetVisibility(True)
