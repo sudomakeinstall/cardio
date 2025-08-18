@@ -30,6 +30,7 @@ class Scene:
         self.nframes: int = None
         self.renderer: vtkRenderer = vtkRenderer()
         self.renderWindow: vtkRenderWindow = vtkRenderWindow()
+        self.renderWindow.SetOffScreenRendering(True)
         self.renderWindowInteractor: vtkRenderWindowInteractor = (
             vtkRenderWindowInteractor()
         )
