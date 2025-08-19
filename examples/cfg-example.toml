@@ -20,6 +20,7 @@ label = "BL_Dense"
 directory = "./data/obj-bl-dense"
 suffix = "obj"
 visible = true
+loop_subdivision_iterations = 1
 
 [meshes.property]
 representation = 2

@@ -3,6 +3,7 @@ import os
 
 import itk
 import numpy as np
+import pydantic as pc
 from vtkmodules.vtkCommonDataModel import vtkPiecewiseFunction, vtkPlanes
 from vtkmodules.vtkIOGeometry import vtkOBJReader
 from vtkmodules.vtkRenderingCore import (
@@ -47,17 +48,27 @@ def reset_direction(image):
 
 
 class Volume(Object):
+    """Volume object with transfer functions and clipping support."""
+
+    actors: list[vtkVolume] = pc.Field(default_factory=list, exclude=True)
+    preset_key: str = pc.Field(default=None, exclude=True)
+    preset: object = pc.Field(default=None, exclude=True)  # transfer function preset
+    clipping_enabled: bool = pc.Field(default=False)
+    clipping_planes: vtkPlanes = pc.Field(default=None, exclude=True)
+
     def __init__(self, cfg: str, renderer: vtkRenderer):
-        super().__init__(cfg, renderer)
-        self.actors: list[vtkVolume] = []
+        super().__init__(
+            label=cfg["label"],
+            directory=cfg["directory"],
+            suffix=cfg["suffix"],
+            visible=cfg["visible"],
+            renderer=renderer,
+            clipping_enabled=cfg["clipping_enabled"],
+        )
 
         # Load preset configuration
-        self._preset_key = cfg["transfer_function_preset"]
-        self.preset = load_preset(self._preset_key)
-
-        # Clipping configuration
-        self.clipping_enabled: bool = cfg["clipping_enabled"]
-        self.clipping_planes: vtkPlanes = None
+        self.preset_key = cfg["transfer_function_preset"]
+        self.preset = load_preset(self.preset_key)
 
         frame = 0
         while os.path.exists(self.path_for_frame(frame)):
@@ -175,7 +186,7 @@ class Volume(Object):
 
     def set_preset(self, preset_name: str):
         """Change the transfer function preset for this volume."""
-        self._preset_key = preset_name
+        self.preset_key = preset_name
         self.preset = load_preset(preset_name)
 
         # Apply the new preset to all actors

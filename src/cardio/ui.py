@@ -223,7 +223,7 @@ class UI:
 
                         # Preset selection in collapsible panel
                         available_presets = list_available_presets()
-                        current_preset = getattr(v, "_preset_key", "cardiac")
+                        current_preset = getattr(v, "preset_key", "cardiac")
                         current_desc = available_presets.get(
                             current_preset, current_preset
                         )

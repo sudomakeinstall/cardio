@@ -84,7 +84,7 @@ class Logic:
             state_key = f"volume_preset_{v.label}"
             if hasattr(self.server.state, state_key):
                 current_preset = getattr(self.server.state, state_key)
-                if current_preset != v._preset_key:
+                if current_preset != v.preset_key:
                     v.set_preset(current_preset)
         self.server.controller.view_update()
 
@@ -174,7 +174,7 @@ class Logic:
         """Initialize clipping state variables for all volumes."""
         for v in self.scene.volumes:
             # Initialize preset selection state
-            preset_key = getattr(v, "_preset_key", "cardiac")
+            preset_key = getattr(v, "preset_key", "cardiac")
             setattr(self.server.state, f"volume_preset_{v.label}", preset_key)
 
             # Initialize preset panel state (collapsed by default)
