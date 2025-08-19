@@ -7,3 +7,4 @@ edge_visibility = true
 vertex_visibility = false
 shading = false
 interpolation = 2
+opacity = 0.7

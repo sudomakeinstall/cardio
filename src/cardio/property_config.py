@@ -37,6 +37,7 @@ class PropertyConfig(pc.BaseModel):
     interpolation: Interpolation = pc.Field(
         default=Interpolation.Gouraud, description="Interpolation mode"
     )
+    opacity: float = pc.Field(ge=0, le=1, default=1.0, description="Transparency level")
 
     @property
     def vtk_property(self) -> vtkProperty:
@@ -48,4 +49,5 @@ class PropertyConfig(pc.BaseModel):
         property.SetVertexVisibility(self.vertex_visibility)
         property.SetShading(self.shading)
         property.SetInterpolation(self.interpolation.value)
+        property.SetOpacity(self.opacity)
         return property

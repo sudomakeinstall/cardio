@@ -37,6 +37,9 @@ def test_property_config_from_toml():
     assert config.interpolation == Interpolation.Phong
     assert config.interpolation == 2
 
+    # Verify opacity value was parsed correctly
+    assert config.opacity == 0.7
+
 
 def test_property_config_vtk_property():
     """Test VTK property creation from PropertyConfig."""
@@ -69,3 +72,6 @@ def test_property_config_vtk_property():
 
     # Verify interpolation setting was set correctly
     assert vtk_prop.GetInterpolation() == 2  # Phong
+
+    # Verify opacity setting was set correctly
+    assert vtk_prop.GetOpacity() == pt.approx(0.7)
