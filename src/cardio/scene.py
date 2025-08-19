@@ -1,4 +1,4 @@
-import logging
+import sys
 
 import numpy as np
 import tomlkit as tk
@@ -38,10 +38,12 @@ class Scene:
 
         with open(cfg_file, mode="rt", encoding="utf-8") as fp:
             self.cfg = tk.load(fp)
-        for mesh_cfg in self.cfg["meshes"]:
-            self.meshes += [Mesh(mesh_cfg, self.renderer)]
-        for volume_cfg in self.cfg["volumes"]:
-            self.volumes += [Volume(volume_cfg, self.renderer)]
+        if "meshes" in self.cfg:
+            for mesh_cfg in self.cfg["meshes"]:
+                self.meshes += [Mesh(mesh_cfg, self.renderer)]
+        if "volumes" in self.cfg:
+            for volume_cfg in self.cfg["volumes"]:
+                self.volumes += [Volume(volume_cfg, self.renderer)]
         self.set_nframes()
 
         self.project_name = self.cfg["project_name"]
@@ -72,11 +74,14 @@ class Scene:
         ns = []
         ns += [len(m.actors) for m in self.meshes]
         ns += [len(v.actors) for v in self.volumes]
-        assert len(ns) > 0
+        if not len(ns) > 0:
+            print(f"WARNING: No objects were found to display.", file=sys.stderr)
+            self.nframes = 1
+            return
         self.nframes = int(max(ns))
         ns = np.array(ns)
         if not np.all(ns == ns[0]):
-            print(f"WARNING: Unequal number of frames: {ns}.")
+            print(f"WARNING: Unequal number of frames: {ns}.", file=sys.stderr)
 
     def setup_rendering(self):
         # Use light background by default
