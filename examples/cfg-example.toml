@@ -18,7 +18,6 @@ b = 0.0
 [[meshes]]
 label = "BL_Dense"
 directory = "./data/obj-bl-dense"
-suffix = "obj"
 visible = true
 loop_subdivision_iterations = 1
 
@@ -35,7 +34,6 @@ interpolation = 1
 [[meshes]]
 label = "BL_Simplified"
 directory = "./data/obj-bl"
-suffix = "obj"
 visible = true
 
 [meshes.property]
@@ -51,7 +49,6 @@ interpolation = 0
 [[volumes]]
 label="BL"
 directory="./data/img-bl"
-suffix="nii.gz"
 visible=true
 transfer_function_preset="vascular_closed"
 clipping_enabled=true

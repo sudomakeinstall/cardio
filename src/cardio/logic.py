@@ -16,6 +16,16 @@ class Logic:
         self.server.state.change("frame")(self.update_frame)
         self.server.state.change("playing")(self.play)
         self.server.state.change("dark_mode")(self.sync_background_color)
+
+        # Initialize visibility state variables
+        for m in self.scene.meshes:
+            self.server.state[f"mesh_visibility_{m.label}"] = m.visible
+        for v in self.scene.volumes:
+            self.server.state[f"volume_visibility_{v.label}"] = v.visible
+
+        # Initialize preset state variables
+        for v in self.scene.volumes:
+            self.server.state[f"volume_preset_{v.label}"] = v.preset_key
         self.server.state.change(
             *[f"mesh_visibility_{m.label}" for m in self.scene.meshes]
         )(self.sync_mesh_visibility)
@@ -49,7 +59,18 @@ class Logic:
 
     def update_frame(self, frame, **kwargs):
         self.scene.hide_all_frames()
-        self.scene.show_frame(frame)
+
+        # Show frame with server state visibility
+        for mesh in self.scene.meshes:
+            visible = self.server.state[f"mesh_visibility_{mesh.label}"]
+            if visible:
+                mesh.actors[frame % len(mesh.actors)].SetVisibility(True)
+
+        for volume in self.scene.volumes:
+            visible = self.server.state[f"volume_visibility_{volume.label}"]
+            if visible:
+                volume.actors[frame % len(volume.actors)].SetVisibility(True)
+
         self.server.controller.view_update()
 
     @asynchronous.task
@@ -68,24 +89,28 @@ class Logic:
 
     def sync_mesh_visibility(self, **kwargs):
         for m in self.scene.meshes:
-            m.visible = self.server.state[f"mesh_visibility_{m.label}"]
-            m.actors[self.server.state.frame % len(m.actors)].SetVisibility(m.visible)
+            visible = self.server.state[f"mesh_visibility_{m.label}"]
+            m.actors[self.server.state.frame % len(m.actors)].SetVisibility(visible)
         self.server.controller.view_update()
 
     def sync_volume_visibility(self, **kwargs):
         for v in self.scene.volumes:
-            v.visible = self.server.state[f"volume_visibility_{v.label}"]
-            v.actors[self.server.state.frame % len(v.actors)].SetVisibility(v.visible)
+            visible = self.server.state[f"volume_visibility_{v.label}"]
+            v.actors[self.server.state.frame % len(v.actors)].SetVisibility(visible)
         self.server.controller.view_update()
 
     def sync_volume_presets(self, **kwargs):
         """Update volume transfer function presets based on UI selection."""
+        from .transfer_functions import load_preset
+
         for v in self.scene.volumes:
-            state_key = f"volume_preset_{v.label}"
-            if hasattr(self.server.state, state_key):
-                current_preset = getattr(self.server.state, state_key)
-                if current_preset != v.preset_key:
-                    v.set_preset(current_preset)
+            preset_name = self.server.state[f"volume_preset_{v.label}"]
+            preset = load_preset(preset_name)
+
+            # Apply preset to all actors
+            for actor in v.actors:
+                actor.SetProperty(preset.vtk_property)
+
         self.server.controller.view_update()
 
     def sync_volume_clipping(self, **kwargs):

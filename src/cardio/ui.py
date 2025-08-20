@@ -199,7 +199,7 @@ class UI:
                     vuetify.VSubheader("Meshes", classes="text-caption pl-4")
                     for i, m in enumerate(self.scene.meshes):
                         vuetify.VCheckbox(
-                            v_model=(f"mesh_visibility_{m.label}", m.visible),
+                            v_model=f"mesh_visibility_{m.label}",
                             on_icon="mdi-eye",
                             off_icon="mdi-eye-off",
                             classes="mx-1",
@@ -212,7 +212,7 @@ class UI:
                     vuetify.VSubheader("Volumes", classes="text-caption pl-4")
                     for i, v in enumerate(self.scene.volumes):
                         vuetify.VCheckbox(
-                            v_model=(f"volume_visibility_{v.label}", v.visible),
+                            v_model=f"volume_visibility_{v.label}",
                             on_icon="mdi-eye",
                             off_icon="mdi-eye-off",
                             classes="mx-1",
@@ -223,7 +223,7 @@ class UI:
 
                         # Preset selection in collapsible panel
                         available_presets = list_available_presets()
-                        current_preset = getattr(v, "preset_key", "cardiac")
+                        current_preset = self.server.state[f"volume_preset_{v.label}"]
                         current_desc = available_presets.get(
                             current_preset, current_preset
                         )
@@ -239,10 +239,7 @@ class UI:
                                 vuetify.VExpansionPanelHeader("Transfer Function")
                                 with vuetify.VExpansionPanelContent():
                                     with vuetify.VRadioGroup(
-                                        v_model=(
-                                            f"volume_preset_{v.label}",
-                                            current_preset,
-                                        ),
+                                        v_model=f"volume_preset_{v.label}",
                                         dense=True,
                                     ):
                                         for (
