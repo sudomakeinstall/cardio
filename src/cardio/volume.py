@@ -51,7 +51,6 @@ class Volume(Object):
     """Volume object with transfer functions and clipping support."""
 
     preset_key: str = pc.Field(default=None, exclude=True)
-    clipping_enabled: bool = pc.Field(default=False)
 
     def __init__(self, cfg: str, renderer: vtkRenderer):
         preset_key = cfg["transfer_function_preset"]
@@ -62,7 +61,7 @@ class Volume(Object):
             pattern=cfg.get("pattern", "${frame}.nii.gz"),
             visible=cfg["visible"],
             renderer=renderer,
-            clipping_enabled=cfg["clipping_enabled"],
+            clipping_enabled=cfg.get("clipping_enabled", False),
             preset_key=preset_key,
         )
 
@@ -88,17 +87,6 @@ class Volume(Object):
 
         return volume_actors
 
-    @functools.cached_property
-    def clipping_planes(self) -> vtkPlanes:
-        """Generate clipping planes based on first actor bounds."""
-        if not self.actors:
-            return None
-
-        bounds = self.actors[0].GetBounds()
-        planes = vtkPlanes()
-        self._create_clipping_planes_from_bounds(planes, bounds)
-        return planes
-
     @property
     def preset(self):
         """Load preset based on current preset_key."""
@@ -113,76 +101,6 @@ class Volume(Object):
             self.actors[frame].SetVisibility(True)
 
         self.renderer.ResetCamera()
-
-    def _create_clipping_planes_from_bounds(self, planes: vtkPlanes, bounds):
-        """Create 6 clipping planes from box bounds."""
-        import vtkmodules.vtkCommonCore as vtk
-
-        # Create 6 planes for the box faces
-        plane_list = []
-        normals = [
-            [1, 0, 0],
-            [-1, 0, 0],  # x-min, x-max
-            [0, 1, 0],
-            [0, -1, 0],  # y-min, y-max
-            [0, 0, 1],
-            [0, 0, -1],  # z-min, z-max
-        ]
-        origins = [
-            [bounds[0], 0, 0],
-            [bounds[1], 0, 0],  # x-min, x-max
-            [0, bounds[2], 0],
-            [0, bounds[3], 0],  # y-min, y-max
-            [0, 0, bounds[4]],
-            [0, 0, bounds[5]],  # z-min, z-max
-        ]
-
-        points = vtk.vtkPoints()
-        norms = vtk.vtkDoubleArray()
-        norms.SetNumberOfComponents(3)
-        norms.SetName("Normals")
-
-        for i, (normal, origin) in enumerate(zip(normals, origins)):
-            points.InsertNextPoint(origin)
-            norms.InsertNextTuple(normal)
-
-        planes.SetPoints(points)
-        planes.SetNormals(norms)
-
-    def toggle_clipping(self, enabled: bool):
-        """Enable or disable volume clipping."""
-
-        if enabled and self.clipping_planes:
-            # Apply clipping to all actors
-            for actor in self.actors:
-                mapper = actor.GetMapper()
-                mapper.SetClippingPlanes(self.clipping_planes)
-        else:
-            # Remove clipping from all actors
-            for actor in self.actors:
-                mapper = actor.GetMapper()
-                mapper.RemoveAllClippingPlanes()
-
-    def reset_clipping_bounds(self):
-        """Reset the clipping bounds to the volume bounds."""
-        if not self.actors:
-            return
-
-        bounds = self.actors[0].GetBounds()
-        self.update_clipping_bounds(bounds)
-
-    def update_clipping_bounds(self, bounds):
-        """Update clipping bounds from UI controls."""
-        if not self.clipping_planes:
-            return
-
-        # Update clipping planes with new bounds
-        self._create_clipping_planes_from_bounds(self.clipping_planes, bounds)
-
-        # Apply to all volume actors
-        for actor in self.actors:
-            mapper = actor.GetMapper()
-            mapper.SetClippingPlanes(self.clipping_planes)
 
     def apply_preset_to_actors(self):
         """Apply the current preset to all actors."""

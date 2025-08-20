@@ -2,7 +2,9 @@ import re
 import string
 import pathlib as pl
 import pydantic as pc
+import functools
 from vtkmodules.vtkRenderingCore import vtkRenderer
+from vtkmodules.vtkCommonDataModel import vtkPlanes
 
 
 class Object(pc.BaseModel):
@@ -19,6 +21,7 @@ class Object(pc.BaseModel):
     renderer: vtkRenderer = pc.Field(
         exclude=True, description="VTK renderer (excluded from serialization)"
     )
+    clipping_enabled: bool = pc.Field(default=False)
 
     @pc.field_validator("label")
     @classmethod
@@ -72,3 +75,78 @@ class Object(pc.BaseModel):
             paths.append(path)
             frame += 1
         return paths
+
+    @functools.cached_property
+    def clipping_planes(self) -> vtkPlanes:
+        """Generate clipping planes based on first actor bounds."""
+        if not hasattr(self, "actors") or not self.actors:
+            return None
+
+        bounds = self.actors[0].GetBounds()
+        planes = vtkPlanes()
+        self._create_clipping_planes_from_bounds(planes, bounds)
+        return planes
+
+    def _create_clipping_planes_from_bounds(self, planes: vtkPlanes, bounds):
+        """Create 6 clipping planes from box bounds."""
+        import vtkmodules.vtkCommonCore as vtk
+
+        # Create 6 planes for the box faces
+        normals = [
+            [1, 0, 0],
+            [-1, 0, 0],  # x-min, x-max
+            [0, 1, 0],
+            [0, -1, 0],  # y-min, y-max
+            [0, 0, 1],
+            [0, 0, -1],  # z-min, z-max
+        ]
+        origins = [
+            [bounds[0], 0, 0],
+            [bounds[1], 0, 0],  # x-min, x-max
+            [0, bounds[2], 0],
+            [0, bounds[3], 0],  # y-min, y-max
+            [0, 0, bounds[4]],
+            [0, 0, bounds[5]],  # z-min, z-max
+        ]
+
+        points = vtk.vtkPoints()
+        norms = vtk.vtkDoubleArray()
+        norms.SetNumberOfComponents(3)
+        norms.SetName("Normals")
+
+        for normal, origin in zip(normals, origins):
+            points.InsertNextPoint(origin)
+            norms.InsertNextTuple(normal)
+
+        planes.SetPoints(points)
+        planes.SetNormals(norms)
+
+    def toggle_clipping(self, enabled: bool):
+        """Enable or disable clipping for all actors."""
+        if not hasattr(self, "actors"):
+            return
+
+        if enabled and self.clipping_planes:
+            # Apply clipping to all actors
+            for actor in self.actors:
+                mapper = actor.GetMapper()
+                mapper.SetClippingPlanes(self.clipping_planes)
+        else:
+            # Remove clipping from all actors
+            for actor in self.actors:
+                mapper = actor.GetMapper()
+                mapper.RemoveAllClippingPlanes()
+
+    def update_clipping_bounds(self, bounds):
+        """Update clipping bounds from UI controls."""
+        if not self.clipping_planes:
+            return
+
+        # Update clipping planes with new bounds
+        self._create_clipping_planes_from_bounds(self.clipping_planes, bounds)
+
+        # Apply to all actors if clipping is enabled
+        if self.clipping_enabled:
+            for actor in self.actors:
+                mapper = actor.GetMapper()
+                mapper.SetClippingPlanes(self.clipping_planes)
