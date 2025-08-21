@@ -20,13 +20,14 @@ from vtkmodules.vtkRenderingCore import (
     vtkRenderWindowInteractor,
 )
 
-from . import Mesh, Volume
+from . import Mesh, Volume, Segmentation
 
 
 class Scene:
     def __init__(self, cfg_file: str):
         self.meshes: list[Mesh] = []
         self.volumes: list[Volume] = []
+        self.segmentations: list[Segmentation] = []
         self.nframes: int = None
         self.renderer: vtkRenderer = vtkRenderer()
         self.renderWindow: vtkRenderWindow = vtkRenderWindow()
@@ -44,6 +45,9 @@ class Scene:
         if "volumes" in self.cfg:
             for volume_cfg in self.cfg["volumes"]:
                 self.volumes += [Volume(volume_cfg, self.renderer)]
+        if "segmentations" in self.cfg:
+            for segmentation_cfg in self.cfg["segmentations"]:
+                self.segmentations += [Segmentation(segmentation_cfg, self.renderer)]
         self.set_nframes()
 
         self.project_name = self.cfg["project_name"]
@@ -69,11 +73,14 @@ class Scene:
             mesh.setup_pipeline(self.current_frame)
         for volume in self.volumes:
             volume.setup_pipeline(self.current_frame)
+        for segmentation in self.segmentations:
+            segmentation.setup_pipeline(self.current_frame)
 
     def set_nframes(self):
         ns = []
         ns += [len(m.actors) for m in self.meshes]
         ns += [len(v.actors) for v in self.volumes]
+        ns += [len(s.actors) for s in self.segmentations]
         if not len(ns) > 0:
             print(f"WARNING: No objects were found to display.", file=sys.stderr)
             self.nframes = 1
@@ -102,3 +109,7 @@ class Scene:
         for volume in self.volumes:
             if volume.visible:
                 volume.actors[frame % len(volume.actors)].SetVisibility(True)
+        for segmentation in self.segmentations:
+            if segmentation.visible:
+                actor = segmentation.actors[frame % len(segmentation.actors)]
+                actor.SetVisibility(True)

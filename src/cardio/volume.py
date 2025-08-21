@@ -17,34 +17,7 @@ from vtkmodules.vtkRenderingVolumeOpenGL2 import vtkOpenGLRayCastImageDisplayHel
 
 from . import Object
 from .transfer_functions import load_preset
-
-
-def reset_direction(image):
-    origin = np.asarray(itk.origin(image))
-    spacing = np.asarray(itk.spacing(image))
-    size = np.asarray(itk.size(image))
-    direction = np.asarray(image.GetDirection())
-
-    direction[direction == 1] = 0
-    origin += np.dot(size, np.dot(np.diag(spacing), direction))
-    direction = np.identity(3)
-
-    origin = itk.Point[itk.F, 3](origin)
-    spacing = itk.spacing(image)
-    size = itk.size(image)
-    direction = itk.matrix_from_array(direction)
-
-    interpolator = itk.LinearInterpolateImageFunction.New(image)
-    output = itk.resample_image_filter(
-        image,
-        size=size,
-        interpolator=interpolator,
-        output_spacing=spacing,
-        output_origin=origin,
-        output_direction=direction,
-    )
-
-    return output
+from .utils import reset_direction, InterpolatorType
 
 
 class Volume(Object):
@@ -74,7 +47,7 @@ class Volume(Object):
             logging.info(f"{self.label}: Loading frame {frame}.")
 
             image = itk.imread(path)
-            image = reset_direction(image)
+            image = reset_direction(image, InterpolatorType.LINEAR)
             image = itk.vtk_image_from_image(image)
 
             mapper = vtkGPUVolumeRayCastMapper()

@@ -6,6 +6,8 @@ import functools
 from vtkmodules.vtkRenderingCore import vtkRenderer
 from vtkmodules.vtkCommonDataModel import vtkPlanes
 
+from .utils import calculate_combined_bounds
+
 
 class Object(pc.BaseModel):
     """Base class for renderable objects with validated configuration."""
@@ -82,20 +84,7 @@ class Object(pc.BaseModel):
         if not hasattr(self, "actors") or not self.actors:
             return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
-        # Start with first actor's bounds
-        combined = list(self.actors[0].GetBounds())
-
-        # Expand to encompass all actors
-        for actor in self.actors[1:]:
-            bounds = actor.GetBounds()
-            combined[0] = min(combined[0], bounds[0])  # xmin
-            combined[1] = max(combined[1], bounds[1])  # xmax
-            combined[2] = min(combined[2], bounds[2])  # ymin
-            combined[3] = max(combined[3], bounds[3])  # ymax
-            combined[4] = min(combined[4], bounds[4])  # zmin
-            combined[5] = max(combined[5], bounds[5])  # zmax
-
-        return combined
+        return calculate_combined_bounds(self.actors)
 
     @functools.cached_property
     def clipping_planes(self) -> vtkPlanes:

@@ -22,6 +22,8 @@ class Logic:
             self.server.state[f"mesh_visibility_{m.label}"] = m.visible
         for v in self.scene.volumes:
             self.server.state[f"volume_visibility_{v.label}"] = v.visible
+        for s in self.scene.segmentations:
+            self.server.state[f"segmentation_visibility_{s.label}"] = s.visible
 
         # Initialize preset state variables
         for v in self.scene.volumes:
@@ -32,12 +34,17 @@ class Logic:
             self.server.state[f"mesh_clipping_{m.label}"] = m.clipping_enabled
         for v in self.scene.volumes:
             self.server.state[f"volume_clipping_{v.label}"] = v.clipping_enabled
+        for s in self.scene.segmentations:
+            self.server.state[f"segmentation_clipping_{s.label}"] = s.clipping_enabled
         self.server.state.change(
             *[f"mesh_visibility_{m.label}" for m in self.scene.meshes]
         )(self.sync_mesh_visibility)
         self.server.state.change(
             *[f"volume_visibility_{v.label}" for v in self.scene.volumes]
         )(self.sync_volume_visibility)
+        self.server.state.change(
+            *[f"segmentation_visibility_{s.label}" for s in self.scene.segmentations]
+        )(self.sync_segmentation_visibility)
         self.server.state.change(
             *[f"volume_preset_{v.label}" for v in self.scene.volumes]
         )(self.sync_volume_presets)
@@ -72,6 +79,22 @@ class Logic:
                 self.sync_volume_clipping
             )
 
+        # Set up segmentation clipping controls
+        segmentation_clipping_controls = []
+        for s in self.scene.segmentations:
+            segmentation_clipping_controls.extend(
+                [
+                    f"segmentation_clipping_{s.label}",
+                    f"clip_x_{s.label}",
+                    f"clip_y_{s.label}",
+                    f"clip_z_{s.label}",
+                ]
+            )
+        if segmentation_clipping_controls:
+            self.server.state.change(*segmentation_clipping_controls)(
+                self.sync_segmentation_clipping
+            )
+
         self.server.controller.increment_frame = self.increment_frame
         self.server.controller.decrement_frame = self.decrement_frame
         self.server.controller.screenshot = self.screenshot
@@ -93,6 +116,12 @@ class Logic:
             visible = self.server.state[f"volume_visibility_{volume.label}"]
             if visible:
                 volume.actors[frame % len(volume.actors)].SetVisibility(True)
+
+        for segmentation in self.scene.segmentations:
+            visible = self.server.state[f"segmentation_visibility_{segmentation.label}"]
+            if visible:
+                actor = segmentation.actors[frame % len(segmentation.actors)]
+                actor.SetVisibility(True)
 
         self.server.controller.view_update()
 
@@ -120,6 +149,13 @@ class Logic:
         for v in self.scene.volumes:
             visible = self.server.state[f"volume_visibility_{v.label}"]
             v.actors[self.server.state.frame % len(v.actors)].SetVisibility(visible)
+        self.server.controller.view_update()
+
+    def sync_segmentation_visibility(self, **kwargs):
+        for s in self.scene.segmentations:
+            visible = self.server.state[f"segmentation_visibility_{s.label}"]
+            actor = s.actors[self.server.state.frame % len(s.actors)]
+            actor.SetVisibility(visible)
         self.server.controller.view_update()
 
     def sync_volume_presets(self, **kwargs):
@@ -185,6 +221,32 @@ class Logic:
                         z_range[1],
                     ]
                     v.update_clipping_bounds(bounds)
+
+        self.server.controller.view_update()
+
+    def sync_segmentation_clipping(self, **kwargs):
+        """Update segmentation clipping based on UI controls."""
+        for s in self.scene.segmentations:
+            # Toggle clipping on/off
+            clipping_enabled = self.server.state[f"segmentation_clipping_{s.label}"]
+            s.toggle_clipping(clipping_enabled)
+
+            # Update clipping bounds if enabled
+            if clipping_enabled:
+                x_range = self.server.state[f"clip_x_{s.label}"]
+                y_range = self.server.state[f"clip_y_{s.label}"]
+                z_range = self.server.state[f"clip_z_{s.label}"]
+
+                if x_range and y_range and z_range:
+                    bounds = [
+                        x_range[0],
+                        x_range[1],
+                        y_range[0],
+                        y_range[1],
+                        z_range[0],
+                        z_range[1],
+                    ]
+                    s.update_clipping_bounds(bounds)
 
         self.server.controller.view_update()
 
@@ -287,3 +349,15 @@ class Logic:
                     setattr(
                         self.server.state, f"clip_z_{v.label}", [bounds[4], bounds[5]]
                     )
+
+        # Initialize segmentation clipping state
+        for s in self.scene.segmentations:
+            # Initialize panel state
+            setattr(self.server.state, f"clip_panel_{s.label}", [])
+
+            # Initialize range sliders with segmentation bounds if available
+            if s.actors:
+                bounds = s.combined_bounds
+                setattr(self.server.state, f"clip_x_{s.label}", [bounds[0], bounds[1]])
+                setattr(self.server.state, f"clip_y_{s.label}", [bounds[2], bounds[3]])
+                setattr(self.server.state, f"clip_z_{s.label}", [bounds[4], bounds[5]])

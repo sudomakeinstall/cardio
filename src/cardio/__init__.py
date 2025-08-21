@@ -1,6 +1,7 @@
 from .object import Object
 from .mesh import Mesh
 from .volume import Volume
+from .segmentation import Segmentation
 from .scene import Scene
 from .logic import Logic
 from .ui import UI
@@ -14,6 +15,7 @@ __all__ = [
     "Object",
     "Mesh",
     "Volume",
+    "Segmentation",
     "Scene",
     "Screenshot",
     "UI",

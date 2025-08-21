@@ -391,3 +391,87 @@ class UI:
                                                 dense=True,
                                                 thumb_label=False,
                                             )
+
+                if self.scene.segmentations:
+                    vuetify.VSubheader("Segmentations", classes="text-caption pl-4")
+                    for i, s in enumerate(self.scene.segmentations):
+                        vuetify.VCheckbox(
+                            v_model=f"segmentation_visibility_{s.label}",
+                            on_icon="mdi-eye",
+                            off_icon="mdi-eye-off",
+                            classes="mx-1",
+                            hide_details=True,
+                            dense=True,
+                            label=s.label,
+                        )
+
+                        if s.clipping_enabled:
+                            vuetify.VCheckbox(
+                                v_model=(
+                                    f"segmentation_clipping_{s.label}",
+                                    s.clipping_enabled,
+                                ),
+                                on_icon="mdi-content-cut",
+                                off_icon="mdi-content-cut",
+                                classes="mx-1 ml-4",
+                                hide_details=True,
+                                dense=True,
+                                label="Clip",
+                            )
+
+                            # Get initial segmentation bounds for sliders
+                            if s.actors:
+                                bounds = s.combined_bounds
+                                with vuetify.VExpansionPanels(
+                                    v_model=f"clip_panel_{s.label}",
+                                    multiple=True,
+                                    flat=True,
+                                    classes="ml-4",
+                                    dense=True,
+                                    style="max-width: 270px;",
+                                ):
+                                    with vuetify.VExpansionPanel():
+                                        vuetify.VExpansionPanelHeader("Clip Bounds")
+                                        with vuetify.VExpansionPanelContent():
+                                            # X bounds
+                                            vuetify.VRangeSlider(
+                                                v_model=(
+                                                    f"clip_x_{s.label}",
+                                                    [bounds[0], bounds[1]],
+                                                ),
+                                                label="X Range",
+                                                min=bounds[0],
+                                                max=bounds[1],
+                                                step=(bounds[1] - bounds[0]) / 100,
+                                                hide_details=True,
+                                                dense=True,
+                                                thumb_label=False,
+                                            )
+                                            # Y bounds
+                                            vuetify.VRangeSlider(
+                                                v_model=(
+                                                    f"clip_y_{s.label}",
+                                                    [bounds[2], bounds[3]],
+                                                ),
+                                                label="Y Range",
+                                                min=bounds[2],
+                                                max=bounds[3],
+                                                step=(bounds[3] - bounds[2]) / 100,
+                                                hide_details=True,
+                                                dense=True,
+                                                thumb_label=False,
+                                            )
+                                            # Z bounds
+                                            vuetify.VRangeSlider(
+                                                v_model=(
+                                                    f"clip_z_{s.label}",
+                                                    [bounds[4], bounds[5]],
+                                                ),
+                                                label="Z Range",
+                                                min=bounds[4],
+                                                max=bounds[5],
+                                                step=(bounds[5] - bounds[4]) / 100,
+                                                hide_details=True,
+                                                dense=True,
+                                                thumb_label=False,
+                                            )
