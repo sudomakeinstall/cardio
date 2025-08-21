@@ -1,4 +1,5 @@
 # System
+import enum
 import logging
 
 # Third Party
@@ -19,6 +20,13 @@ from vtkmodules.vtkFiltersVerdict import vtkMeshQuality
 # Internal
 from . import Object
 from .property_config import Representation, PropertyConfig
+
+
+class SurfaceType(enum.Enum):
+    """Surface coloring types for mesh rendering."""
+
+    SOLID = "solid"
+    SQUEEZ = "squeez"
 
 
 def apply_elementwise(
@@ -54,12 +62,23 @@ class Mesh(Object):
     actors: list[vtkActor] = pc.Field(default_factory=list, exclude=True)
     property_config: PropertyConfig = pc.Field(default=None, exclude=True)
     loop_subdivision_iterations: int = pc.Field(ge=0, le=5, default=0)
+    surface_type: SurfaceType = pc.Field(default=SurfaceType.SOLID)
     ctf_min: float = pc.Field(ge=0.0, default=0.7)
     ctf_max: float = pc.Field(ge=0.0, default=1.3)
 
     def __init__(self, cfg: str, renderer: vtkRenderer):
         # Validate loop subdivision iterations
         iterations = cfg.get("loop_subdivision_iterations", 0)
+
+        # Parse surface_type from config
+        surface_type_str = cfg.get("surface_type", "solid")
+        try:
+            surface_type = SurfaceType(surface_type_str)
+        except ValueError:
+            logging.warning(
+                f"Invalid surface_type '{surface_type_str}' for mesh {cfg['label']}, using default 'solid'"
+            )
+            surface_type = SurfaceType.SOLID
 
         super().__init__(
             label=cfg["label"],
@@ -69,6 +88,7 @@ class Mesh(Object):
             renderer=renderer,
             clipping_enabled=cfg.get("clipping_enabled", True),
             loop_subdivision_iterations=iterations,
+            surface_type=surface_type,
             property_config=PropertyConfig.model_validate(cfg["property"]),
         )
 
@@ -100,44 +120,73 @@ class Mesh(Object):
 
         # Pass 2: Create actors with appropriate coloring
         for frame, polydata in enumerate(frame_data):
-            if (
-                self.property_config.representation == Representation.Surface
-                and consistent_topology
-            ):
-                ref_quality_array = frame_data[0].GetCellData().GetArray("Area")
-                if frame == 0:
-                    ratio_array = apply_elementwise(
-                        ref_quality_array, ref_quality_array, lambda x, y: 1.0, "SQUEEZ"
-                    )
-                else:
-                    current_quality_array = polydata.GetCellData().GetArray("Area")
-                    ratio_array = apply_elementwise(
-                        current_quality_array,
-                        ref_quality_array,
-                        calculate_squeez,
-                        "SQUEEZ",
-                    )
-                polydata.GetCellData().AddArray(ratio_array)
-                polydata.GetCellData().SetActiveScalars("SQUEEZ")
-
-                mapper = vtkPolyDataMapper()
-                mapper.SetInputData(polydata)
-                mapper = self.setup_scalar_coloring(mapper)
-            else:
-                mapper = vtkPolyDataMapper()
-                mapper.SetInputData(polydata)
-                mapper.ScalarVisibilityOff()
+            mapper = self._setup_coloring(
+                polydata, frame_data, frame, consistent_topology
+            )
 
             actor = vtkActor()
             actor.SetMapper(mapper)
 
-            if (
-                self.property_config.representation == Representation.Surface
-                and consistent_topology
-            ):
-                actor.GetProperty().SetInterpolationToFlat()
-
             self.actors.append(actor)
+
+    def _setup_coloring(self, polydata, frame_data, frame, consistent_topology):
+        """Setup mesh coloring based on surface_type with smart fallback."""
+        if self.surface_type == SurfaceType.SQUEEZ:
+            if self._can_use_squeez_coloring(consistent_topology):
+                return self._setup_squeez_coloring(polydata, frame_data, frame)
+            else:
+                self._log_squeez_fallback()
+                return self._setup_solid_coloring(polydata)
+        else:  # SurfaceType.SOLID
+            return self._setup_solid_coloring(polydata)
+
+    def _can_use_squeez_coloring(self, consistent_topology):
+        """Check if SQUEEZ coloring is possible."""
+        return (
+            self.property_config.representation == Representation.Surface
+            and consistent_topology
+        )
+
+    def _log_squeez_fallback(self):
+        """Log warning when falling back from SQUEEZ to solid coloring."""
+        if self.property_config.representation != Representation.Surface:
+            logging.warning(
+                f"SQUEEZ coloring requested for {self.label} but representation is not Surface, falling back to solid coloring"
+            )
+        else:
+            logging.warning(
+                f"SQUEEZ coloring requested for {self.label} but topology inconsistent across frames, falling back to solid coloring"
+            )
+
+    def _setup_solid_coloring(self, polydata):
+        """Setup solid coloring using VTK property colors."""
+        mapper = vtkPolyDataMapper()
+        mapper.SetInputData(polydata)
+        mapper.ScalarVisibilityOff()
+        return mapper
+
+    def _setup_squeez_coloring(self, polydata, frame_data, frame):
+        """Setup SQUEEZ coloring with scalar data."""
+        ref_quality_array = frame_data[0].GetCellData().GetArray("Area")
+        if frame == 0:
+            ratio_array = apply_elementwise(
+                ref_quality_array, ref_quality_array, lambda x, y: 1.0, "SQUEEZ"
+            )
+        else:
+            current_quality_array = polydata.GetCellData().GetArray("Area")
+            ratio_array = apply_elementwise(
+                current_quality_array,
+                ref_quality_array,
+                calculate_squeez,
+                "SQUEEZ",
+            )
+        polydata.GetCellData().AddArray(ratio_array)
+        polydata.GetCellData().SetActiveScalars("SQUEEZ")
+
+        mapper = vtkPolyDataMapper()
+        mapper.SetInputData(polydata)
+        mapper = self.setup_scalar_coloring(mapper)
+        return mapper
 
     def color_transfer_function(self):
         ctf = vtkColorTransferFunction()
@@ -213,24 +262,25 @@ class Mesh(Object):
             a.SetVisibility(False)
             a.SetProperty(self.property_config.vtk_property)
 
-        # Apply flat shading AFTER setting properties, for consistent topology cases
-        if (
-            self.property_config.representation == Representation.Surface
-            and len(self.actors) > 1
-        ):  # Need at least 2 frames to check consistency
-            # Check if any frame has scalar data (indicates consistent topology)
-            has_scalar_data = False
+        # Apply flat shading for SQUEEZ coloring
+        if self._is_using_squeez_coloring():
             for actor in self.actors:
-                mapper = actor.GetMapper()
-                if mapper.GetInput() and mapper.GetInput().GetCellData().GetScalars():
-                    has_scalar_data = True
-                    break
-
-            # If we found scalar data, apply flat shading to ALL actors for consistency
-            if has_scalar_data:
-                for actor in self.actors:
-                    actor.GetProperty().SetInterpolationToFlat()
+                actor.GetProperty().SetInterpolationToFlat()
 
         if self.visible:
             self.actors[frame].SetVisibility(True)
         self.renderer.ResetCamera()
+
+    def _is_using_squeez_coloring(self):
+        """Check if SQUEEZ coloring is actually being used (not fell back to solid)."""
+        if self.surface_type != SurfaceType.SQUEEZ:
+            return False
+
+        # Check if any actor has SQUEEZ scalar data
+        for actor in self.actors:
+            mapper = actor.GetMapper()
+            if mapper.GetInput():
+                squeez_array = mapper.GetInput().GetCellData().GetArray("SQUEEZ")
+                if squeez_array is not None:
+                    return True
+        return False
