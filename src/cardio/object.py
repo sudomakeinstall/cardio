@@ -76,13 +76,34 @@ class Object(pc.BaseModel):
             frame += 1
         return paths
 
+    @property
+    def combined_bounds(self) -> list[float]:
+        """Get combined bounds encompassing all actors."""
+        if not hasattr(self, "actors") or not self.actors:
+            return [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+        # Start with first actor's bounds
+        combined = list(self.actors[0].GetBounds())
+
+        # Expand to encompass all actors
+        for actor in self.actors[1:]:
+            bounds = actor.GetBounds()
+            combined[0] = min(combined[0], bounds[0])  # xmin
+            combined[1] = max(combined[1], bounds[1])  # xmax
+            combined[2] = min(combined[2], bounds[2])  # ymin
+            combined[3] = max(combined[3], bounds[3])  # ymax
+            combined[4] = min(combined[4], bounds[4])  # zmin
+            combined[5] = max(combined[5], bounds[5])  # zmax
+
+        return combined
+
     @functools.cached_property
     def clipping_planes(self) -> vtkPlanes:
-        """Generate clipping planes based on first actor bounds."""
+        """Generate clipping planes based on combined bounds of all actors."""
         if not hasattr(self, "actors") or not self.actors:
             return None
 
-        bounds = self.actors[0].GetBounds()
+        bounds = self.combined_bounds
         planes = vtkPlanes()
         self._create_clipping_planes_from_bounds(planes, bounds)
         return planes

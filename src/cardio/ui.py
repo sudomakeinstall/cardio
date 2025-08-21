@@ -223,7 +223,7 @@ class UI:
 
                             # Get initial mesh bounds for sliders
                             if m.actors:
-                                bounds = m.actors[0].GetBounds()
+                                bounds = m.combined_bounds
                                 with vuetify.VExpansionPanels(
                                     v_model=f"clip_panel_{m.label}",
                                     multiple=True,
@@ -337,7 +337,7 @@ class UI:
 
                             # Get initial volume bounds for sliders
                             if v.actors:
-                                bounds = v.actors[0].GetBounds()
+                                bounds = v.combined_bounds
                                 with vuetify.VExpansionPanels(
                                     v_model=f"clip_panel_{v.label}",
                                     multiple=True,

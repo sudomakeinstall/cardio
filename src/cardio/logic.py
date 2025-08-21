@@ -253,7 +253,7 @@ class Logic:
 
             # Initialize range sliders with mesh bounds if available
             if m.actors:
-                bounds = m.actors[0].GetBounds()
+                bounds = m.combined_bounds
                 setattr(self.server.state, f"clip_x_{m.label}", [bounds[0], bounds[1]])
                 setattr(self.server.state, f"clip_y_{m.label}", [bounds[2], bounds[3]])
                 setattr(self.server.state, f"clip_z_{m.label}", [bounds[4], bounds[5]])
@@ -277,7 +277,7 @@ class Logic:
 
                 # Initialize range sliders with volume bounds if available
                 if v.actors:
-                    bounds = v.actors[0].GetBounds()
+                    bounds = v.combined_bounds
                     setattr(
                         self.server.state, f"clip_x_{v.label}", [bounds[0], bounds[1]]
                     )
