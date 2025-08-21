@@ -61,7 +61,7 @@ class Volume(Object):
             pattern=cfg.get("pattern", "${frame}.nii.gz"),
             visible=cfg["visible"],
             renderer=renderer,
-            clipping_enabled=cfg.get("clipping_enabled", False),
+            clipping_enabled=cfg.get("clipping_enabled", True),
             preset_key=preset_key,
         )
 

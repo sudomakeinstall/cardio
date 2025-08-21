@@ -26,6 +26,12 @@ class Logic:
         # Initialize preset state variables
         for v in self.scene.volumes:
             self.server.state[f"volume_preset_{v.label}"] = v.preset_key
+
+        # Initialize clipping state variables
+        for m in self.scene.meshes:
+            self.server.state[f"mesh_clipping_{m.label}"] = m.clipping_enabled
+        for v in self.scene.volumes:
+            self.server.state[f"volume_clipping_{v.label}"] = v.clipping_enabled
         self.server.state.change(
             *[f"mesh_visibility_{m.label}" for m in self.scene.meshes]
         )(self.sync_mesh_visibility)
@@ -36,9 +42,24 @@ class Logic:
             *[f"volume_preset_{v.label}" for v in self.scene.volumes]
         )(self.sync_volume_presets)
 
-        clipping_controls = []
+        # Set up mesh clipping controls
+        mesh_clipping_controls = []
+        for m in self.scene.meshes:
+            mesh_clipping_controls.extend(
+                [
+                    f"mesh_clipping_{m.label}",
+                    f"clip_x_{m.label}",
+                    f"clip_y_{m.label}",
+                    f"clip_z_{m.label}",
+                ]
+            )
+        if mesh_clipping_controls:
+            self.server.state.change(*mesh_clipping_controls)(self.sync_mesh_clipping)
+
+        # Set up volume clipping controls
+        volume_clipping_controls = []
         for v in self.scene.volumes:
-            clipping_controls.extend(
+            volume_clipping_controls.extend(
                 [
                     f"volume_clipping_{v.label}",
                     f"clip_x_{v.label}",
@@ -46,8 +67,10 @@ class Logic:
                     f"clip_z_{v.label}",
                 ]
             )
-        if clipping_controls:
-            self.server.state.change(*clipping_controls)(self.sync_volume_clipping)
+        if volume_clipping_controls:
+            self.server.state.change(*volume_clipping_controls)(
+                self.sync_volume_clipping
+            )
 
         self.server.controller.increment_frame = self.increment_frame
         self.server.controller.decrement_frame = self.decrement_frame
@@ -110,6 +133,32 @@ class Logic:
             # Apply preset to all actors
             for actor in v.actors:
                 actor.SetProperty(preset.vtk_property)
+
+        self.server.controller.view_update()
+
+    def sync_mesh_clipping(self, **kwargs):
+        """Update mesh clipping based on UI controls."""
+        for m in self.scene.meshes:
+            # Toggle clipping on/off
+            clipping_enabled = self.server.state[f"mesh_clipping_{m.label}"]
+            m.toggle_clipping(clipping_enabled)
+
+            # Update clipping bounds from sliders
+            if clipping_enabled and hasattr(self.server.state, f"clip_x_{m.label}"):
+                x_bounds = getattr(self.server.state, f"clip_x_{m.label}")
+                y_bounds = getattr(self.server.state, f"clip_y_{m.label}")
+                z_bounds = getattr(self.server.state, f"clip_z_{m.label}")
+
+                bounds = [
+                    x_bounds[0],
+                    x_bounds[1],  # x_min, x_max
+                    y_bounds[0],
+                    y_bounds[1],  # y_min, y_max
+                    z_bounds[0],
+                    z_bounds[1],  # z_min, z_max
+                ]
+
+                m.update_clipping_bounds(bounds)
 
         self.server.controller.view_update()
 
@@ -196,7 +245,20 @@ class Logic:
         self.server.controller.view_update()
 
     def _initialize_clipping_state(self):
-        """Initialize clipping state variables for all volumes."""
+        """Initialize clipping state variables for all objects."""
+        # Initialize mesh clipping state
+        for m in self.scene.meshes:
+            # Initialize panel state
+            setattr(self.server.state, f"clip_panel_{m.label}", [])
+
+            # Initialize range sliders with mesh bounds if available
+            if m.actors:
+                bounds = m.actors[0].GetBounds()
+                setattr(self.server.state, f"clip_x_{m.label}", [bounds[0], bounds[1]])
+                setattr(self.server.state, f"clip_y_{m.label}", [bounds[2], bounds[3]])
+                setattr(self.server.state, f"clip_z_{m.label}", [bounds[4], bounds[5]])
+
+        # Initialize volume clipping state
         for v in self.scene.volumes:
             # Initialize preset selection state
             preset_key = getattr(v, "preset_key", "cardiac")

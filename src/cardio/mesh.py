@@ -67,6 +67,7 @@ class Mesh(Object):
             pattern=cfg.get("pattern", "${frame}.obj"),
             visible=cfg["visible"],
             renderer=renderer,
+            clipping_enabled=cfg.get("clipping_enabled", True),
             loop_subdivision_iterations=iterations,
             property_config=PropertyConfig.model_validate(cfg["property"]),
         )
