@@ -23,7 +23,7 @@ def test_pair_config_from_toml():
     assert len(pair.color.points) == 2
     assert pair.opacity.points[0].x == 0.0
     assert pair.opacity.points[0].y == 0.0
-    assert pair.color.points[0].r == 1.0
+    assert pair.color.points[0].color == (1.0, 0.0, 0.0)
 
 
 def test_pair_config_vtk_functions():
@@ -50,7 +50,7 @@ def test_pair_config_validation():
     # Valid config
     data = {
         "opacity": {"points": [{"x": 0.0, "y": 0.0}]},
-        "color": {"points": [{"x": 0.0, "r": 1.0, "g": 0.0, "b": 0.0}]},
+        "color": {"points": [{"x": 0.0, "color": [1.0, 0.0, 0.0]}]},
     }
     pair = TransferFunctionPairConfig.model_validate(data)
     assert len(pair.opacity.points) == 1

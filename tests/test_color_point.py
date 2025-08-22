@@ -18,28 +18,24 @@ def test_color_point_from_toml():
 
     # Verify values
     assert point.x == 200.0
-    assert point.r == 0.8
-    assert point.g == 0.4
-    assert point.b == 0.2
+    assert point.color == (0.8, 0.4, 0.2)
 
 
 def test_color_point_validation():
     """Test ColorTransferFunctionPoint validation."""
     # Valid point
-    point = ColorTransferFunctionPoint(x=100.0, r=1.0, g=0.5, b=0.0)
+    point = ColorTransferFunctionPoint(x=100.0, color=(1.0, 0.5, 0.0))
     assert point.x == 100.0
-    assert point.r == 1.0
-    assert point.g == 0.5
-    assert point.b == 0.0
+    assert point.color == (1.0, 0.5, 0.0)
 
-    # Invalid r value (too high)
+    # Invalid color value (too high)
     with pt.raises(ValueError):
-        ColorTransferFunctionPoint(x=0.0, r=1.5, g=0.0, b=0.0)
+        ColorTransferFunctionPoint(x=0.0, color=(1.5, 0.0, 0.0))
 
-    # Invalid g value (negative)
+    # Invalid color value (negative)
     with pt.raises(ValueError):
-        ColorTransferFunctionPoint(x=0.0, r=0.0, g=-0.1, b=0.0)
+        ColorTransferFunctionPoint(x=0.0, color=(0.0, -0.1, 0.0))
 
-    # Invalid b value (too high)
+    # Invalid color value (too high)
     with pt.raises(ValueError):
-        ColorTransferFunctionPoint(x=0.0, r=0.0, g=0.0, b=2.0)
+        ColorTransferFunctionPoint(x=0.0, color=(0.0, 0.0, 2.0))

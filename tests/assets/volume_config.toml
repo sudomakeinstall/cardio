@@ -28,21 +28,15 @@ y = 0.0
 [transfer_functions.color]
 [[transfer_functions.color.points]]
 x = -500.0
-r = 0.0
-g = 0.0
-b = 1.0
+color = [0.0, 0.0, 1.0]
 
 [[transfer_functions.color.points]]
 x = 0.0
-r = 1.0
-g = 1.0
-b = 0.0
+color = [1.0, 1.0, 0.0]
 
 [[transfer_functions.color.points]]
 x = 500.0
-r = 1.0
-g = 0.0
-b = 0.0
+color = [1.0, 0.0, 0.0]
 
 # Second transfer function pair
 [[transfer_functions]]
@@ -65,18 +59,12 @@ y = 0.0
 [transfer_functions.color]
 [[transfer_functions.color.points]]
 x = -200.0
-r = 1.0
-g = 0.0
-b = 1.0
+color = [1.0, 0.0, 1.0]
 
 [[transfer_functions.color.points]]
 x = 200.0
-r = 0.0
-g = 1.0
-b = 1.0
+color = [0.0, 1.0, 1.0]
 
 [[transfer_functions.color.points]]
 x = 600.0
-r = 1.0
-g = 1.0
-b = 0.0
+color = [1.0, 1.0, 0.0]

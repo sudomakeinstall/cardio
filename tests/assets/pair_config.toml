@@ -14,12 +14,8 @@ y = 0.5
 [color]
 [[color.points]]
 x = 0.0
-r = 1.0
-g = 0.0
-b = 0.0
+color = [1.0, 0.0, 0.0]
 
 [[color.points]]
 x = 500.0
-r = 0.0
-g = 1.0
-b = 0.0
+color = [0.0, 1.0, 0.0]

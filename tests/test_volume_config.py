@@ -69,7 +69,7 @@ def test_volume_config_validation():
         "transfer_functions": [
             {
                 "opacity": {"points": [{"x": 0.0, "y": 0.0}]},
-                "color": {"points": [{"x": 0.0, "r": 1.0, "g": 0.0, "b": 0.0}]},
+                "color": {"points": [{"x": 0.0, "color": [1.0, 0.0, 0.0]}]},
             }
         ],
     }
