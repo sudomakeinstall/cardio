@@ -300,16 +300,12 @@ class Logic:
         if dark_mode:
             # Dark mode: use dark background from config
             self.scene.renderer.SetBackground(
-                self.scene.background.dark.r,
-                self.scene.background.dark.g,
-                self.scene.background.dark.b,
+                *self.scene.background.dark,
             )
         else:
             # Light mode: use light background from config
             self.scene.renderer.SetBackground(
-                self.scene.background.light.r,
-                self.scene.background.light.g,
-                self.scene.background.light.b,
+                *self.scene.background.light,
             )
         self.server.controller.view_update()
 

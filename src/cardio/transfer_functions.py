@@ -1,11 +1,14 @@
-"""Transfer function preset management for volume rendering."""
-
+# System
 import pathlib as pl
-import typing as ty
+
+# Third Party
 import tomlkit as tk
 import pydantic as pc
 import numpy as np
 import vtk
+
+# Internal
+from .types import ScalarComponent, RGBColor
 
 
 def blend_transfer_functions(tfs, scalar_range=(-2000, 2000), num_samples=512):
@@ -91,16 +94,14 @@ class PiecewiseFunctionPoint(pc.BaseModel):
     """A single point in a piecewise function."""
 
     x: float = pc.Field(description="Scalar value")
-    y: float = pc.Field(ge=0, le=1, description="Opacity value")
+    y: ScalarComponent
 
 
 class ColorTransferFunctionPoint(pc.BaseModel):
     """A single point in a color transfer function."""
 
     x: float = pc.Field(description="Scalar value")
-    r: float = pc.Field(ge=0, le=1, description="Red component")
-    g: float = pc.Field(ge=0, le=1, description="Green component")
-    b: float = pc.Field(ge=0, le=1, description="Blue component")
+    color: RGBColor
 
 
 class PiecewiseFunctionConfig(pc.BaseModel):
@@ -131,7 +132,7 @@ class ColorTransferFunctionConfig(pc.BaseModel):
         """Create VTK color transfer function from this configuration."""
         ctf = vtk.vtkColorTransferFunction()
         for point in self.points:
-            ctf.AddRGBPoint(point.x, point.r, point.g, point.b)
+            ctf.AddRGBPoint(point.x, *point.color)
         return ctf
 
 
@@ -140,22 +141,9 @@ class TransferFunctionConfig(pc.BaseModel):
 
     window: float = pc.Field(gt=0, description="Window width for transfer function")
     level: float = pc.Field(description="Window level for transfer function")
-    locolor: list[float] = pc.Field(
-        min_length=3, max_length=3, description="RGB color for low values"
-    )
-    hicolor: list[float] = pc.Field(
-        min_length=3, max_length=3, description="RGB color for high values"
-    )
-    opacity: float = pc.Field(ge=0, le=1, description="Maximum opacity value")
-
-    @pc.field_validator("locolor", "hicolor")
-    @classmethod
-    def validate_rgb_values(cls, v: list[float]) -> list[float]:
-        """Validate RGB values are in [0, 1] range."""
-        for val in v:
-            if not (0 <= val <= 1):
-                raise ValueError(f"RGB values must be in range [0, 1], got {val}")
-        return v
+    locolor: RGBColor
+    hicolor: RGBColor
+    opacity: ScalarComponent
 
     @property
     def vtk_functions(
@@ -172,15 +160,11 @@ class TransferFunctionConfig(pc.BaseModel):
         ctf = vtk.vtkColorTransferFunction()
         ctf.AddRGBPoint(
             self.level - self.window / 2,
-            self.locolor[0],
-            self.locolor[1],
-            self.locolor[2],
+            *self.locolor,
         )
         ctf.AddRGBPoint(
             self.level + self.window / 2,
-            self.hicolor[0],
-            self.hicolor[1],
-            self.hicolor[2],
+            *self.hicolor,
         )
 
         return otf, ctf
@@ -211,9 +195,9 @@ class VolumePropertyConfig(pc.BaseModel):
     description: str = pc.Field(description="Description of the preset")
 
     # Lighting parameters
-    ambient: float = pc.Field(ge=0, le=1, description="Ambient lighting coefficient")
-    diffuse: float = pc.Field(ge=0, le=1, description="Diffuse lighting coefficient")
-    specular: float = pc.Field(ge=0, le=1, description="Specular lighting coefficient")
+    ambient: ScalarComponent
+    diffuse: ScalarComponent
+    specular: ScalarComponent
 
     # Transfer functions
     transfer_functions: list[TransferFunctionPairConfig] = pc.Field(
@@ -230,16 +214,16 @@ class VolumePropertyConfig(pc.BaseModel):
         blended_otf, blended_ctf = blend_transfer_functions(tfs)
 
         # Create and configure the volume property
-        property = vtk.vtkVolumeProperty()
-        property.SetScalarOpacity(blended_otf)
-        property.SetColor(blended_ctf)
-        property.ShadeOn()
-        property.SetInterpolationTypeToLinear()
-        property.SetAmbient(self.ambient)
-        property.SetDiffuse(self.diffuse)
-        property.SetSpecular(self.specular)
+        _vtk_property = vtk.vtkVolumeProperty()
+        _vtk_property.SetScalarOpacity(blended_otf)
+        _vtk_property.SetColor(blended_ctf)
+        _vtk_property.ShadeOn()
+        _vtk_property.SetInterpolationTypeToLinear()
+        _vtk_property.SetAmbient(self.ambient)
+        _vtk_property.SetDiffuse(self.diffuse)
+        _vtk_property.SetSpecular(self.specular)
 
-        return property
+        return _vtk_property
 
 
 def load_preset(preset_name: str) -> VolumePropertyConfig:

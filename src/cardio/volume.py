@@ -40,7 +40,7 @@ class Volume(Object):
 
         return self
 
-    @pc.computed_field
+    @property
     def actors(self) -> list[vtk.vtkVolume]:
         return self._actors
 

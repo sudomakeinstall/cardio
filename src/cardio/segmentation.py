@@ -1,12 +1,15 @@
+# System
 import logging
 
+# Third Party
 import itk
 import vtk
 import numpy as np
 import pydantic as pc
 
+# Internal
 from . import Object
-from .property_config import PropertyConfig
+from .property_config import vtkPropertyConfig
 from .utils import reset_direction, InterpolatorType
 
 
@@ -18,8 +21,8 @@ class Segmentation(Object):
         description="Filename pattern with $frame placeholder",
     )
     _actors: list[vtk.vtkActor] = pc.PrivateAttr(default_factory=list)
-    property: PropertyConfig = pc.Field(
-        default_factory=PropertyConfig, description="Property configuration"
+    properties: vtkPropertyConfig = pc.Field(
+        default_factory=vtkPropertyConfig, description="Property configuration"
     )
     include_labels: list[int] | None = pc.Field(default=None)
     label_properties: dict[int, dict] = pc.Field(default_factory=dict)
@@ -78,7 +81,7 @@ class Segmentation(Object):
 
         return self
 
-    @pc.computed_field
+    @property
     def actors(self) -> list[vtk.vtkActor]:
         return self._actors
 
@@ -138,7 +141,7 @@ class Segmentation(Object):
         for actor in self._actors:
             actor.SetVisibility(False)
             # Apply base property configuration if available
-            base_prop = self.property.vtk_property
+            base_prop = self.properties.vtk_property
             if base_prop:
                 # Note: For scalar-colored actors, we preserve the color transfer function
                 # by not overriding the mapper's lookup table

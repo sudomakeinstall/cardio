@@ -10,17 +10,12 @@ from pydantic import Field, model_validator, PrivateAttr
 
 # Internal
 from . import Mesh, Volume, Segmentation
-
-
-class Color(pc.BaseModel):
-    r: float = 1.0
-    g: float = 1.0
-    b: float = 1.0
+from .types import RGBColor
 
 
 class Background(pc.BaseModel):
-    light: Color = {1.0, 1.0, 1.0}
-    dark: Color = {0.0, 0.0, 0.0}
+    light: RGBColor = (1.0, 1.0, 1.0)
+    dark: RGBColor = (0.0, 0.0, 0.0)
 
 
 class Scene(pc.BaseModel):
@@ -60,10 +55,9 @@ class Scene(pc.BaseModel):
     @model_validator(mode="after")
     def setup_scene(self):
         # Configure VTK objects
+        print(self.background.light)
         self._renderer.SetBackground(
-            self.background.light.r,
-            self.background.light.g,
-            self.background.light.b,
+            *self.background.light,
         )
         self._renderWindow.AddRenderer(self._renderer)
         self._renderWindow.SetOffScreenRendering(True)

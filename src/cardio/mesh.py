@@ -9,7 +9,7 @@ import vtk
 
 # Internal
 from . import Object
-from .property_config import Representation, PropertyConfig
+from .property_config import Representation, vtkPropertyConfig
 
 
 class SurfaceType(enum.Enum):
@@ -53,7 +53,7 @@ class Mesh(Object):
         default="${frame}.obj", description="Filename pattern with $frame placeholder"
     )
     _actors: list[vtk.vtkActor] = pc.PrivateAttr(default_factory=list)
-    property: PropertyConfig = pc.Field(description="Property configuration")
+    properties: vtkPropertyConfig = pc.Field(description="Property configuration")
     loop_subdivision_iterations: int = pc.Field(ge=0, le=5, default=0)
     surface_type: SurfaceType = pc.Field(default=SurfaceType.SOLID)
     ctf_min: float = pc.Field(ge=0.0, default=0.7)
@@ -80,7 +80,7 @@ class Mesh(Object):
             else:
                 polydata = reader.GetOutput()
 
-            if self.property.representation == Representation.Surface:
+            if self.properties.representation == Representation.Surface:
                 polydata = self.calculate_mesh_areas(polydata)
 
             frame_data.append(polydata)
@@ -100,7 +100,7 @@ class Mesh(Object):
 
         return self
 
-    @pc.computed_field
+    @property
     def actors(self) -> list[vtk.vtkActor]:
         return self._actors
 
@@ -118,13 +118,13 @@ class Mesh(Object):
     def _can_use_squeez_coloring(self, consistent_topology):
         """Check if SQUEEZ coloring is possible."""
         return (
-            self.property.representation == Representation.Surface
+            self.properties.representation == Representation.Surface
             and consistent_topology
         )
 
     def _log_squeez_fallback(self):
         """Log warning when falling back from SQUEEZ to solid coloring."""
-        if self.property.representation != Representation.Surface:
+        if self.properties.representation != Representation.Surface:
             logging.warning(
                 f"SQUEEZ coloring requested for {self.label} but representation is not Surface, falling back to solid coloring"
             )
@@ -203,7 +203,7 @@ class Mesh(Object):
 
     def _should_calculate_squeez(self, frame_data: list) -> bool:
         if (
-            self.property.representation != Representation.Surface
+            self.properties.representation != Representation.Surface
             or len(frame_data) <= 1
         ):
             return False
@@ -235,7 +235,7 @@ class Mesh(Object):
         """Configure actor properties without adding to renderer."""
         for actor in self._actors:
             actor.SetVisibility(False)
-            actor.SetProperty(self.property.vtk_property)
+            actor.SetProperty(self.properties.vtk_property)
 
         # Apply flat shading for SQUEEZ coloring
         if self._is_using_squeez_coloring():

@@ -1,8 +1,13 @@
-"""Property configuration for mesh rendering."""
-
+# System
 import enum
+import functools
+
+# Third Party
 import pydantic as pc
-from vtkmodules.vtkRenderingCore import vtkProperty
+import vtk
+
+# Internal
+from .types import ScalarComponent, RGBColor
 
 
 class Representation(enum.IntEnum):
@@ -22,32 +27,30 @@ class Interpolation(enum.IntEnum):
     PBR = 3
 
 
-class PropertyConfig(pc.BaseModel):
+class vtkPropertyConfig(pc.BaseModel):
     """Configuration for mesh rendering properties."""
 
     representation: Representation = pc.Field(
         default=Representation.Surface, description="Rendering representation mode"
     )
-    r: float = pc.Field(ge=0, le=1, default=1.0, description="Red component")
-    g: float = pc.Field(ge=0, le=1, default=1.0, description="Green component")
-    b: float = pc.Field(ge=0, le=1, default=1.0, description="Blue component")
+    color: RGBColor = (1.0, 1.0, 1.0)
     edge_visibility: bool = pc.Field(default=False, description="Show edges")
     vertex_visibility: bool = pc.Field(default=False, description="Show vertices")
     shading: bool = pc.Field(default=True, description="Enable shading")
     interpolation: Interpolation = pc.Field(
         default=Interpolation.Gouraud, description="Interpolation mode"
     )
-    opacity: float = pc.Field(ge=0, le=1, default=1.0, description="Transparency level")
+    opacity: ScalarComponent = 1.0
 
-    @property
-    def vtk_property(self) -> vtkProperty:
+    @functools.cached_property
+    def vtk_property(self) -> vtk.vtkProperty:
         """Create a fully configured VTK property from this configuration."""
-        property = vtkProperty()
-        property.SetRepresentation(self.representation.value)
-        property.SetColor(self.r, self.g, self.b)
-        property.SetEdgeVisibility(self.edge_visibility)
-        property.SetVertexVisibility(self.vertex_visibility)
-        property.SetShading(self.shading)
-        property.SetInterpolation(self.interpolation.value)
-        property.SetOpacity(self.opacity)
-        return property
+        _vtk_property = vtk.vtkProperty()
+        _vtk_property.SetRepresentation(self.representation.value)
+        _vtk_property.SetColor(*self.color)
+        _vtk_property.SetEdgeVisibility(self.edge_visibility)
+        _vtk_property.SetVertexVisibility(self.vertex_visibility)
+        _vtk_property.SetShading(self.shading)
+        _vtk_property.SetInterpolation(self.interpolation.value)
+        _vtk_property.SetOpacity(self.opacity)
+        return _vtk_property
