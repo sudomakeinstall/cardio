@@ -5,15 +5,8 @@ screenshot_subdirectory_format = "%Y-%m-%d-%H-%M-%S"
 rotation_factor = 3
 
 [background]
-[background.light]
-r = 1.0
-g = 1.0
-b = 1.0
-
-[background.dark]
-r = 0.0
-g = 0.0
-b = 0.0
+light = [1.0, 1.0, 1.0]
+dark = [0.0, 0.0, 0.0]
 
 [[meshes]]
 label = "BL_Dense"

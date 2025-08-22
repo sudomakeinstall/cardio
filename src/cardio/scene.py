@@ -6,30 +6,122 @@ import pathlib as pl
 import numpy as np
 import vtk
 import pydantic as pc
-from pydantic import Field, model_validator, PrivateAttr
+from pydantic import Field, model_validator, field_validator, PrivateAttr, TypeAdapter
+import pydantic_settings as ps
 
 # Internal
 from . import Mesh, Volume, Segmentation
 from .types import RGBColor
 
+# Type adapters for list types to improve CLI integration
+from typing import Annotated
+
+MeshListAdapter = TypeAdapter(list[Mesh])
+VolumeListAdapter = TypeAdapter(list[Volume])
+SegmentationListAdapter = TypeAdapter(list[Segmentation])
+
+# Create annotated types for better CLI integration
+MeshList = Annotated[
+    list[Mesh],
+    Field(
+        description='List of mesh objects. CLI usage: --meshes \'[{"label":"mesh1","directory":"./data/mesh1"}]\''
+    ),
+]
+VolumeList = Annotated[
+    list[Volume],
+    Field(
+        description='Volume objects. CLI: --volumes \'[{"label":"vol1","directory":"./data/vol1"}]\''
+    ),
+]
+SegmentationList = Annotated[
+    list[Segmentation],
+    Field(
+        description='Segmentation objects. CLI: --segmentations \'[{"label":"seg1","directory":"./data/seg1"}]\''
+    ),
+]
+
 
 class Background(pc.BaseModel):
-    light: RGBColor = (1.0, 1.0, 1.0)
-    dark: RGBColor = (0.0, 0.0, 0.0)
+    light: RGBColor = Field(
+        default=(1.0, 1.0, 1.0),
+        description="Background color in light mode.  CLI usage: --background.light '[0.8,0.9,1.0]'",
+    )
+    dark: RGBColor = Field(
+        default=(0.0, 0.0, 0.0),
+        description="Background color in dark mode.  CLI usage: --background.dark '[0.1,0.1,0.2]'",
+    )
 
 
-class Scene(pc.BaseModel):
-    model_config = pc.ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
+class Scene(ps.BaseSettings):
+    model_config = ps.SettingsConfigDict(
+        arbitrary_types_allowed=True,
+        populate_by_name=True,
+        cli_parse_args=False,
+        cli_use_class_docstring=True,
+    )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        # Get the CLI settings source and config file from the class if available
+        cli_source = getattr(cls, "_cli_source", None)
+        config_file = getattr(cls, "_config_file", None)
+
+        sources = [init_settings]
+
+        # Add CLI settings source if available
+        if cli_source is not None:
+            sources.append(cli_source)
+
+        # Add TOML config file source if config file is specified
+        if config_file is not None:
+            sources.append(
+                ps.TomlConfigSettingsSource(settings_cls, toml_file=config_file)
+            )
+
+        sources.extend([env_settings, file_secret_settings])
+        return tuple(sources)
 
     project_name: str = "Cardio"
     current_frame: int = 0
-    screenshot_directory: pl.Path
-    screenshot_subdirectory_format: pl.Path
-    rotation_factor: float
-    background: Background = Background()
-    meshes: list[Mesh] = Field(default_factory=list)
-    volumes: list[Volume] = Field(default_factory=list)
-    segmentations: list[Segmentation] = Field(default_factory=list)
+    screenshot_directory: pl.Path = pl.Path("./data/screenshots")
+    screenshot_subdirectory_format: pl.Path = pl.Path("%Y-%m-%d-%H-%M-%S")
+    rotation_factor: float = 3.0
+    background: Background = Field(
+        default_factory=Background,
+        description='Background colors. CLI usage: \'{"light": [0.8, 0.9, 1.0], "dark": [0.1, 0.1, 0.2]}\'',
+    )
+    meshes: MeshList = Field(default_factory=list)
+    volumes: VolumeList = Field(default_factory=list)
+    segmentations: SegmentationList = Field(default_factory=list)
+
+    # Field validators for JSON string inputs
+    @field_validator("meshes", mode="before")
+    @classmethod
+    def validate_meshes(cls, v):
+        if isinstance(v, str):
+            return MeshListAdapter.validate_json(v)
+        return v
+
+    @field_validator("volumes", mode="before")
+    @classmethod
+    def validate_volumes(cls, v):
+        if isinstance(v, str):
+            return VolumeListAdapter.validate_json(v)
+        return v
+
+    @field_validator("segmentations", mode="before")
+    @classmethod
+    def validate_segmentations(cls, v):
+        if isinstance(v, str):
+            return SegmentationListAdapter.validate_json(v)
+        return v
 
     # VTK objects as private attributes
     _renderer: vtk.vtkRenderer = PrivateAttr(default_factory=vtk.vtkRenderer)

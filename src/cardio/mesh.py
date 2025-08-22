@@ -53,7 +53,9 @@ class Mesh(Object):
         default="${frame}.obj", description="Filename pattern with $frame placeholder"
     )
     _actors: list[vtk.vtkActor] = pc.PrivateAttr(default_factory=list)
-    properties: vtkPropertyConfig = pc.Field(description="Property configuration")
+    properties: vtkPropertyConfig = pc.Field(
+        default_factory=vtkPropertyConfig, description="Property configuration"
+    )
     loop_subdivision_iterations: int = pc.Field(ge=0, le=5, default=0)
     surface_type: SurfaceType = pc.Field(default=SurfaceType.SOLID)
     ctf_min: float = pc.Field(ge=0.0, default=0.7)
