@@ -1,6 +1,5 @@
 import asyncio
 import datetime as dt
-import os
 
 from trame.app import asynchronous
 
@@ -27,7 +26,7 @@ class Logic:
 
         # Initialize preset state variables
         for v in self.scene.volumes:
-            self.server.state[f"volume_preset_{v.label}"] = v.preset_key
+            self.server.state[f"volume_preset_{v.label}"] = v.transfer_function_preset
 
         # Initialize clipping state variables
         for m in self.scene.meshes:
@@ -263,8 +262,8 @@ class Logic:
     @asynchronous.task
     async def screenshot(self):
         dr = dt.datetime.now().strftime(self.scene.screenshot_subdirectory_format)
-        dr = f"{self.scene.screenshot_directory}/{dr}"
-        os.makedirs(dr)
+        dr = self.scene.screenshot_directory / dr
+        dr.mkdir(parents=True, exist_ok=True)
 
         if not (self.server.state.incrementing or self.server.state.rotating):
             ss = Screenshot(self.scene.renderWindow)
@@ -300,10 +299,18 @@ class Logic:
         """Sync VTK renderer background with dark mode."""
         if dark_mode:
             # Dark mode: use dark background from config
-            self.scene.renderer.SetBackground(*self.scene.background_dark)
+            self.scene.renderer.SetBackground(
+                self.scene.background.dark.r,
+                self.scene.background.dark.g,
+                self.scene.background.dark.b,
+            )
         else:
             # Light mode: use light background from config
-            self.scene.renderer.SetBackground(*self.scene.background_light)
+            self.scene.renderer.SetBackground(
+                self.scene.background.light.r,
+                self.scene.background.light.g,
+                self.scene.background.light.b,
+            )
         self.server.controller.view_update()
 
     def _initialize_clipping_state(self):
@@ -322,8 +329,7 @@ class Logic:
 
         # Initialize volume clipping state
         for v in self.scene.volumes:
-            # Initialize preset selection state
-            preset_key = getattr(v, "preset_key", "cardiac")
+            preset_key = getattr(v, "transfer_function_preset", "cardiac")
             setattr(self.server.state, f"volume_preset_{v.label}", preset_key)
 
             # Initialize preset panel state (collapsed by default)

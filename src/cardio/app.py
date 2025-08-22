@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 
+# Third Party
 import trame as tm
+import tomlkit as tk
 
-from .logic import Logic
+# Internal
 from .scene import Scene
+from .logic import Logic
 from .ui import UI
 
 
@@ -16,7 +19,10 @@ class CardioApp(tm.app.TrameApp):
         )
         args = self.server.cli.parse_args()
 
-        scene = Scene(args.cfg_file)
+        with open(args.cfg_file, mode="rt", encoding="utf-8") as fp:
+            cfg = tk.load(fp)
+
+        scene = Scene(**cfg)
         Logic(self.server, scene)
         UI(self.server, scene)
 

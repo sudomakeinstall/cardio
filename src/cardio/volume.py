@@ -1,19 +1,9 @@
-import functools
 import logging
 
 import itk
 import numpy as np
 import pydantic as pc
-from vtkmodules.vtkCommonDataModel import vtkPiecewiseFunction, vtkPlanes
-from vtkmodules.vtkIOGeometry import vtkOBJReader
-from vtkmodules.vtkRenderingCore import (
-    vtkColorTransferFunction,
-    vtkRenderer,
-    vtkVolume,
-    vtkVolumeProperty,
-)
-from vtkmodules.vtkRenderingVolume import vtkGPUVolumeRayCastMapper
-from vtkmodules.vtkRenderingVolumeOpenGL2 import vtkOpenGLRayCastImageDisplayHelper
+import vtk
 
 from . import Object
 from .transfer_functions import load_preset
@@ -23,26 +13,16 @@ from .utils import reset_direction, InterpolatorType
 class Volume(Object):
     """Volume object with transfer functions and clipping support."""
 
-    preset_key: str = pc.Field(default=None, exclude=True)
+    pattern: str = pc.Field(
+        default="${frame}.nii.gz",
+        description="Filename pattern with $frame placeholder",
+    )
+    transfer_function_preset: str = pc.Field(description="Transfer function preset key")
+    _actors: list[vtk.vtkVolume] = pc.PrivateAttr(default_factory=list)
 
-    def __init__(self, cfg: str, renderer: vtkRenderer):
-        preset_key = cfg["transfer_function_preset"]
-
-        super().__init__(
-            label=cfg["label"],
-            directory=cfg["directory"],
-            pattern=cfg.get("pattern", "${frame}.nii.gz"),
-            visible=cfg["visible"],
-            renderer=renderer,
-            clipping_enabled=cfg.get("clipping_enabled", True),
-            preset_key=preset_key,
-        )
-
-    @functools.cached_property
-    def actors(self) -> list[vtkVolume]:
+    @pc.model_validator(mode="after")
+    def initialize_volume(self):
         """Generate VTK volume actors for all frames."""
-        volume_actors = []
-
         for frame, path in enumerate(self.path_list):
             logging.info(f"{self.label}: Loading frame {frame}.")
 
@@ -50,32 +30,32 @@ class Volume(Object):
             image = reset_direction(image, InterpolatorType.LINEAR)
             image = itk.vtk_image_from_image(image)
 
-            mapper = vtkGPUVolumeRayCastMapper()
+            mapper = vtk.vtkGPUVolumeRayCastMapper()
             mapper.SetInputData(image)
 
-            actor = vtkVolume()
+            actor = vtk.vtkVolume()
             actor.SetMapper(mapper)
 
-            volume_actors.append(actor)
+            self._actors.append(actor)
 
-        return volume_actors
+        return self
+
+    @pc.computed_field
+    def actors(self) -> list[vtk.vtkVolume]:
+        return self._actors
 
     @property
     def preset(self):
-        """Load preset based on current preset_key."""
-        return load_preset(self.preset_key)
+        """Load preset based on transfer_function_preset."""
+        return load_preset(self.transfer_function_preset)
 
-    def setup_pipeline(self, frame: int):
-        for a in self.actors:
-            self.renderer.AddVolume(a)
-            a.SetVisibility(False)
-            a.SetProperty(self.preset.vtk_property)
-        if self.visible:
-            self.actors[frame].SetVisibility(True)
-
-        self.renderer.ResetCamera()
+    def configure_actors(self):
+        """Configure volume properties without adding to renderer."""
+        for volume in self._actors:
+            volume.SetVisibility(False)
+            volume.SetProperty(self.preset.vtk_property)
 
     def apply_preset_to_actors(self):
         """Apply the current preset to all actors."""
-        for actor in self.actors:
+        for actor in self._actors:
             actor.SetProperty(self.preset.vtk_property)

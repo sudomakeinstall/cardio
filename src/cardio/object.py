@@ -3,8 +3,7 @@ import string
 import pathlib as pl
 import pydantic as pc
 import functools
-from vtkmodules.vtkRenderingCore import vtkRenderer
-from vtkmodules.vtkCommonDataModel import vtkPlanes
+import vtk
 
 from .utils import calculate_combined_bounds
 
@@ -19,9 +18,6 @@ class Object(pc.BaseModel):
     pattern: str = pc.Field(description="Filename pattern with $frame placeholder")
     visible: bool = pc.Field(
         default=True, description="Whether object is initially visible"
-    )
-    renderer: vtkRenderer = pc.Field(
-        exclude=True, description="VTK renderer (excluded from serialization)"
     )
     clipping_enabled: bool = pc.Field(default=False)
 
@@ -87,19 +83,18 @@ class Object(pc.BaseModel):
         return calculate_combined_bounds(self.actors)
 
     @functools.cached_property
-    def clipping_planes(self) -> vtkPlanes:
+    def clipping_planes(self) -> vtk.vtkPlanes:
         """Generate clipping planes based on combined bounds of all actors."""
         if not hasattr(self, "actors") or not self.actors:
             return None
 
         bounds = self.combined_bounds
-        planes = vtkPlanes()
+        planes = vtk.vtkPlanes()
         self._create_clipping_planes_from_bounds(planes, bounds)
         return planes
 
-    def _create_clipping_planes_from_bounds(self, planes: vtkPlanes, bounds):
+    def _create_clipping_planes_from_bounds(self, planes: vtk.vtkPlanes, bounds):
         """Create 6 clipping planes from box bounds."""
-        import vtkmodules.vtkCommonCore as vtk
 
         # Create 6 planes for the box faces
         normals = [

@@ -5,8 +5,7 @@ import typing as ty
 import tomlkit as tk
 import pydantic as pc
 import numpy as np
-from vtkmodules.vtkCommonDataModel import vtkPiecewiseFunction
-from vtkmodules.vtkRenderingCore import vtkColorTransferFunction, vtkVolumeProperty
+import vtk
 
 
 def blend_transfer_functions(tfs, scalar_range=(-2000, 2000), num_samples=512):
@@ -76,8 +75,8 @@ def blend_transfer_functions(tfs, scalar_range=(-2000, 2000), num_samples=512):
         blended_color.append(final_color)
 
     # Create new VTK transfer functions with blended values
-    blended_otf = vtkPiecewiseFunction()
-    blended_ctf = vtkColorTransferFunction()
+    blended_otf = vtk.vtkPiecewiseFunction()
+    blended_ctf = vtk.vtkColorTransferFunction()
 
     for i, scalar_val in enumerate(sample_points):
         blended_otf.AddPoint(scalar_val, blended_opacity[i])
@@ -112,9 +111,9 @@ class PiecewiseFunctionConfig(pc.BaseModel):
     )
 
     @property
-    def vtk_function(self) -> vtkPiecewiseFunction:
+    def vtk_function(self) -> vtk.vtkPiecewiseFunction:
         """Create VTK piecewise function from this configuration."""
-        otf = vtkPiecewiseFunction()
+        otf = vtk.vtkPiecewiseFunction()
         for point in self.points:
             otf.AddPoint(point.x, point.y)
         return otf
@@ -128,9 +127,9 @@ class ColorTransferFunctionConfig(pc.BaseModel):
     )
 
     @property
-    def vtk_function(self) -> vtkColorTransferFunction:
+    def vtk_function(self) -> vtk.vtkColorTransferFunction:
         """Create VTK color transfer function from this configuration."""
-        ctf = vtkColorTransferFunction()
+        ctf = vtk.vtkColorTransferFunction()
         for point in self.points:
             ctf.AddRGBPoint(point.x, point.r, point.g, point.b)
         return ctf
@@ -159,16 +158,18 @@ class TransferFunctionConfig(pc.BaseModel):
         return v
 
     @property
-    def vtk_functions(self) -> tuple[vtkPiecewiseFunction, vtkColorTransferFunction]:
+    def vtk_functions(
+        self,
+    ) -> tuple[vtk.vtkPiecewiseFunction, vtk.vtkColorTransferFunction]:
         """Create VTK transfer functions from this configuration."""
         # Create opacity transfer function
-        otf = vtkPiecewiseFunction()
+        otf = vtk.vtkPiecewiseFunction()
         otf.AddPoint(self.level - self.window * 0.50, 0.0)
         otf.AddPoint(self.level + self.window * 0.14, self.opacity)
         otf.AddPoint(self.level + self.window * 0.50, 0.0)
 
         # Create color transfer function
-        ctf = vtkColorTransferFunction()
+        ctf = vtk.vtkColorTransferFunction()
         ctf.AddRGBPoint(
             self.level - self.window / 2,
             self.locolor[0],
@@ -196,7 +197,9 @@ class TransferFunctionPairConfig(pc.BaseModel):
     )
 
     @property
-    def vtk_functions(self) -> tuple[vtkPiecewiseFunction, vtkColorTransferFunction]:
+    def vtk_functions(
+        self,
+    ) -> tuple[vtk.vtkPiecewiseFunction, vtk.vtkColorTransferFunction]:
         """Create VTK transfer functions from this pair configuration."""
         return self.opacity.vtk_function, self.color.vtk_function
 
@@ -218,7 +221,7 @@ class VolumePropertyConfig(pc.BaseModel):
     )
 
     @property
-    def vtk_property(self) -> vtkVolumeProperty:
+    def vtk_property(self) -> vtk.vtkVolumeProperty:
         """Create a fully configured VTK volume property from this configuration."""
         # Get VTK transfer functions from each pair config
         tfs = [pair.vtk_functions for pair in self.transfer_functions]
@@ -227,7 +230,7 @@ class VolumePropertyConfig(pc.BaseModel):
         blended_otf, blended_ctf = blend_transfer_functions(tfs)
 
         # Create and configure the volume property
-        property = vtkVolumeProperty()
+        property = vtk.vtkVolumeProperty()
         property.SetScalarOpacity(blended_otf)
         property.SetColor(blended_ctf)
         property.ShadeOn()

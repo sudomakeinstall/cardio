@@ -1,100 +1,126 @@
-import sys
+# System
+import logging
+import pathlib as pl
 
+# Third Party
 import numpy as np
-import tomlkit as tk
+import vtk
+import pydantic as pc
+from pydantic import Field, model_validator, PrivateAttr
 
-# noinspection PyUnresolvedReferences
-import vtkmodules.vtkInteractionStyle
-
-# Required for rendering initialization, not necessary for
-# local rendering, but doesn't hurt to include it
-# noinspection PyUnresolvedReferences
-import vtkmodules.vtkRenderingOpenGL2  # noqa
-
-# Required for interactor initialization
-from vtkmodules.vtkInteractionStyle import vtkInteractorStyleSwitch  # noqa
-from vtkmodules.vtkIOGeometry import vtkOBJReader
-from vtkmodules.vtkRenderingCore import (
-    vtkRenderer,
-    vtkRenderWindow,
-    vtkRenderWindowInteractor,
-)
-
+# Internal
 from . import Mesh, Volume, Segmentation
 
 
-class Scene:
-    def __init__(self, cfg_file: str):
-        self.meshes: list[Mesh] = []
-        self.volumes: list[Volume] = []
-        self.segmentations: list[Segmentation] = []
-        self.nframes: int = None
-        self.renderer: vtkRenderer = vtkRenderer()
-        self.renderWindow: vtkRenderWindow = vtkRenderWindow()
-        self.renderWindow.SetOffScreenRendering(True)
-        self.renderWindowInteractor: vtkRenderWindowInteractor = (
-            vtkRenderWindowInteractor()
+class Color(pc.BaseModel):
+    r: float = 1.0
+    g: float = 1.0
+    b: float = 1.0
+
+
+class Background(pc.BaseModel):
+    light: Color = {1.0, 1.0, 1.0}
+    dark: Color = {0.0, 0.0, 0.0}
+
+
+class Scene(pc.BaseModel):
+    model_config = pc.ConfigDict(arbitrary_types_allowed=True, populate_by_name=True)
+
+    project_name: str = "Cardio"
+    current_frame: int = 0
+    screenshot_directory: pl.Path
+    screenshot_subdirectory_format: pl.Path
+    rotation_factor: float
+    background: Background = Background()
+    meshes: list[Mesh] = Field(default_factory=list)
+    volumes: list[Volume] = Field(default_factory=list)
+    segmentations: list[Segmentation] = Field(default_factory=list)
+
+    # VTK objects as private attributes
+    _renderer: vtk.vtkRenderer = PrivateAttr(default_factory=vtk.vtkRenderer)
+    _renderWindow: vtk.vtkRenderWindow = PrivateAttr(
+        default_factory=vtk.vtkRenderWindow
+    )
+    _renderWindowInteractor: vtk.vtkRenderWindowInteractor = PrivateAttr(
+        default_factory=vtk.vtkRenderWindowInteractor
+    )
+
+    @property
+    def renderer(self) -> vtk.vtkRenderer:
+        return self._renderer
+
+    @property
+    def renderWindow(self) -> vtk.vtkRenderWindow:
+        return self._renderWindow
+
+    @property
+    def renderWindowInteractor(self) -> vtk.vtkRenderWindowInteractor:
+        return self._renderWindowInteractor
+
+    @model_validator(mode="after")
+    def setup_scene(self):
+        # Configure VTK objects
+        self._renderer.SetBackground(
+            self.background.light.r,
+            self.background.light.g,
+            self.background.light.b,
         )
-        self.renderWindowInteractor.GetInteractorStyle().SetCurrentStyleToTrackballCamera()
+        self._renderWindow.AddRenderer(self._renderer)
+        self._renderWindow.SetOffScreenRendering(True)
+        self._renderWindowInteractor.SetRenderWindow(self._renderWindow)
+        self._renderWindowInteractor.GetInteractorStyle().SetCurrentStyleToTrackballCamera()
 
-        with open(cfg_file, mode="rt", encoding="utf-8") as fp:
-            self.cfg = tk.load(fp)
-        if "meshes" in self.cfg:
-            for mesh_cfg in self.cfg["meshes"]:
-                self.meshes += [Mesh(mesh_cfg, self.renderer)]
-        if "volumes" in self.cfg:
-            for volume_cfg in self.cfg["volumes"]:
-                self.volumes += [Volume(volume_cfg, self.renderer)]
-        if "segmentations" in self.cfg:
-            for segmentation_cfg in self.cfg["segmentations"]:
-                self.segmentations += [Segmentation(segmentation_cfg, self.renderer)]
-        self.set_nframes()
-
-        self.project_name = self.cfg["project_name"]
-        self.current_frame = self.cfg["current_frame"] % self.nframes
-        self.screenshot_directory = self.cfg["screenshot_directory"]
-        self.screenshot_subdirectory_format = self.cfg["screenshot_subdirectory_format"]
-        self.rotation_factor = self.cfg["rotation_factor"]
-        # Load light and dark background colors from config
-        bg_config = self.cfg["background"]
-        self.background_light = [
-            bg_config["light"]["r"],
-            bg_config["light"]["g"],
-            bg_config["light"]["b"],
-        ]
-        self.background_dark = [
-            bg_config["dark"]["r"],
-            bg_config["dark"]["g"],
-            bg_config["dark"]["b"],
-        ]
-
-        self.setup_rendering()
+        # Configure all objects
         for mesh in self.meshes:
-            mesh.setup_pipeline(self.current_frame)
+            mesh.configure_actors()
         for volume in self.volumes:
-            volume.setup_pipeline(self.current_frame)
+            volume.configure_actors()
         for segmentation in self.segmentations:
-            segmentation.setup_pipeline(self.current_frame)
+            segmentation.configure_actors()
 
-    def set_nframes(self):
+        # Set current frame using nframes property
+        self.current_frame = self.current_frame % self.nframes
+
+        # Setup rendering pipeline
+        self.setup_pipeline()
+
+        return self
+
+    @property
+    def nframes(self) -> int:
         ns = []
         ns += [len(m.actors) for m in self.meshes]
         ns += [len(v.actors) for v in self.volumes]
         ns += [len(s.actors) for s in self.segmentations]
         if not len(ns) > 0:
-            print(f"WARNING: No objects were found to display.", file=sys.stderr)
-            self.nframes = 1
-            return
-        self.nframes = int(max(ns))
+            logging.warning("No objects were found to display.")
+            return 1
+        result = int(max(ns))
         ns = np.array(ns)
         if not np.all(ns == ns[0]):
-            print(f"WARNING: Unequal number of frames: {ns}.", file=sys.stderr)
+            logging.warning(f"Unequal number of frames: {ns}.")
+        return result
 
-    def setup_rendering(self):
-        # Use light background by default
-        self.renderer.SetBackground(*self.background_light)
-        self.renderWindow.AddRenderer(self.renderer)
-        self.renderWindowInteractor.SetRenderWindow(self.renderWindow)
+    def setup_pipeline(self):
+        """Add all actors to the renderer and configure initial visibility."""
+        # Add mesh actors
+        for mesh in self.meshes:
+            for actor in mesh.actors:
+                self.renderer.AddActor(actor)
+
+        # Add volume actors
+        for volume in self.volumes:
+            for actor in volume.actors:
+                self.renderer.AddVolume(actor)
+
+        # Add segmentation actors
+        for segmentation in self.segmentations:
+            for actor in segmentation.actors:
+                self.renderer.AddActor(actor)
+
+        # Show current frame
+        self.show_frame(self.current_frame)
+        self.renderer.ResetCamera()
 
     def hide_all_frames(self):
         for a in self.renderer.GetActors():

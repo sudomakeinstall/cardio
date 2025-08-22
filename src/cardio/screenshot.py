@@ -1,16 +1,15 @@
-from vtkmodules.vtkIOImage import vtkPNGWriter
-from vtkmodules.vtkRenderingCore import vtkRenderWindow, vtkWindowToImageFilter
+import vtk
 
 
 class Screenshot:
-    def __init__(self, renderWindow: vtkRenderWindow):
-        self.windowToImageFilter = vtkWindowToImageFilter()
+    def __init__(self, renderWindow: vtk.vtkRenderWindow):
+        self.windowToImageFilter = vtk.vtkWindowToImageFilter()
         self.windowToImageFilter.SetInput(renderWindow)
         self.windowToImageFilter.SetScale(1)
         self.windowToImageFilter.SetInputBufferTypeToRGBA()
         self.windowToImageFilter.ReadFrontBufferOff()
 
-        self.writer = vtkPNGWriter()
+        self.writer = vtk.vtkPNGWriter()
         self.writer.SetInputConnection(self.windowToImageFilter.GetOutputPort())
 
     def save(self, fileName: str):

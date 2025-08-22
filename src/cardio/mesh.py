@@ -5,17 +5,7 @@ import logging
 # Third Party
 import numpy as np
 import pydantic as pc
-from vtkmodules.vtkIOGeometry import vtkOBJReader
-from vtkmodules.vtkRenderingCore import (
-    vtkActor,
-    vtkPolyDataMapper,
-    vtkRenderer,
-    vtkColorTransferFunction,
-)
-from vtkmodules.vtkFiltersModeling import vtkLoopSubdivisionFilter
-from vtkmodules.vtkCommonCore import vtkFloatArray
-from vtkmodules.vtkFiltersCore import vtkTriangleFilter
-from vtkmodules.vtkFiltersVerdict import vtkMeshQuality
+import vtk
 
 # Internal
 from . import Object
@@ -30,14 +20,14 @@ class SurfaceType(enum.Enum):
 
 
 def apply_elementwise(
-    array1: vtkFloatArray, array2: vtkFloatArray, func, name: str = "Result"
-) -> vtkFloatArray:
+    array1: vtk.vtkFloatArray, array2: vtk.vtkFloatArray, func, name: str = "Result"
+) -> vtk.vtkFloatArray:
     if array1.GetNumberOfTuples() != array2.GetNumberOfTuples():
         raise ValueError(
             f"Array lengths must match: {array1.GetNumberOfTuples()} != {array2.GetNumberOfTuples()}"
         )
 
-    result_array = vtkFloatArray()
+    result_array = vtk.vtkFloatArray()
     result_array.SetName(name)
     result_array.SetNumberOfComponents(1)
 
@@ -59,49 +49,28 @@ def calculate_squeez(current_area: float, ref_area: float) -> float:
 class Mesh(Object):
     """Mesh object with subdivision support."""
 
-    actors: list[vtkActor] = pc.Field(default_factory=list, exclude=True)
-    property_config: PropertyConfig = pc.Field(default=None, exclude=True)
+    pattern: str = pc.Field(
+        default="${frame}.obj", description="Filename pattern with $frame placeholder"
+    )
+    _actors: list[vtk.vtkActor] = pc.PrivateAttr(default_factory=list)
+    property: PropertyConfig = pc.Field(description="Property configuration")
     loop_subdivision_iterations: int = pc.Field(ge=0, le=5, default=0)
     surface_type: SurfaceType = pc.Field(default=SurfaceType.SOLID)
     ctf_min: float = pc.Field(ge=0.0, default=0.7)
     ctf_max: float = pc.Field(ge=0.0, default=1.3)
 
-    def __init__(self, cfg: str, renderer: vtkRenderer):
-        # Validate loop subdivision iterations
-        iterations = cfg.get("loop_subdivision_iterations", 0)
-
-        # Parse surface_type from config
-        surface_type_str = cfg.get("surface_type", "solid")
-        try:
-            surface_type = SurfaceType(surface_type_str)
-        except ValueError:
-            logging.warning(
-                f"Invalid surface_type '{surface_type_str}' for mesh {cfg['label']}, using default 'solid'"
-            )
-            surface_type = SurfaceType.SOLID
-
-        super().__init__(
-            label=cfg["label"],
-            directory=cfg["directory"],
-            pattern=cfg.get("pattern", "${frame}.obj"),
-            visible=cfg["visible"],
-            renderer=renderer,
-            clipping_enabled=cfg.get("clipping_enabled", True),
-            loop_subdivision_iterations=iterations,
-            surface_type=surface_type,
-            property_config=PropertyConfig.model_validate(cfg["property"]),
-        )
-
+    @pc.model_validator(mode="after")
+    def initialize_mesh(self):
         # Pass 1: Load all frames and determine topology consistency
         frame_data = []
         for frame, path in enumerate(self.path_list):
             logging.info(f"{self.label}: Loading frame {frame}.")
-            reader = vtkOBJReader()
+            reader = vtk.vtkOBJReader()
             reader.SetFileName(path)
             reader.Update()
 
             if self.loop_subdivision_iterations > 0:
-                subdivision_filter = vtkLoopSubdivisionFilter()
+                subdivision_filter = vtk.vtkLoopSubdivisionFilter()
                 subdivision_filter.SetInputConnection(reader.GetOutputPort())
                 subdivision_filter.SetNumberOfSubdivisions(
                     self.loop_subdivision_iterations
@@ -111,7 +80,7 @@ class Mesh(Object):
             else:
                 polydata = reader.GetOutput()
 
-            if self.property_config.representation == Representation.Surface:
+            if self.property.representation == Representation.Surface:
                 polydata = self.calculate_mesh_areas(polydata)
 
             frame_data.append(polydata)
@@ -124,10 +93,16 @@ class Mesh(Object):
                 polydata, frame_data, frame, consistent_topology
             )
 
-            actor = vtkActor()
+            actor = vtk.vtkActor()
             actor.SetMapper(mapper)
 
-            self.actors.append(actor)
+            self._actors.append(actor)
+
+        return self
+
+    @pc.computed_field
+    def actors(self) -> list[vtk.vtkActor]:
+        return self._actors
 
     def _setup_coloring(self, polydata, frame_data, frame, consistent_topology):
         """Setup mesh coloring based on surface_type with smart fallback."""
@@ -143,13 +118,13 @@ class Mesh(Object):
     def _can_use_squeez_coloring(self, consistent_topology):
         """Check if SQUEEZ coloring is possible."""
         return (
-            self.property_config.representation == Representation.Surface
+            self.property.representation == Representation.Surface
             and consistent_topology
         )
 
     def _log_squeez_fallback(self):
         """Log warning when falling back from SQUEEZ to solid coloring."""
-        if self.property_config.representation != Representation.Surface:
+        if self.property.representation != Representation.Surface:
             logging.warning(
                 f"SQUEEZ coloring requested for {self.label} but representation is not Surface, falling back to solid coloring"
             )
@@ -160,7 +135,7 @@ class Mesh(Object):
 
     def _setup_solid_coloring(self, polydata):
         """Setup solid coloring using VTK property colors."""
-        mapper = vtkPolyDataMapper()
+        mapper = vtk.vtkPolyDataMapper()
         mapper.SetInputData(polydata)
         mapper.ScalarVisibilityOff()
         return mapper
@@ -183,13 +158,13 @@ class Mesh(Object):
         polydata.GetCellData().AddArray(ratio_array)
         polydata.GetCellData().SetActiveScalars("SQUEEZ")
 
-        mapper = vtkPolyDataMapper()
+        mapper = vtk.vtkPolyDataMapper()
         mapper.SetInputData(polydata)
         mapper = self.setup_scalar_coloring(mapper)
         return mapper
 
     def color_transfer_function(self):
-        ctf = vtkColorTransferFunction()
+        ctf = vtk.vtkColorTransferFunction()
         ctf.AddRGBPoint(0.7, 0.0, 0.0, 1.0)
         ctf.AddRGBPoint(1.0, 1.0, 0.0, 0.0)
         ctf.AddRGBPoint(1.3, 1.0, 1.0, 0.0)
@@ -207,13 +182,13 @@ class Mesh(Object):
     def calculate_mesh_areas(self, polydata):
         """Calculate area of each triangle/cell in the mesh using VTK mesh quality."""
         # Ensure we have triangles
-        triangle_filter = vtkTriangleFilter()
+        triangle_filter = vtk.vtkTriangleFilter()
         triangle_filter.SetInputData(polydata)
         triangle_filter.Update()
         triangulated = triangle_filter.GetOutput()
 
         # Use VTK mesh quality to calculate areas
-        mesh_quality = vtkMeshQuality()
+        mesh_quality = vtk.vtkMeshQuality()
         mesh_quality.SetInputData(triangulated)
         mesh_quality.SetTriangleQualityMeasureToArea()
         mesh_quality.SetQuadQualityMeasureToArea()
@@ -228,7 +203,7 @@ class Mesh(Object):
 
     def _should_calculate_squeez(self, frame_data: list) -> bool:
         if (
-            self.property_config.representation != Representation.Surface
+            self.property.representation != Representation.Surface
             or len(frame_data) <= 1
         ):
             return False
@@ -256,20 +231,16 @@ class Mesh(Object):
 
         return True
 
-    def setup_pipeline(self, frame: int):
-        for a in self.actors:
-            self.renderer.AddActor(a)
-            a.SetVisibility(False)
-            a.SetProperty(self.property_config.vtk_property)
+    def configure_actors(self):
+        """Configure actor properties without adding to renderer."""
+        for actor in self._actors:
+            actor.SetVisibility(False)
+            actor.SetProperty(self.property.vtk_property)
 
         # Apply flat shading for SQUEEZ coloring
         if self._is_using_squeez_coloring():
-            for actor in self.actors:
+            for actor in self._actors:
                 actor.GetProperty().SetInterpolationToFlat()
-
-        if self.visible:
-            self.actors[frame].SetVisibility(True)
-        self.renderer.ResetCamera()
 
     def _is_using_squeez_coloring(self):
         """Check if SQUEEZ coloring is actually being used (not fell back to solid)."""
@@ -277,7 +248,7 @@ class Mesh(Object):
             return False
 
         # Check if any actor has SQUEEZ scalar data
-        for actor in self.actors:
+        for actor in self._actors:
             mapper = actor.GetMapper()
             if mapper.GetInput():
                 squeez_array = mapper.GetInput().GetCellData().GetArray("SQUEEZ")
