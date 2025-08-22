@@ -46,8 +46,6 @@ class CardioApp(tm.app.TrameApp):
         Logic(self.server, scene)
         UI(self.server, scene)
 
-        print("Project name:", scene.project_name)
-
 
 def main():
     app = CardioApp()

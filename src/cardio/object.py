@@ -1,8 +1,12 @@
+# System
 import re
 import string
 import pathlib as pl
-import pydantic as pc
 import functools
+import logging
+
+# Third Party
+import pydantic as pc
 import vtk
 
 from .utils import calculate_combined_bounds
@@ -15,7 +19,12 @@ class Object(pc.BaseModel):
 
     label: str = pc.Field(description="Object identifier (only [a-zA-Z0-9_] allowed)")
     directory: pl.Path = pc.Field(description="Directory containing object files")
-    pattern: str = pc.Field(description="Filename pattern with $frame placeholder")
+    pattern: str | None = pc.Field(
+        default=None, description="Filename pattern with ${frame} placeholder"
+    )
+    file_paths: list[str] | None = pc.Field(
+        default=None, description="Static list of file paths relative to directory"
+    )
     visible: bool = pc.Field(
         default=True, description="Whether object is initially visible"
     )
@@ -38,7 +47,10 @@ class Object(pc.BaseModel):
 
     @pc.field_validator("pattern")
     @classmethod
-    def validate_pattern(cls, v: str) -> str:
+    def validate_pattern(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+
         if not isinstance(v, str):
             raise ValueError("pattern must be a string")
 
@@ -50,20 +62,37 @@ class Object(pc.BaseModel):
 
         return v
 
+    @pc.model_validator(mode="after")
+    def validate_pattern_or_file_paths(self):
+        if self.pattern is None and self.file_paths is None:
+            raise ValueError("Either pattern or file_paths must be provided")
+        if self.pattern is not None and self.file_paths is not None:
+            logging.info("Both pattern and file_paths specified; using file_paths.")
+
+        # Validate all paths for traversal attacks and file existence
+        for path in self.path_list:
+            if not path.resolve().is_relative_to(self.directory.resolve()):
+                raise ValueError(
+                    f"Path {path} would access files outside base directory"
+                )
+            if not path.is_file():
+                raise ValueError(f"File does not exist: {path}")
+
+        return self
+
     def path_for_frame(self, frame: int) -> pl.Path:
+        if self.pattern is None:
+            raise ValueError("Cannot use path_for_frame with static file_paths")
         template = string.Template(self.pattern)
         filename = template.safe_substitute(frame=frame)
+        return self.directory / filename
 
-        full_path = self.directory / filename
-
-        if not full_path.resolve().is_relative_to(self.directory.resolve()):
-            raise ValueError("Pattern would access files outside base directory")
-
-        return full_path
-
-    @property
+    @functools.cached_property
     def path_list(self) -> list[pl.Path]:
-        """Precompute list of existing file paths for all frames."""
+        """Return list of file paths, using static paths if provided, otherwise dynamic pattern-based paths."""
+        if self.file_paths is not None:
+            return [self.directory / path for path in self.file_paths]
+
         paths = []
         frame = 0
         while True:

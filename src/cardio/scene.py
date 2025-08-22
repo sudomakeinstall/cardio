@@ -147,7 +147,6 @@ class Scene(ps.BaseSettings):
     @model_validator(mode="after")
     def setup_scene(self):
         # Configure VTK objects
-        print(self.background.light)
         self._renderer.SetBackground(
             *self.background.light,
         )
