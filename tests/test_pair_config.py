@@ -1,11 +1,13 @@
 """Test TransferFunctionPairConfig."""
 
 import pathlib as pl
-import tomlkit as tk
+
 import pytest as pt
-from cardio.transfer_functions import TransferFunctionPairConfig
+import tomlkit as tk
 from vtkmodules.vtkCommonDataModel import vtkPiecewiseFunction
 from vtkmodules.vtkRenderingCore import vtkColorTransferFunction
+
+from cardio.transfer_functions import TransferFunctionPairConfig
 
 
 def test_pair_config_from_toml():

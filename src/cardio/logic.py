@@ -3,7 +3,7 @@ import datetime as dt
 
 from trame.app import asynchronous
 
-from . import Scene
+from .scene import Scene
 from .screenshot import Screenshot
 
 

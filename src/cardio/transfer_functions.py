@@ -1,14 +1,15 @@
 # System
 import pathlib as pl
 
+import numpy as np
+import pydantic as pc
+
 # Third Party
 import tomlkit as tk
-import pydantic as pc
-import numpy as np
 import vtk
 
 # Internal
-from .types import ScalarComponent, RGBColor
+from .types import RGBColor, ScalarComponent
 
 
 def blend_transfer_functions(tfs, scalar_range=(-2000, 2000), num_samples=512):

@@ -1,6 +1,7 @@
 """Utility functions shared across cardio classes."""
 
 import enum
+
 import itk
 import numpy as np
 

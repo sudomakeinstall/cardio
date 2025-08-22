@@ -1,13 +1,15 @@
 #!/usr/bin/env python
 
 # Third Party
-import trame as tm
-import tomlkit as tk
 import pydantic_settings as ps
+import tomlkit as tk
+import trame as tm
+
+from . import __version__
+from .logic import Logic
 
 # Internal
 from .scene import Scene
-from .logic import Logic
 from .ui import UI
 
 
@@ -18,6 +20,11 @@ class CardioApp(tm.app.TrameApp):
         # Add config file argument to Trame's parser
         self.server.cli.add_argument(
             "--config", help="TOML configuration file.", dest="cfg_file", required=False
+        )
+
+        # Add version argument
+        self.server.cli.add_argument(
+            "--version", action="version", version=f"cardio {__version__}"
         )
 
         # Create CLI settings source with Trame's parser - enable argument parsing

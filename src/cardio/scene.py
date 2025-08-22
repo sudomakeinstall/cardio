@@ -2,19 +2,21 @@
 import logging
 import pathlib as pl
 
-# Third Party
-import numpy as np
-import vtk
-import pydantic as pc
-from pydantic import Field, model_validator, field_validator, PrivateAttr, TypeAdapter
-import pydantic_settings as ps
-
-# Internal
-from . import Mesh, Volume, Segmentation
-from .types import RGBColor
-
 # Type adapters for list types to improve CLI integration
 from typing import Annotated
+
+# Third Party
+import numpy as np
+import pydantic as pc
+import pydantic_settings as ps
+import vtk
+from pydantic import Field, PrivateAttr, TypeAdapter, field_validator, model_validator
+
+# Internal
+from .mesh import Mesh
+from .segmentation import Segmentation
+from .types import RGBColor
+from .volume import Volume
 
 MeshListAdapter = TypeAdapter(list[Mesh])
 VolumeListAdapter = TypeAdapter(list[Volume])

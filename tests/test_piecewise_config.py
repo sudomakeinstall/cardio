@@ -1,10 +1,12 @@
 """Test PiecewiseFunctionConfig."""
 
 import pathlib as pl
-import tomlkit as tk
+
 import pytest as pt
-from cardio.transfer_functions import PiecewiseFunctionConfig
+import tomlkit as tk
 from vtkmodules.vtkCommonDataModel import vtkPiecewiseFunction
+
+from cardio.transfer_functions import PiecewiseFunctionConfig
 
 
 def test_piecewise_config_from_toml():

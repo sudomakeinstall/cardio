@@ -8,7 +8,7 @@ import pydantic as pc
 import vtk
 
 # Internal
-from . import Object
+from .object import Object
 from .property_config import Representation, vtkPropertyConfig
 
 

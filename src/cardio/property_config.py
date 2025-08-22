@@ -7,7 +7,7 @@ import pydantic as pc
 import vtk
 
 # Internal
-from .types import ScalarComponent, RGBColor
+from .types import RGBColor, ScalarComponent
 
 
 class Representation(enum.IntEnum):

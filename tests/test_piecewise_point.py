@@ -1,8 +1,10 @@
 """Test PiecewiseFunctionPoint."""
 
 import pathlib as pl
-import tomlkit as tk
+
 import pytest as pt
+import tomlkit as tk
+
 from cardio.transfer_functions import PiecewiseFunctionPoint
 
 

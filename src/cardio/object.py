@@ -1,9 +1,9 @@
 # System
-import re
-import string
-import pathlib as pl
 import functools
 import logging
+import pathlib as pl
+import re
+import string
 
 # Third Party
 import pydantic as pc

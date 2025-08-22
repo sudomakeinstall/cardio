@@ -2,7 +2,7 @@ from trame.ui.vuetify import SinglePageWithDrawerLayout
 from trame.widgets import vtk as vtk_widgets
 from trame.widgets import vuetify
 
-from . import Scene
+from .scene import Scene
 from .transfer_functions import list_available_presets
 
 

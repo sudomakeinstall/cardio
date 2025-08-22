@@ -5,9 +5,9 @@ import numpy as np
 import pydantic as pc
 import vtk
 
-from . import Object
+from .object import Object
 from .transfer_functions import load_preset
-from .utils import reset_direction, InterpolatorType
+from .utils import InterpolatorType, reset_direction
 
 
 class Volume(Object):

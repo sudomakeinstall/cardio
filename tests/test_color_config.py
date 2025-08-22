@@ -1,10 +1,12 @@
 """Test ColorTransferFunctionConfig."""
 
 import pathlib as pl
-import tomlkit as tk
+
 import pytest as pt
-from cardio.transfer_functions import ColorTransferFunctionConfig
+import tomlkit as tk
 from vtkmodules.vtkRenderingCore import vtkColorTransferFunction
+
+from cardio.transfer_functions import ColorTransferFunctionConfig
 
 
 def test_color_config_from_toml():

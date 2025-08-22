@@ -1,15 +1,15 @@
-from .object import Object
-from .mesh import Mesh
-from .volume import Volume
-from .segmentation import Segmentation
-from .scene import Scene
 from .logic import Logic
-from .ui import UI
+from .mesh import Mesh
+from .object import Object
+from .scene import Scene
 from .screenshot import Screenshot
+from .segmentation import Segmentation
 from .transfer_functions import (
-    load_preset,
     list_available_presets,
+    load_preset,
 )
+from .ui import UI
+from .volume import Volume
 
 __all__ = [
     "Object",

@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>61.0.0"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.8.13,<0.9.0"]
+build-backend = "uv_build"
 
 [project]
 name = "cardio"
@@ -32,10 +32,9 @@ dependencies = [
     "numpy>=2.2.6",
     "pydantic>=2.11.7",
     "pydantic-settings>=2.0.0",
-    "pytest>=8.4.1",
 ]
-description = "A simple web-based viewer for 4D ('cine') medical imaging data."
-keywords = ["Medical", "Imaging", "4D", "Visualization"]
+description = "A simple web-based viewer for 3D and 4D ('cine') medical imaging data."
+keywords = ["Medical", "Imaging", "3D", "4D", "Visualization"]
 license = {file = "LICENSE"}
 maintainers = [
     {name = "Davis Marc Vigneault", email = "davis.vigneault@gmail.com"}
@@ -44,7 +43,12 @@ readme = "README.md"
 requires-python = ">=3.10"
 
 [project.optional-dependencies]
-dev = ["black", "isort", "pip-tools", "pytest", "bumpver", "build", "twine"]
+dev = [
+ "isort",
+ "pytest",
+ "bumpver",
+ "ruff>=0.12.10",
+]
 
 [project.gui-scripts]
 cardio = "cardio.app:main"

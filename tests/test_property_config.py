@@ -3,13 +3,14 @@
 # System
 import pathlib as pl
 
+import pytest as pt
+
 # Third Party
 import tomlkit as tk
-import pytest as pt
 import vtk
 
 # Internal
-from cardio.property_config import vtkPropertyConfig, Representation, Interpolation
+from cardio.property_config import Interpolation, Representation, vtkPropertyConfig
 
 
 def test_property_config_from_toml():

@@ -3,14 +3,14 @@ import logging
 
 # Third Party
 import itk
-import vtk
 import numpy as np
 import pydantic as pc
+import vtk
 
 # Internal
-from . import Object
+from .object import Object
 from .property_config import vtkPropertyConfig
-from .utils import reset_direction, InterpolatorType
+from .utils import InterpolatorType, reset_direction
 
 
 class Segmentation(Object):

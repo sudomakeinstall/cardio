@@ -1,10 +1,12 @@
 """Test VolumePropertyConfig."""
 
 import pathlib as pl
-import tomlkit as tk
+
 import pytest as pt
-from cardio.transfer_functions import VolumePropertyConfig
+import tomlkit as tk
 from vtkmodules.vtkRenderingCore import vtkVolumeProperty
+
+from cardio.transfer_functions import VolumePropertyConfig
 
 
 def test_volume_config_from_toml():
