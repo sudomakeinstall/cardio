@@ -178,13 +178,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bumpver", marker = "extra == 'dev'" },
-    { name = "isort", marker = "extra == 'dev'" },
+    { name = "bumpver", marker = "extra == 'dev'", specifier = ">=2025.1131" },
+    { name = "isort", marker = "extra == 'dev'", specifier = ">=6.0.1" },
     { name = "itk", specifier = ">=5.4.4.post1" },
     { name = "numpy", specifier = ">=2.2.6" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
-    { name = "pytest", marker = "extra == 'dev'" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.10" },
     { name = "tomlkit", specifier = ">=0.13.3" },
     { name = "trame", specifier = ">=3.11.0" },

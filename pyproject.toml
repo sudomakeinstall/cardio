@@ -44,10 +44,10 @@ requires-python = ">=3.10"
 
 [project.optional-dependencies]
 dev = [
- "isort",
- "pytest",
- "bumpver",
  "ruff>=0.12.10",
+ "isort>=6.0.1",
+ "bumpver>=2025.1131",
+ "pytest>=8.4.1",
 ]
 
 [project.gui-scripts]
