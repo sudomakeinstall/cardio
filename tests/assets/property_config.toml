@@ -1,8 +1,6 @@
-# Test data for PropertyConfig
+# Test data for vtkPropertyConfig
 representation = 1
-r = 0.8
-g = 0.4
-b = 0.2
+color = [0.8, 0.4, 0.2]
 edge_visibility = true
 vertex_visibility = false
 shading = false

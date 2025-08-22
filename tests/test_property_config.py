@@ -1,30 +1,33 @@
-"""Test PropertyConfig."""
+"""Test vtkPropertyConfig."""
 
+# System
 import pathlib as pl
+
+# Third Party
 import tomlkit as tk
 import pytest as pt
-from cardio.property_config import PropertyConfig, Representation, Interpolation
-from vtkmodules.vtkRenderingCore import vtkProperty
+import vtk
+
+# Internal
+from cardio.property_config import vtkPropertyConfig, Representation, Interpolation
 
 
 def test_property_config_from_toml():
-    """Test loading PropertyConfig from TOML with integer representation."""
+    """Test loading vtkPropertyConfig from TOML."""
     # Load test data
     toml_path = pl.Path(__file__).parent / "assets" / "property_config.toml"
     with toml_path.open("rt", encoding="utf-8") as fp:
         data = tk.load(fp)
 
     # Create config from TOML data
-    config = PropertyConfig.model_validate(data)
+    config = vtkPropertyConfig.model_validate(data)
 
     # Verify representation was parsed correctly
     assert config.representation == Representation.Wireframe
     assert config.representation == 1
 
     # Verify color values were parsed correctly
-    assert config.r == 0.8
-    assert config.g == 0.4
-    assert config.b == 0.2
+    assert config.color == (0.8, 0.4, 0.2)
 
     # Verify visibility values were parsed correctly
     assert config.edge_visibility == True
@@ -41,18 +44,23 @@ def test_property_config_from_toml():
     assert config.opacity == 0.7
 
 
-def test_property_config_vtk_property():
-    """Test VTK property creation from PropertyConfig."""
-    # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "property_config.toml"
-    with toml_path.open("rt", encoding="utf-8") as fp:
-        data = tk.load(fp)
+def test_vtk_property_creation():
+    """Test VTK property creation from vtkPropertyConfig."""
+    # Create config directly to test VTK property generation
+    config = vtkPropertyConfig(
+        representation=Representation.Wireframe,
+        color=(0.8, 0.4, 0.2),
+        edge_visibility=True,
+        vertex_visibility=False,
+        shading=False,
+        interpolation=Interpolation.Phong,
+        opacity=0.7,
+    )
 
-    config = PropertyConfig.model_validate(data)
     vtk_prop = config.vtk_property
 
     # Verify it's the right type
-    assert isinstance(vtk_prop, vtkProperty)
+    assert isinstance(vtk_prop, vtk.vtkProperty)
 
     # Verify representation was set correctly
     assert vtk_prop.GetRepresentation() == 1  # Wireframe
