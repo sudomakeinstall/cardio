@@ -38,3 +38,11 @@ $ isort .
 $ ruff format
 $ pytest -v
 ```
+
+Uploading:
+
+```bash
+$ bumpver update
+$ uv build --no-sources
+$ uv publish --token <pypi_api_key>
+```
