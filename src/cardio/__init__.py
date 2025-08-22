@@ -24,4 +24,4 @@ __all__ = [
     "list_available_presets",
 ]
 
-__version__ = "2023.1.2"
+__version__ = "2025.8.0"
