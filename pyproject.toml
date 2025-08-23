@@ -48,6 +48,7 @@ dev = [
  "isort>=6.0.1",
  "bumpver>=2025.1131",
  "pytest>=8.4.1",
+ "coverage>=7.10.4",
 ]
 
 [project.gui-scripts]
