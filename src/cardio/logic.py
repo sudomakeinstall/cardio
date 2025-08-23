@@ -98,6 +98,7 @@ class Logic:
         self.server.controller.decrement_frame = self.decrement_frame
         self.server.controller.screenshot = self.screenshot
         self.server.controller.reset_all = self.reset_all
+        self.server.controller.close_application = self.close_application
 
         # Initialize clipping state variables
         self._initialize_clipping_state()
@@ -363,3 +364,8 @@ class Logic:
                 setattr(self.server.state, f"clip_x_{s.label}", [bounds[0], bounds[1]])
                 setattr(self.server.state, f"clip_y_{s.label}", [bounds[2], bounds[3]])
                 setattr(self.server.state, f"clip_z_{s.label}", [bounds[4], bounds[5]])
+
+    @asynchronous.task
+    async def close_application(self):
+        """Close the application by stopping the server."""
+        await self.server.stop()

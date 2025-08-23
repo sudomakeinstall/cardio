@@ -58,6 +58,17 @@ class UI:
                     readonly=True,
                 )
 
+                # Close button
+                vuetify.VCheckbox(
+                    value=False,
+                    on_icon="mdi-close-circle",
+                    off_icon="mdi-close-circle",
+                    hide_details=True,
+                    title="Close Application",
+                    click=self.server.controller.close_application,
+                    readonly=True,
+                )
+
                 vuetify.VProgressLinear(
                     indeterminate=True,
                     absolute=True,
