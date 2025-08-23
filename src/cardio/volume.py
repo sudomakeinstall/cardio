@@ -6,8 +6,8 @@ import pydantic as pc
 import vtk
 
 from .object import Object
-from .transfer_functions import load_preset
 from .utils import InterpolatorType, reset_direction
+from .volume_property_presets import load_volume_property_preset
 
 
 class Volume(Object):
@@ -17,7 +17,9 @@ class Volume(Object):
         default="${frame}.nii.gz",
         description="Filename pattern with $frame placeholder",
     )
-    transfer_function_preset: str = pc.Field(description="Transfer function preset key")
+    transfer_function_preset: str = pc.Field(
+        default="bone", description="Transfer function preset key"
+    )
     _actors: list[vtk.vtkVolume] = pc.PrivateAttr(default_factory=list)
 
     @pc.model_validator(mode="after")
@@ -47,7 +49,7 @@ class Volume(Object):
     @property
     def preset(self):
         """Load preset based on transfer_function_preset."""
-        return load_preset(self.transfer_function_preset)
+        return load_volume_property_preset(self.transfer_function_preset)
 
     def configure_actors(self):
         """Configure volume properties without adding to renderer."""

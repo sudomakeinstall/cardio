@@ -7,13 +7,13 @@ import tomlkit as tk
 from vtkmodules.vtkCommonDataModel import vtkPiecewiseFunction
 from vtkmodules.vtkRenderingCore import vtkColorTransferFunction
 
-from cardio.transfer_functions import TransferFunctionPairConfig
+from cardio.transfer_function_pair import TransferFunctionPairConfig
 
 
 def test_pair_config_from_toml():
     """Test loading TransferFunctionPairConfig from TOML."""
     # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "pair_config.toml"
+    toml_path = pl.Path(__file__).parent / "assets" / "transfer_function_pair.toml"
     with toml_path.open("rt", encoding="utf-8") as fp:
         data = tk.load(fp)
 
@@ -31,7 +31,7 @@ def test_pair_config_from_toml():
 def test_pair_config_vtk_functions():
     """Test VTK function creation from TransferFunctionPairConfig."""
     # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "pair_config.toml"
+    toml_path = pl.Path(__file__).parent / "assets" / "transfer_function_pair.toml"
     with toml_path.open("rt", encoding="utf-8") as fp:
         data = tk.load(fp)
 

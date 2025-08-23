@@ -159,11 +159,11 @@ class Logic:
 
     def sync_volume_presets(self, **kwargs):
         """Update volume transfer function presets based on UI selection."""
-        from .transfer_functions import load_preset
+        from .volume_property_presets import load_volume_property_preset
 
         for v in self.scene.volumes:
             preset_name = self.server.state[f"volume_preset_{v.label}"]
-            preset = load_preset(preset_name)
+            preset = load_volume_property_preset(preset_name)
 
             # Apply preset to all actors
             for actor in v.actors:

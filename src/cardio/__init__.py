@@ -4,12 +4,12 @@ from .object import Object
 from .scene import Scene
 from .screenshot import Screenshot
 from .segmentation import Segmentation
-from .transfer_functions import (
-    list_available_presets,
-    load_preset,
-)
 from .ui import UI
 from .volume import Volume
+from .volume_property_presets import (
+    list_volume_property_presets,
+    load_volume_property_preset,
+)
 
 __all__ = [
     "Object",
@@ -20,8 +20,8 @@ __all__ = [
     "Screenshot",
     "UI",
     "Logic",
-    "load_preset",
-    "list_available_presets",
+    "load_volume_property_preset",
+    "list_volume_property_presets",
 ]
 
 __version__ = "2025.8.1"

@@ -148,6 +148,9 @@ class Scene(ps.BaseSettings):
 
     @model_validator(mode="after")
     def setup_scene(self):
+        # Validate unique labels
+        self._validate_unique_labels()
+
         # Configure VTK objects
         self._renderer.SetBackground(
             *self.background.light,
@@ -172,6 +175,31 @@ class Scene(ps.BaseSettings):
         self.setup_pipeline()
 
         return self
+
+    def _validate_unique_labels(self):
+        mesh_labels = [mesh.label for mesh in self.meshes]
+        volume_labels = [volume.label for volume in self.volumes]
+        segmentation_labels = [seg.label for seg in self.segmentations]
+
+        if len(mesh_labels) != len(set(mesh_labels)):
+            duplicates = [
+                label for label in set(mesh_labels) if mesh_labels.count(label) > 1
+            ]
+            raise ValueError(f"Duplicate mesh labels found: {duplicates}")
+
+        if len(volume_labels) != len(set(volume_labels)):
+            duplicates = [
+                label for label in set(volume_labels) if volume_labels.count(label) > 1
+            ]
+            raise ValueError(f"Duplicate volume labels found: {duplicates}")
+
+        if len(segmentation_labels) != len(set(segmentation_labels)):
+            duplicates = [
+                label
+                for label in set(segmentation_labels)
+                if segmentation_labels.count(label) > 1
+            ]
+            raise ValueError(f"Duplicate segmentation labels found: {duplicates}")
 
     @property
     def nframes(self) -> int:

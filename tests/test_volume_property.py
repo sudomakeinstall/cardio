@@ -6,13 +6,13 @@ import pytest as pt
 import tomlkit as tk
 from vtkmodules.vtkRenderingCore import vtkVolumeProperty
 
-from cardio.transfer_functions import VolumePropertyConfig
+from cardio.volume_property import VolumePropertyConfig
 
 
 def test_volume_config_from_toml():
     """Test loading VolumePropertyConfig from TOML."""
     # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "volume_config.toml"
+    toml_path = pl.Path(__file__).parent / "assets" / "volume_property.toml"
     with toml_path.open("rt", encoding="utf-8") as fp:
         data = tk.load(fp)
 
@@ -43,7 +43,7 @@ def test_volume_config_from_toml():
 def test_volume_config_vtk_property():
     """Test VTK property creation from VolumePropertyConfig."""
     # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "volume_config.toml"
+    toml_path = pl.Path(__file__).parent / "assets" / "volume_property.toml"
     with toml_path.open("rt", encoding="utf-8") as fp:
         data = tk.load(fp)
 

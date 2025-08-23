@@ -3,7 +3,7 @@ from trame.widgets import vtk as vtk_widgets
 from trame.widgets import vuetify
 
 from .scene import Scene
-from .transfer_functions import list_available_presets
+from .volume_property_presets import list_volume_property_presets
 
 
 class UI:
@@ -292,7 +292,7 @@ class UI:
                         )
 
                         # Preset selection in collapsible panel
-                        available_presets = list_available_presets()
+                        available_presets = list_volume_property_presets()
                         current_preset = self.server.state[f"volume_preset_{v.label}"]
                         current_desc = available_presets.get(
                             current_preset, current_preset
