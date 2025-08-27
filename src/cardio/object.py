@@ -69,12 +69,7 @@ class Object(pc.BaseModel):
         if self.pattern is not None and self.file_paths is not None:
             logging.info("Both pattern and file_paths specified; using file_paths.")
 
-        # Validate all paths for traversal attacks and file existence
         for path in self.path_list:
-            if not path.resolve().is_relative_to(self.directory.resolve()):
-                raise ValueError(
-                    f"Path {path} would access files outside base directory"
-                )
             if not path.is_file():
                 raise ValueError(f"File does not exist: {path}")
 
