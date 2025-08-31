@@ -93,7 +93,7 @@ class Scene(ps.BaseSettings):
     project_name: str = "Cardio"
     current_frame: int = 0
     screenshot_directory: pl.Path = pl.Path("./data/screenshots")
-    screenshot_subdirectory_format: pl.Path = pl.Path("%Y-%m-%d-%H-%M-%S")
+    screenshot_subdirectory_format: str = "%Y-%m-%d-%H-%M-%S"
     rotation_factor: float = 3.0
     background: Background = Field(
         default_factory=Background,
