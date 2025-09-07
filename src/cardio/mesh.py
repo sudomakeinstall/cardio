@@ -167,9 +167,9 @@ class Mesh(Object):
 
     def color_transfer_function(self):
         ctf = vtk.vtkColorTransferFunction()
-        ctf.AddRGBPoint(0.7, 0.0, 0.0, 1.0)
+        ctf.AddRGBPoint(self.ctf_min, 0.0, 0.0, 1.0)
         ctf.AddRGBPoint(1.0, 1.0, 0.0, 0.0)
-        ctf.AddRGBPoint(1.3, 1.0, 1.0, 0.0)
+        ctf.AddRGBPoint(self.ctf_max, 1.0, 1.0, 0.0)
         return ctf
 
     def setup_scalar_coloring(self, mapper):
