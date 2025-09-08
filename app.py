@@ -4,8 +4,8 @@ import itk
 import numpy as np
 import vtk
 from trame.app import get_server
-from trame.ui.vuetify import SinglePageWithDrawerLayout
-from trame.widgets import vuetify, vtk as vtk_widgets
+from trame.ui.vuetify3 import SinglePageWithDrawerLayout
+from trame.widgets import vuetify3 as vuetify, vtk as vtk_widgets
 
 import cardio
 
@@ -14,8 +14,9 @@ level = 200
 background = [0.0, 0.0, 0.0]
 vr_preset = "vascular_closed"
 
-server = get_server(client_type="vue2")
+server = get_server(client_type="vue3")
 state, ctrl = server.state, server.controller
+state.theme_mode = "dark"
 
 nifti_file_path = "ct_scan.nii.gz"
 
@@ -205,11 +206,17 @@ def add_z_rotation():
 
 @ctrl.set("remove_rotation_event")
 def remove_rotation_event(index):
-    """Remove a rotation at given index."""
+    """Remove a rotation at given index and all subsequent rotations."""
     sequence = list(state.rotation_sequence)
     if 0 <= index < len(sequence):
-        sequence.pop(index)
+        # Remove this rotation and all subsequent ones
+        sequence = sequence[:index]
         state.rotation_sequence = sequence
+
+        # Reset angle states for all removed rotations
+        for i in range(index, 20):
+            setattr(state, f"rotation_angle_{i}", 0)
+
         update_rotation_labels()
 
 
@@ -353,15 +360,19 @@ def update_all_views(**kwargs):
     ctrl.volume_update()
 
 
-with SinglePageWithDrawerLayout(server) as layout:
+with SinglePageWithDrawerLayout(server, theme=("theme_mode", "dark")) as layout:
     layout.title.set_text("NIFTI Slice Viewer")
 
     with layout.toolbar:
         vuetify.VSpacer()
-        vuetify.VSwitch(
-            v_model=("$vuetify.theme.dark", True),
+        vuetify.VCheckbox(
+            v_model=("theme_mode", "dark"),
+            true_value="dark",
+            false_value="light",
             label="Dark Mode",
-            dense=True,
+            true_icon="mdi-lightbulb-off-outline",
+            false_icon="mdi-lightbulb-outline",
+            density="compact",
             hide_details=True,
             style="max-width: 150px;",
         )
@@ -378,7 +389,7 @@ with SinglePageWithDrawerLayout(server) as layout:
             )
 
             vuetify.VDivider(classes="my-2")
-            vuetify.VSubheader("Slice Positions")
+            vuetify.VListSubheader("Slice Positions")
             vuetify.VSlider(
                 v_model=("axial_slice", state.axial_slice),
                 min=f"{state.axial_min}",
@@ -408,7 +419,7 @@ with SinglePageWithDrawerLayout(server) as layout:
             )
 
             vuetify.VDivider(classes="my-4")
-            vuetify.VSubheader("View Rotation")
+            vuetify.VListSubheader("View Rotation")
 
             # Add rotation buttons
             with vuetify.VRow(no_gutters=True, classes="mb-2"):
@@ -462,7 +473,7 @@ with SinglePageWithDrawerLayout(server) as layout:
                             )
 
             vuetify.VDivider(classes="my-4")
-            vuetify.VSubheader("Image Display")
+            vuetify.VListSubheader("Image Display")
             vuetify.VSlider(
                 v_model=("image_window", 600),
                 min=1,
@@ -483,29 +494,29 @@ with SinglePageWithDrawerLayout(server) as layout:
             )
 
     with layout.content:
-        with vuetify.VContainer(fluid=True, classes="pa-0 fill-height"):
+        with vuetify.VContainer(fluid=True, classes="pa-0", style="height: 100vh;"):
             # First row: Axial and Volume (50% height)
-            with vuetify.VRow(no_gutters=True, style="height: 50%;"):
-                with vuetify.VCol(cols=6, classes="pa-0", style="height: 100%;"):
+            with vuetify.VRow(classes="ma-0", style="height: 50%;"):
+                with vuetify.VCol(cols="6", classes="pa-1", style="height: 100%;"):
                     axial_view = vtk_widgets.VtkRemoteView(
-                        axial_render_window, style="height: 100%;"
+                        axial_render_window, style="height: 100%; width: 100%;"
                     )
-                with vuetify.VCol(cols=6, classes="pa-0", style="height: 100%;"):
+                with vuetify.VCol(cols="6", classes="pa-1", style="height: 100%;"):
                     volume_view = vtk_widgets.VtkRemoteView(
                         volume_render_window,
-                        style="height: 100%;",
+                        style="height: 100%; width: 100%;",
                         interactive_ratio=1,  # Enable full interaction
                     )
 
             # Second row: Coronal and Sagittal (50% height)
-            with vuetify.VRow(no_gutters=True, style="height: 50%;"):
-                with vuetify.VCol(cols=6, classes="pa-0", style="height: 100%;"):
+            with vuetify.VRow(classes="ma-0", style="height: 50%;"):
+                with vuetify.VCol(cols="6", classes="pa-1", style="height: 100%;"):
                     coronal_view = vtk_widgets.VtkRemoteView(
-                        coronal_render_window, style="height: 100%;"
+                        coronal_render_window, style="height: 100%; width: 100%;"
                     )
-                with vuetify.VCol(cols=6, classes="pa-0", style="height: 100%;"):
+                with vuetify.VCol(cols="6", classes="pa-1", style="height: 100%;"):
                     sagittal_view = vtk_widgets.VtkRemoteView(
-                        sagittal_render_window, style="height: 100%;"
+                        sagittal_render_window, style="height: 100%; width: 100%;"
                     )
 
             # Store view update functions in controller
