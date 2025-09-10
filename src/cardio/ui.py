@@ -185,6 +185,46 @@ class UI:
                         hide_details=True,
                     )
 
+                    # Window/Level controls for MPR
+                    vuetify.VSubheader(
+                        "Window/Level", v_if="mpr_enabled && active_volume_label"
+                    )
+
+                    vuetify.VSelect(
+                        v_if="mpr_enabled && active_volume_label",
+                        v_model=("mpr_window_level_preset", 7),
+                        items=("mpr_presets", []),
+                        label="Preset",
+                        dense=True,
+                        hide_details=True,
+                    )
+
+                    vuetify.VSlider(
+                        v_if="mpr_enabled && active_volume_label",
+                        v_model="mpr_window",
+                        min=1.0,
+                        max=2000.0,
+                        step=1.0,
+                        hint="Window",
+                        persistent_hint=True,
+                        dense=True,
+                        hide_details=False,
+                        thumb_label=True,
+                    )
+
+                    vuetify.VSlider(
+                        v_if="mpr_enabled && active_volume_label",
+                        v_model="mpr_level",
+                        min=-1000.0,
+                        max=1000.0,
+                        step=1.0,
+                        hint="Level",
+                        persistent_hint=True,
+                        dense=True,
+                        hide_details=False,
+                        thumb_label=True,
+                    )
+
                     # Slice position controls (only show when MPR is enabled and volume is selected)
                     vuetify.VSubheader(
                         "Slice Positions", v_if="mpr_enabled && active_volume_label"
@@ -229,45 +269,69 @@ class UI:
                         thumb_label=True,
                     )
 
-                    # Window/Level controls for MPR
+                    # MPR Rotation controls
                     vuetify.VSubheader(
-                        "Window/Level", v_if="mpr_enabled && active_volume_label"
+                        "Rotations", v_if="mpr_enabled && active_volume_label"
                     )
 
-                    vuetify.VSelect(
+                    # Rotation buttons
+                    with vuetify.VRow(
                         v_if="mpr_enabled && active_volume_label",
-                        v_model=("mpr_window_level_preset", 1),
-                        items=("mpr_presets", []),
-                        label="Preset",
+                        no_gutters=True,
+                        classes="mb-2",
+                    ):
+                        with vuetify.VCol(cols="4"):
+                            vuetify.VBtn(
+                                "X",
+                                click=self.server.controller.add_x_rotation,
+                                small=True,
+                                dense=True,
+                                outlined=True,
+                            )
+                        with vuetify.VCol(cols="4"):
+                            vuetify.VBtn(
+                                "Y",
+                                click=self.server.controller.add_y_rotation,
+                                small=True,
+                                dense=True,
+                                outlined=True,
+                            )
+                        with vuetify.VCol(cols="4"):
+                            vuetify.VBtn(
+                                "Z",
+                                click=self.server.controller.add_z_rotation,
+                                small=True,
+                                dense=True,
+                                outlined=True,
+                            )
+
+                    # Reset rotations button
+                    vuetify.VBtn(
+                        "Reset",
+                        v_if="mpr_enabled && active_volume_label && mpr_rotation_sequence && mpr_rotation_sequence.length > 0",
+                        click=self.server.controller.reset_rotations,
+                        small=True,
                         dense=True,
-                        hide_details=True,
+                        outlined=True,
+                        color="warning",
+                        block=True,
+                        classes="mb-2",
                     )
 
-                    vuetify.VSlider(
-                        v_if="mpr_enabled && active_volume_label",
-                        v_model=("mpr_window", 400.0),
-                        min=1.0,
-                        max=2000.0,
-                        step=1.0,
-                        hint="Window",
-                        persistent_hint=True,
-                        dense=True,
-                        hide_details=False,
-                        thumb_label=True,
-                    )
-
-                    vuetify.VSlider(
-                        v_if="mpr_enabled && active_volume_label",
-                        v_model=("mpr_level", 40.0),
-                        min=-1000.0,
-                        max=1000.0,
-                        step=1.0,
-                        hint="Level",
-                        persistent_hint=True,
-                        dense=True,
-                        hide_details=False,
-                        thumb_label=True,
-                    )
+                    # Individual rotation sliders (show up to 10)
+                    for i in range(10):
+                        vuetify.VSlider(
+                            v_if=f"mpr_enabled && active_volume_label && mpr_rotation_sequence && mpr_rotation_sequence.length > {i}",
+                            v_model=(f"mpr_rotation_angle_{i}", 0),
+                            min=-180,
+                            max=180,
+                            step=1,
+                            hint=(f"mpr_rotation_axis_{i}", f"Rotation {i+1}"),
+                            persistent_hint=True,
+                            dense=True,
+                            hide_details=False,
+                            thumb_label=True,
+                        )
 
                     vuetify.VDivider(classes="my-2")
 

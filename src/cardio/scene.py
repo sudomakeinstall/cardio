@@ -120,13 +120,17 @@ class Scene(ps.BaseSettings):
         default=0.5, description="Coronal slice position as fraction (0.0 to 1.0)"
     )
     mpr_window: float = Field(
-        default=400.0, description="Window width for MPR image display"
+        default=800.0, description="Window width for MPR image display"
     )
     mpr_level: float = Field(
-        default=40.0, description="Window level for MPR image display"
+        default=200.0, description="Window level for MPR image display"
     )
     mpr_window_level_preset: int = Field(
-        default=1, description="Window/level preset key for MPR views"
+        default=7, description="Window/level preset key for MPR views"
+    )
+    mpr_rotation_sequence: list = Field(
+        default_factory=list,
+        description="Dynamic rotation sequence for MPR views - list of rotation steps",
     )
 
     # Field validators for JSON string inputs
@@ -295,6 +299,10 @@ class Scene(ps.BaseSettings):
         # Show current frame
         self.show_frame(self.current_frame)
         self.renderer.ResetCamera()
+
+        # Set default camera elevation to -90 degrees
+        camera = self.renderer.GetActiveCamera()
+        camera.Elevation(-90)
 
     def setup_mpr_render_windows(self):
         """Initialize MPR render windows when MPR mode is enabled."""

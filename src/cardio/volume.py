@@ -10,6 +10,19 @@ from .utils import InterpolatorType, reset_direction
 from .volume_property_presets import load_volume_property_preset
 
 
+def create_rotation_matrix(axis, angle_degrees):
+    """Create rotation matrix for given axis and angle."""
+    angle = np.radians(angle_degrees)
+    cos_a, sin_a = np.cos(angle), np.sin(angle)
+    if axis == "X":
+        return np.array([[1, 0, 0], [0, cos_a, -sin_a], [0, sin_a, cos_a]])
+    elif axis == "Y":
+        return np.array([[cos_a, 0, sin_a], [0, 1, 0], [-sin_a, 0, cos_a]])
+    elif axis == "Z":
+        return np.array([[cos_a, -sin_a, 0], [sin_a, cos_a, 0], [0, 0, 1]])
+    return np.eye(3)
+
+
 def create_reslice_matrix(normal, up, origin):
     """Create a 4x4 reslice matrix from normal vector, up vector, and origin"""
     normal = normal / np.linalg.norm(normal)
@@ -100,6 +113,7 @@ class Volume(Object):
             reslice.SetInputData(image_data)
             reslice.SetOutputDimensionality(2)
             reslice.SetInterpolationModeToLinear()
+            reslice.SetBackgroundLevel(-1000.0)  # Set background to air value
 
             # Create image actor
             actor = vtk.vtkImageActor()
@@ -166,9 +180,15 @@ class Volume(Object):
         return self._mpr_actors[frame]
 
     def update_slice_positions(
-        self, frame: int, axial_frac: float, sagittal_frac: float, coronal_frac: float
+        self,
+        frame: int,
+        axial_frac: float,
+        sagittal_frac: float,
+        coronal_frac: float,
+        rotation_sequence: list = None,
+        rotation_angles: dict = None,
     ):
-        """Update slice positions for MPR views."""
+        """Update slice positions for MPR views with optional rotation."""
         if frame not in self._mpr_actors:
             return
 
@@ -186,34 +206,56 @@ class Volume(Object):
             bounds[3] - bounds[2]
         )  # Flipped Y bounds
 
-        # Base LAS vectors
-        base_axial_normal = np.array([0.0, 0.0, 1.0])
-        base_axial_up = np.array([0.0, -1.0, 0.0])
-        base_sagittal_normal = np.array([1.0, 0.0, 0.0])
-        base_sagittal_up = np.array([0.0, 0.0, 1.0])
-        base_coronal_normal = np.array([0.0, 1.0, 0.0])
-        base_coronal_up = np.array([0.0, 0.0, 1.0])
+        # Base LAS vectors (Left-Anterior-Superior coordinate system)
+        base_axial_normal = np.array([0.0, 0.0, 1.0])  # Z axis (Superior)
+        base_axial_up = np.array([0.0, -1.0, 0.0])  # -Y axis (Anterior)
+        base_sagittal_normal = np.array([1.0, 0.0, 0.0])  # X axis (Left)
+        base_sagittal_up = np.array([0.0, 0.0, 1.0])  # Z axis (Superior)
+        base_coronal_normal = np.array([0.0, 1.0, 0.0])  # Y axis (Posterior in data)
+        base_coronal_up = np.array([0.0, 0.0, 1.0])  # Z axis (Superior)
+
+        # Apply cumulative rotation if provided
+        if rotation_sequence and rotation_angles:
+            cumulative_rotation = np.eye(3)
+            for i, rotation in enumerate(rotation_sequence):
+                angle = rotation_angles.get(i, 0)
+                rotation_matrix = create_rotation_matrix(rotation["axis"], angle)
+                cumulative_rotation = cumulative_rotation @ rotation_matrix
+
+            # Apply rotation to base view vectors
+            axial_normal = cumulative_rotation @ base_axial_normal
+            axial_up = cumulative_rotation @ base_axial_up
+            sagittal_normal = cumulative_rotation @ base_sagittal_normal
+            sagittal_up = cumulative_rotation @ base_sagittal_up
+            coronal_normal = cumulative_rotation @ base_coronal_normal
+            coronal_up = cumulative_rotation @ base_coronal_up
+        else:
+            # Use base vectors without rotation
+            axial_normal = base_axial_normal
+            axial_up = base_axial_up
+            sagittal_normal = base_sagittal_normal
+            sagittal_up = base_sagittal_up
+            coronal_normal = base_coronal_normal
+            coronal_up = base_coronal_up
 
         center = image_data.GetCenter()
 
         # Update axial slice
         axial_origin = [center[0], center[1], axial_pos]
-        axial_matrix = create_reslice_matrix(
-            base_axial_normal, base_axial_up, axial_origin
-        )
+        axial_matrix = create_reslice_matrix(axial_normal, axial_up, axial_origin)
         actors["axial"]["reslice"].SetResliceAxes(axial_matrix)
 
         # Update sagittal slice
         sagittal_origin = [sagittal_pos, center[1], center[2]]
         sagittal_matrix = create_reslice_matrix(
-            base_sagittal_normal, base_sagittal_up, sagittal_origin
+            sagittal_normal, sagittal_up, sagittal_origin
         )
         actors["sagittal"]["reslice"].SetResliceAxes(sagittal_matrix)
 
         # Update coronal slice
         coronal_origin = [center[0], coronal_pos, center[2]]
         coronal_matrix = create_reslice_matrix(
-            base_coronal_normal, base_coronal_up, coronal_origin
+            coronal_normal, coronal_up, coronal_origin
         )
         actors["coronal"]["reslice"].SetResliceAxes(coronal_matrix)
 
