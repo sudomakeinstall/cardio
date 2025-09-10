@@ -11,6 +11,8 @@ from .volume_property_presets import (
     load_volume_property_preset,
 )
 
+from . import window_level
+
 __all__ = [
     "Object",
     "Mesh",

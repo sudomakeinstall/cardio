@@ -81,21 +81,196 @@ class UI:
                     fluid=True,
                     classes="pa-0 fill-height",
                 ):
-                    view = vtk_widgets.VtkRemoteView(
-                        self.scene.renderWindow, interactive_ratio=1
-                    )
-                    # view = vtk_widgets.VtkLocalView(renderWindow)
-                    # view = vtk_widgets.VtkRemoteLocalView(
-                    #    scene.renderWindow,
-                    #    namespace="view",
-                    #    mode="local",
-                    #    interactive_ratio=1,
-                    # )
-                    self.server.controller.view_update = view.update
-                    self.server.controller.view_reset_camera = view.reset_camera
-                    self.server.controller.on_server_ready.add(view.update)
+                    # Single VR view (default mode)
+                    with vuetify.VContainer(
+                        v_if="!mpr_enabled",
+                        fluid=True,
+                        classes="pa-0 fill-height",
+                    ):
+                        view = vtk_widgets.VtkRemoteView(
+                            self.scene.renderWindow, interactive_ratio=1
+                        )
+                        self.server.controller.view_update = view.update
+                        self.server.controller.view_reset_camera = view.reset_camera
+                        self.server.controller.on_server_ready.add(view.update)
+
+                    # Quad-view layout (MPR mode)
+                    with vuetify.VContainer(
+                        v_if="mpr_enabled",
+                        fluid=True,
+                        classes="pa-0 fill-height",
+                    ):
+                        # Setup MPR render windows in Scene
+                        self.scene.setup_mpr_render_windows()
+
+                        # First row: Axial and Volume (50% height)
+                        with vuetify.VRow(classes="ma-0", style="height: 50%;"):
+                            with vuetify.VCol(
+                                cols="6", classes="pa-1", style="height: 100%;"
+                            ):
+                                # Axial view
+                                axial_view = vtk_widgets.VtkRemoteView(
+                                    self.scene.axial_renderWindow,
+                                    style="height: 100%; width: 100%;",
+                                    interactive_ratio=0,
+                                )
+                            with vuetify.VCol(
+                                cols="6", classes="pa-1", style="height: 100%;"
+                            ):
+                                # Volume view (reuse existing render window)
+                                volume_view = vtk_widgets.VtkRemoteView(
+                                    self.scene.renderWindow,
+                                    style="height: 100%; width: 100%;",
+                                    interactive_ratio=1,
+                                )
+
+                        # Second row: Coronal and Sagittal (50% height)
+                        with vuetify.VRow(classes="ma-0", style="height: 50%;"):
+                            with vuetify.VCol(
+                                cols="6", classes="pa-1", style="height: 100%;"
+                            ):
+                                # Coronal view
+                                coronal_view = vtk_widgets.VtkRemoteView(
+                                    self.scene.coronal_renderWindow,
+                                    style="height: 100%; width: 100%;",
+                                    interactive_ratio=0,
+                                )
+                            with vuetify.VCol(
+                                cols="6", classes="pa-1", style="height: 100%;"
+                            ):
+                                # Sagittal view
+                                sagittal_view = vtk_widgets.VtkRemoteView(
+                                    self.scene.sagittal_renderWindow,
+                                    style="height: 100%; width: 100%;",
+                                    interactive_ratio=0,
+                                )
+
+                        # Set up controller functions for MPR mode
+                        self.server.controller.view_update = self._update_all_mpr_views
+                        self.server.controller.view_reset_camera = (
+                            volume_view.reset_camera
+                        )
+                        self.server.controller.on_server_ready.add(
+                            self._update_all_mpr_views
+                        )
+
+                        # Store individual view update functions
+                        self.server.controller.axial_update = axial_view.update
+                        self.server.controller.coronal_update = coronal_view.update
+                        self.server.controller.sagittal_update = sagittal_view.update
+                        self.server.controller.volume_update = volume_view.update
 
             with layout.drawer:
+                # MPR Mode Toggle (only show when volumes are present)
+                if self.scene.volumes:
+                    vuetify.VSubheader("View Mode")
+                    vuetify.VCheckbox(
+                        v_model=("mpr_enabled", False),
+                        label="Multi-Planar Reconstruction (MPR)",
+                        title="Toggle between single 3D view and quad-view with slice planes",
+                        dense=True,
+                        hide_details=True,
+                    )
+
+                    # Volume selection dropdown (only show when MPR is enabled)
+                    vuetify.VSelect(
+                        v_if="mpr_enabled",
+                        v_model=("active_volume_label", ""),
+                        items=[
+                            {"text": volume.label, "value": volume.label}
+                            for volume in self.scene.volumes
+                        ],
+                        title="Select which volume to use for MPR",
+                        dense=True,
+                        hide_details=True,
+                    )
+
+                    # Slice position controls (only show when MPR is enabled and volume is selected)
+                    vuetify.VSubheader(
+                        "Slice Positions", v_if="mpr_enabled && active_volume_label"
+                    )
+
+                    vuetify.VSlider(
+                        v_if="mpr_enabled && active_volume_label",
+                        v_model=("axial_slice", 0.5),
+                        min=0.0,
+                        max=1.0,
+                        step=0.01,
+                        hint="A (I ↔ S)",
+                        persistent_hint=True,
+                        dense=True,
+                        hide_details=False,
+                        thumb_label=True,
+                    )
+
+                    vuetify.VSlider(
+                        v_if="mpr_enabled && active_volume_label",
+                        v_model=("sagittal_slice", 0.5),
+                        min=0.0,
+                        max=1.0,
+                        step=0.01,
+                        hint="S (R ↔ L)",
+                        persistent_hint=True,
+                        dense=True,
+                        hide_details=False,
+                        thumb_label=True,
+                    )
+
+                    vuetify.VSlider(
+                        v_if="mpr_enabled && active_volume_label",
+                        v_model=("coronal_slice", 0.5),
+                        min=0.0,
+                        max=1.0,
+                        step=0.01,
+                        hint="C (P ↔ A)",
+                        persistent_hint=True,
+                        dense=True,
+                        hide_details=False,
+                        thumb_label=True,
+                    )
+
+                    # Window/Level controls for MPR
+                    vuetify.VSubheader(
+                        "Window/Level", v_if="mpr_enabled && active_volume_label"
+                    )
+
+                    vuetify.VSelect(
+                        v_if="mpr_enabled && active_volume_label",
+                        v_model=("mpr_window_level_preset", 1),
+                        items=("mpr_presets", []),
+                        label="Preset",
+                        dense=True,
+                        hide_details=True,
+                    )
+
+                    vuetify.VSlider(
+                        v_if="mpr_enabled && active_volume_label",
+                        v_model=("mpr_window", 400.0),
+                        min=1.0,
+                        max=2000.0,
+                        step=1.0,
+                        hint="Window",
+                        persistent_hint=True,
+                        dense=True,
+                        hide_details=False,
+                        thumb_label=True,
+                    )
+
+                    vuetify.VSlider(
+                        v_if="mpr_enabled && active_volume_label",
+                        v_model=("mpr_level", 40.0),
+                        min=-1000.0,
+                        max=1000.0,
+                        step=1.0,
+                        hint="Level",
+                        persistent_hint=True,
+                        dense=True,
+                        hide_details=False,
+                        thumb_label=True,
+                    )
+
+                    vuetify.VDivider(classes="my-2")
+
                 vuetify.VSubheader("Playback Controls")
 
                 with vuetify.VToolbar(dense=True, flat=True):
@@ -486,3 +661,14 @@ class UI:
                                                 dense=True,
                                                 thumb_label=False,
                                             )
+
+    def _update_all_mpr_views(self, **kwargs):
+        """Update all MPR views."""
+        if hasattr(self.server.controller, "axial_update"):
+            self.server.controller.axial_update()
+        if hasattr(self.server.controller, "coronal_update"):
+            self.server.controller.coronal_update()
+        if hasattr(self.server.controller, "sagittal_update"):
+            self.server.controller.sagittal_update()
+        if hasattr(self.server.controller, "volume_update"):
+            self.server.controller.volume_update()

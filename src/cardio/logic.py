@@ -15,6 +15,15 @@ class Logic:
         self.server.state.change("frame")(self.update_frame)
         self.server.state.change("playing")(self.play)
         self.server.state.change("dark_mode")(self.sync_background_color)
+        self.server.state.change("mpr_enabled")(self.sync_mpr_mode)
+        self.server.state.change("active_volume_label")(self.sync_active_volume)
+        self.server.state.change("axial_slice", "sagittal_slice", "coronal_slice")(
+            self.update_slice_positions
+        )
+        self.server.state.change("mpr_window", "mpr_level")(
+            self.update_mpr_window_level
+        )
+        self.server.state.change("mpr_window_level_preset")(self.update_mpr_preset)
 
         # Initialize visibility state variables
         for m in self.scene.meshes:
@@ -100,6 +109,23 @@ class Logic:
         self.server.controller.reset_all = self.reset_all
         self.server.controller.close_application = self.close_application
 
+        # Initialize MPR state
+        self.server.state.mpr_enabled = self.scene.mpr_enabled
+        self.server.state.active_volume_label = self.scene.active_volume_label
+        self.server.state.axial_slice = self.scene.axial_slice
+        self.server.state.sagittal_slice = self.scene.sagittal_slice
+        self.server.state.coronal_slice = self.scene.coronal_slice
+        self.server.state.mpr_window = self.scene.mpr_window
+        self.server.state.mpr_level = self.scene.mpr_level
+        self.server.state.mpr_window_level_preset = self.scene.mpr_window_level_preset
+
+        # Initialize MPR presets data
+        from .window_level import presets
+
+        self.server.state.mpr_presets = [
+            {"text": preset.name, "value": key} for key, preset in presets.items()
+        ]
+
         # Initialize clipping state variables
         self._initialize_clipping_state()
 
@@ -123,7 +149,80 @@ class Logic:
                 actor = segmentation.actors[frame % len(segmentation.actors)]
                 actor.SetVisibility(True)
 
+        # Update MPR views if MPR is enabled
+        self.update_mpr_frame(frame)
+
         self.server.controller.view_update()
+
+    def update_mpr_frame(self, frame):
+        """Update MPR views to show the specified frame."""
+        if not getattr(self.server.state, "mpr_enabled", False):
+            return
+
+        active_volume_label = getattr(self.server.state, "active_volume_label", "")
+        if not active_volume_label:
+            return
+
+        # Find the active volume
+        active_volume = None
+        for volume in self.scene.volumes:
+            if volume.label == active_volume_label:
+                active_volume = volume
+                break
+
+        if not active_volume:
+            return
+
+        # Get or create MPR actors for the new frame
+        mpr_actors = active_volume.get_mpr_actors_for_frame(frame)
+
+        # Update each MPR renderer with the new frame's actors
+        if self.scene.axial_renderWindow:
+            axial_renderer = (
+                self.scene.axial_renderWindow.GetRenderers().GetFirstRenderer()
+            )
+            if axial_renderer:
+                axial_renderer.RemoveAllViewProps()
+                axial_renderer.AddActor(mpr_actors["axial"]["actor"])
+                mpr_actors["axial"]["actor"].SetVisibility(True)
+                # Apply current slice position and window/level
+                self._apply_current_mpr_settings(active_volume, frame)
+                axial_renderer.ResetCamera()
+
+        if self.scene.coronal_renderWindow:
+            coronal_renderer = (
+                self.scene.coronal_renderWindow.GetRenderers().GetFirstRenderer()
+            )
+            if coronal_renderer:
+                coronal_renderer.RemoveAllViewProps()
+                coronal_renderer.AddActor(mpr_actors["coronal"]["actor"])
+                mpr_actors["coronal"]["actor"].SetVisibility(True)
+                coronal_renderer.ResetCamera()
+
+        if self.scene.sagittal_renderWindow:
+            sagittal_renderer = (
+                self.scene.sagittal_renderWindow.GetRenderers().GetFirstRenderer()
+            )
+            if sagittal_renderer:
+                sagittal_renderer.RemoveAllViewProps()
+                sagittal_renderer.AddActor(mpr_actors["sagittal"]["actor"])
+                mpr_actors["sagittal"]["actor"].SetVisibility(True)
+                sagittal_renderer.ResetCamera()
+
+    def _apply_current_mpr_settings(self, active_volume, frame):
+        """Apply current slice positions and window/level to MPR actors."""
+        # Apply slice positions
+        axial_slice = getattr(self.server.state, "axial_slice", 0.5)
+        sagittal_slice = getattr(self.server.state, "sagittal_slice", 0.5)
+        coronal_slice = getattr(self.server.state, "coronal_slice", 0.5)
+        active_volume.update_slice_positions(
+            frame, axial_slice, sagittal_slice, coronal_slice
+        )
+
+        # Apply window/level
+        window = getattr(self.server.state, "mpr_window", 400.0)
+        level = getattr(self.server.state, "mpr_level", 40.0)
+        active_volume.update_mpr_window_level(frame, window, level)
 
     @asynchronous.task
     async def play(self, playing, **kwargs):
@@ -364,6 +463,144 @@ class Logic:
                 setattr(self.server.state, f"clip_x_{s.label}", [bounds[0], bounds[1]])
                 setattr(self.server.state, f"clip_y_{s.label}", [bounds[2], bounds[3]])
                 setattr(self.server.state, f"clip_z_{s.label}", [bounds[4], bounds[5]])
+
+    def sync_mpr_mode(self, mpr_enabled, **kwargs):
+        """Handle MPR mode toggle."""
+        if (
+            mpr_enabled
+            and self.scene.volumes
+            and not self.server.state.active_volume_label
+        ):
+            # Auto-select first volume when MPR is enabled and no volume is selected
+            self.server.state.active_volume_label = self.scene.volumes[0].label
+
+    def sync_active_volume(self, active_volume_label, **kwargs):
+        """Handle active volume selection for MPR."""
+
+        if not active_volume_label or not self.server.state.mpr_enabled:
+            return
+
+        # Find the selected volume
+        active_volume = None
+        for volume in self.scene.volumes:
+            if volume.label == active_volume_label:
+                active_volume = volume
+                break
+
+        if not active_volume:
+            return
+
+        # Create MPR actors for current frame
+        current_frame = getattr(self.server.state, "frame", 0)
+        mpr_actors = active_volume.get_mpr_actors_for_frame(current_frame)
+
+        # Add MPR actors to their respective renderers
+        if self.scene.axial_renderWindow:
+            axial_renderer = (
+                self.scene.axial_renderWindow.GetRenderers().GetFirstRenderer()
+            )
+            if axial_renderer:
+                axial_renderer.RemoveAllViewProps()  # Clear existing actors
+                axial_renderer.AddActor(mpr_actors["axial"]["actor"])
+                mpr_actors["axial"]["actor"].SetVisibility(True)
+                axial_renderer.ResetCamera()
+
+        if self.scene.coronal_renderWindow:
+            coronal_renderer = (
+                self.scene.coronal_renderWindow.GetRenderers().GetFirstRenderer()
+            )
+            if coronal_renderer:
+                coronal_renderer.RemoveAllViewProps()
+                coronal_renderer.AddActor(mpr_actors["coronal"]["actor"])
+                mpr_actors["coronal"]["actor"].SetVisibility(True)
+                coronal_renderer.ResetCamera()
+
+        if self.scene.sagittal_renderWindow:
+            sagittal_renderer = (
+                self.scene.sagittal_renderWindow.GetRenderers().GetFirstRenderer()
+            )
+            if sagittal_renderer:
+                sagittal_renderer.RemoveAllViewProps()
+                sagittal_renderer.AddActor(mpr_actors["sagittal"]["actor"])
+                mpr_actors["sagittal"]["actor"].SetVisibility(True)
+                sagittal_renderer.ResetCamera()
+
+        # Update all views
+        self.server.controller.view_update()
+
+    def update_slice_positions(self, **kwargs):
+        """Update MPR slice positions when sliders change."""
+
+        if not getattr(self.server.state, "mpr_enabled", False):
+            return
+
+        active_volume_label = getattr(self.server.state, "active_volume_label", "")
+        if not active_volume_label:
+            return
+
+        # Find the active volume
+        active_volume = None
+        for volume in self.scene.volumes:
+            if volume.label == active_volume_label:
+                active_volume = volume
+                break
+
+        if not active_volume:
+            return
+
+        # Get current slice positions
+        axial_slice = getattr(self.server.state, "axial_slice", 0.5)
+        sagittal_slice = getattr(self.server.state, "sagittal_slice", 0.5)
+        coronal_slice = getattr(self.server.state, "coronal_slice", 0.5)
+        current_frame = getattr(self.server.state, "frame", 0)
+
+        # Update slice positions
+        active_volume.update_slice_positions(
+            current_frame, axial_slice, sagittal_slice, coronal_slice
+        )
+
+        # Update all views
+        self.server.controller.view_update()
+
+    def update_mpr_window_level(self, **kwargs):
+        """Update MPR window/level when sliders change."""
+
+        if not getattr(self.server.state, "mpr_enabled", False):
+            return
+
+        active_volume_label = getattr(self.server.state, "active_volume_label", "")
+        if not active_volume_label:
+            return
+
+        # Find the active volume
+        active_volume = None
+        for volume in self.scene.volumes:
+            if volume.label == active_volume_label:
+                active_volume = volume
+                break
+
+        if not active_volume:
+            return
+
+        # Get current window/level values
+        window = getattr(self.server.state, "mpr_window", 400.0)
+        level = getattr(self.server.state, "mpr_level", 40.0)
+        current_frame = getattr(self.server.state, "frame", 0)
+
+        # Update window/level for MPR actors
+        active_volume.update_mpr_window_level(current_frame, window, level)
+
+        # Update all views
+        self.server.controller.view_update()
+
+    def update_mpr_preset(self, mpr_window_level_preset, **kwargs):
+        """Update MPR window/level when preset changes."""
+        from .window_level import presets
+
+        if mpr_window_level_preset in presets:
+            preset = presets[mpr_window_level_preset]
+            self.server.state.mpr_window = preset.window
+            self.server.state.mpr_level = preset.level
 
     @asynchronous.task
     async def close_application(self):

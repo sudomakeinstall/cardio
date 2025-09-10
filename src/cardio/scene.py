@@ -102,6 +102,32 @@ class Scene(ps.BaseSettings):
     meshes: MeshList = Field(default_factory=list)
     volumes: VolumeList = Field(default_factory=list)
     segmentations: SegmentationList = Field(default_factory=list)
+    mpr_enabled: bool = Field(
+        default=False,
+        description="Enable multi-planar reconstruction (MPR) mode with quad-view layout",
+    )
+    active_volume_label: str = Field(
+        default="",
+        description="Label of the volume to use for multi-planar reconstruction",
+    )
+    axial_slice: float = Field(
+        default=0.5, description="Axial slice position as fraction (0.0 to 1.0)"
+    )
+    sagittal_slice: float = Field(
+        default=0.5, description="Sagittal slice position as fraction (0.0 to 1.0)"
+    )
+    coronal_slice: float = Field(
+        default=0.5, description="Coronal slice position as fraction (0.0 to 1.0)"
+    )
+    mpr_window: float = Field(
+        default=400.0, description="Window width for MPR image display"
+    )
+    mpr_level: float = Field(
+        default=40.0, description="Window level for MPR image display"
+    )
+    mpr_window_level_preset: int = Field(
+        default=1, description="Window/level preset key for MPR views"
+    )
 
     # Field validators for JSON string inputs
     @field_validator("meshes", mode="before")
@@ -134,6 +160,11 @@ class Scene(ps.BaseSettings):
         default_factory=vtk.vtkRenderWindowInteractor
     )
 
+    # MPR render windows
+    _axial_renderWindow: vtk.vtkRenderWindow = PrivateAttr(default=None)
+    _coronal_renderWindow: vtk.vtkRenderWindow = PrivateAttr(default=None)
+    _sagittal_renderWindow: vtk.vtkRenderWindow = PrivateAttr(default=None)
+
     @property
     def renderer(self) -> vtk.vtkRenderer:
         return self._renderer
@@ -146,10 +177,25 @@ class Scene(ps.BaseSettings):
     def renderWindowInteractor(self) -> vtk.vtkRenderWindowInteractor:
         return self._renderWindowInteractor
 
+    @property
+    def axial_renderWindow(self) -> vtk.vtkRenderWindow:
+        return self._axial_renderWindow
+
+    @property
+    def coronal_renderWindow(self) -> vtk.vtkRenderWindow:
+        return self._coronal_renderWindow
+
+    @property
+    def sagittal_renderWindow(self) -> vtk.vtkRenderWindow:
+        return self._sagittal_renderWindow
+
     @model_validator(mode="after")
     def setup_scene(self):
         # Validate unique labels
         self._validate_unique_labels()
+
+        # Validate active volume label
+        self._validate_active_volume_label()
 
         # Configure VTK objects
         self._renderer.SetBackground(
@@ -201,6 +247,19 @@ class Scene(ps.BaseSettings):
             ]
             raise ValueError(f"Duplicate segmentation labels found: {duplicates}")
 
+    def _validate_active_volume_label(self):
+        """Validate that active_volume_label refers to an existing volume."""
+        if self.active_volume_label and self.volumes:
+            volume_labels = [volume.label for volume in self.volumes]
+            if self.active_volume_label not in volume_labels:
+                raise ValueError(
+                    f"Active volume label '{self.active_volume_label}' not found in available volumes: {volume_labels}"
+                )
+        elif self.active_volume_label and not self.volumes:
+            raise ValueError(
+                "Active volume label specified but no volumes are available"
+            )
+
     @property
     def nframes(self) -> int:
         ns = []
@@ -236,6 +295,42 @@ class Scene(ps.BaseSettings):
         # Show current frame
         self.show_frame(self.current_frame)
         self.renderer.ResetCamera()
+
+    def setup_mpr_render_windows(self):
+        """Initialize MPR render windows when MPR mode is enabled."""
+        if self._axial_renderWindow is None:
+            # Create axial render window
+            self._axial_renderWindow = vtk.vtkRenderWindow()
+            axial_renderer = vtk.vtkRenderer()
+            axial_renderer.SetBackground(0.0, 0.0, 0.0)  # Black background
+            self._axial_renderWindow.AddRenderer(axial_renderer)
+            self._axial_renderWindow.SetOffScreenRendering(True)
+
+            # Create and set interactor for axial
+            axial_interactor = vtk.vtkRenderWindowInteractor()
+            self._axial_renderWindow.SetInteractor(axial_interactor)
+
+            # Create coronal render window
+            self._coronal_renderWindow = vtk.vtkRenderWindow()
+            coronal_renderer = vtk.vtkRenderer()
+            coronal_renderer.SetBackground(0.0, 0.0, 0.0)  # Black background
+            self._coronal_renderWindow.AddRenderer(coronal_renderer)
+            self._coronal_renderWindow.SetOffScreenRendering(True)
+
+            # Create and set interactor for coronal
+            coronal_interactor = vtk.vtkRenderWindowInteractor()
+            self._coronal_renderWindow.SetInteractor(coronal_interactor)
+
+            # Create sagittal render window
+            self._sagittal_renderWindow = vtk.vtkRenderWindow()
+            sagittal_renderer = vtk.vtkRenderer()
+            sagittal_renderer.SetBackground(0.0, 0.0, 0.0)  # Black background
+            self._sagittal_renderWindow.AddRenderer(sagittal_renderer)
+            self._sagittal_renderWindow.SetOffScreenRendering(True)
+
+            # Create and set interactor for sagittal
+            sagittal_interactor = vtk.vtkRenderWindowInteractor()
+            self._sagittal_renderWindow.SetInteractor(sagittal_interactor)
 
     def hide_all_frames(self):
         for a in self.renderer.GetActors():
