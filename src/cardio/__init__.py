@@ -25,4 +25,4 @@ __all__ = [
     "list_volume_property_presets",
 ]
 
-__version__ = "2025.8.1"
+__version__ = "2025.9.0"
