@@ -157,7 +157,7 @@ class Logic:
         # Initialize rotation angle states (up to 20 rotations like app.py)
         for i in range(20):
             setattr(self.server.state, f"mpr_rotation_angle_{i}", 0)
-            setattr(self.server.state, f"mpr_rotation_axis_{i}", f"Rotation {i+1}")
+            setattr(self.server.state, f"mpr_rotation_axis_{i}", f"Rotation {i + 1}")
 
         # Apply initial preset to ensure window/level values are set correctly
         # Only update state values, don't call update methods yet since MPR may not be enabled
@@ -763,11 +763,11 @@ class Logic:
             setattr(
                 self.server.state,
                 f"mpr_rotation_axis_{i}",
-                f"{rotation['axis']} ({i+1})",
+                f"{rotation['axis']} ({i + 1})",
             )
         # Clear unused labels
         for i in range(len(rotation_sequence), 20):
-            setattr(self.server.state, f"mpr_rotation_axis_{i}", f"Rotation {i+1}")
+            setattr(self.server.state, f"mpr_rotation_axis_{i}", f"Rotation {i + 1}")
 
     @asynchronous.task
     async def close_application(self):

@@ -301,7 +301,7 @@ class UI:
                             min=-180,
                             max=180,
                             step=1,
-                            hint=(f"mpr_rotation_axis_{i}", f"Rotation {i+1}"),
+                            hint=(f"mpr_rotation_axis_{i}", f"Rotation {i + 1}"),
                             persistent_hint=True,
                             dense=True,
                             hide_details=False,

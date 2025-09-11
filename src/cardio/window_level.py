@@ -1,5 +1,8 @@
-import pydantic as pc
+# System
 import functools as ft
+
+# Third Party
+import pydantic as pc
 
 
 @pc.dataclasses.dataclass(config=dict(frozen=True))

@@ -1,3 +1,4 @@
+from . import window_level
 from .logic import Logic
 from .mesh import Mesh
 from .object import Object
@@ -10,8 +11,6 @@ from .volume_property_presets import (
     list_volume_property_presets,
     load_volume_property_preset,
 )
-
-from . import window_level
 
 __all__ = [
     "Object",
