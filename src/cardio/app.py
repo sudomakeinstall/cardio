@@ -15,7 +15,7 @@ from .ui import UI
 
 class CardioApp(tm.app.TrameApp):
     def __init__(self, name=None):
-        super().__init__(server=name, client_type="vue2")
+        super().__init__(server=name, client_type="vue3")
 
         # Add config file argument to Trame's parser
         self.server.cli.add_argument(

@@ -12,9 +12,18 @@ class Logic:
         self.server = server
         self.scene = scene
 
+        # Initialize mpr_presets early to avoid undefined errors
+        self.server.state.mpr_presets = []
+
+        # Initialize volume items for MPR dropdown
+        self.server.state.volume_items = [
+            {"text": volume.label, "value": volume.label}
+            for volume in self.scene.volumes
+        ]
+
         self.server.state.change("frame")(self.update_frame)
         self.server.state.change("playing")(self.play)
-        self.server.state.change("dark_mode")(self.sync_background_color)
+        self.server.state.change("theme_mode")(self.sync_background_color)
         self.server.state.change("mpr_enabled")(self.sync_mpr_mode)
         self.server.state.change("active_volume_label")(self.sync_active_volume)
         self.server.state.change("axial_slice", "sagittal_slice", "coronal_slice")(
@@ -135,11 +144,15 @@ class Logic:
         self.server.state.mpr_rotation_sequence = self.scene.mpr_rotation_sequence
 
         # Initialize MPR presets data
-        from .window_level import presets
+        try:
+            from .window_level import presets
 
-        self.server.state.mpr_presets = [
-            {"text": preset.name, "value": key} for key, preset in presets.items()
-        ]
+            self.server.state.mpr_presets = [
+                {"text": preset.name, "value": key} for key, preset in presets.items()
+            ]
+        except Exception as e:
+            print(f"Error initializing MPR presets: {e}")
+            self.server.state.mpr_presets = []
 
         # Initialize rotation angle states (up to 20 rotations like app.py)
         for i in range(20):
@@ -438,9 +451,9 @@ class Logic:
         self.server.state.bpr = 5
         self.server.controller.view_update()
 
-    def sync_background_color(self, dark_mode, **kwargs):
+    def sync_background_color(self, theme_mode, **kwargs):
         """Sync VTK renderer background with dark mode."""
-        if dark_mode:
+        if theme_mode == "dark":
             # Dark mode: use dark background from config
             self.scene.renderer.SetBackground(
                 *self.scene.background.dark,

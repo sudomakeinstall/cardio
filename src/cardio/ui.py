@@ -1,6 +1,6 @@
-from trame.ui.vuetify import SinglePageWithDrawerLayout
+from trame.ui.vuetify3 import SinglePageWithDrawerLayout
 from trame.widgets import vtk as vtk_widgets
-from trame.widgets import vuetify
+from trame.widgets import vuetify3 as vuetify
 
 from .scene import Scene
 from .volume_property_presets import list_volume_property_presets
@@ -16,7 +16,9 @@ class UI:
     def setup(self):
         self.server.state.trame__title = self.scene.project_name
 
-        with SinglePageWithDrawerLayout(self.server) as layout:
+        with SinglePageWithDrawerLayout(
+            self.server, theme=("theme_mode", "dark")
+        ) as layout:
             layout.icon.click = self.server.controller.view_reset_camera
             layout.title.set_text(self.scene.project_name)
 
@@ -25,46 +27,23 @@ class UI:
 
                 vuetify.VSpacer()
 
-                #        vuetify.VCheckbox(
-                #            v_model=("viewMode", "local"),
-                #            on_icon="mdi-lan-disconnect",
-                #            off_icon="mdi-lan-connect",
-                #            true_value="local",
-                #            false_value="remote",
-                #            classes="mx-1",
-                #            hide_details=True,
-                #            dense=True,
-                #            )
-
                 vuetify.VCheckbox(
-                    v_model=("dark_mode", False),
-                    on_icon="mdi-lightbulb-outline",
-                    off_icon="mdi-lightbulb-off-outline",
-                    classes="mx-1",
-                    hide_details=True,
-                    dense=True,
-                    outlined=True,
-                    change="$vuetify.theme.dark = $event",
-                )
-
-                # NOTE: Reset button should be VBtn, but using VCheckbox for consistent sizing/spacing
-                vuetify.VCheckbox(
-                    value=False,
-                    on_icon="mdi-undo-variant",
-                    off_icon="mdi-undo-variant",
-                    hide_details=True,
-                    title="Reset All",
-                    click=self.server.controller.reset_all,
-                    readonly=True,
+                    v_model=("theme_mode", "dark"),
+                    true_value="dark",
+                    false_value="light",
+                    label="Dark Mode",
+                    true_icon="mdi-lightbulb-off-outline",
+                    false_icon="mdi-lightbulb-outline",
+                    density="compact",
+                    style="max-width: 150px;",
                 )
 
                 # Close button
                 vuetify.VCheckbox(
                     value=False,
-                    on_icon="mdi-close-circle",
-                    off_icon="mdi-close-circle",
-                    hide_details=True,
-                    title="Close Application",
+                    true_icon="mdi-close-circle",
+                    false_icon="mdi-close-circle",
+                    label="Close Application",
                     click=self.server.controller.close_application,
                     readonly=True,
                 )
@@ -77,93 +56,88 @@ class UI:
                 )
 
             with layout.content:
+                # Single VR view (default mode)
                 with vuetify.VContainer(
+                    v_if="!mpr_enabled",
                     fluid=True,
                     classes="pa-0 fill-height",
                 ):
-                    # Single VR view (default mode)
-                    with vuetify.VContainer(
-                        v_if="!mpr_enabled",
-                        fluid=True,
-                        classes="pa-0 fill-height",
-                    ):
-                        view = vtk_widgets.VtkRemoteView(
-                            self.scene.renderWindow, interactive_ratio=1
-                        )
-                        self.server.controller.view_update = view.update
-                        self.server.controller.view_reset_camera = view.reset_camera
-                        self.server.controller.on_server_ready.add(view.update)
+                    view = vtk_widgets.VtkRemoteView(
+                        self.scene.renderWindow, interactive_ratio=1
+                    )
+                    self.server.controller.view_update = view.update
+                    self.server.controller.view_reset_camera = view.reset_camera
+                    self.server.controller.on_server_ready.add(view.update)
 
-                    # Quad-view layout (MPR mode)
-                    with vuetify.VContainer(
-                        v_if="mpr_enabled",
-                        fluid=True,
-                        classes="pa-0 fill-height",
-                    ):
-                        # Setup MPR render windows in Scene
-                        self.scene.setup_mpr_render_windows()
+                # Quad-view layout (MPR mode) - directly in content like app.py
+                with vuetify.VContainer(
+                    v_if="mpr_enabled",
+                    fluid=True,
+                    classes="pa-0",
+                    style="height: calc(100vh - 85px);",
+                ):
+                    # Setup MPR render windows in Scene
+                    self.scene.setup_mpr_render_windows()
 
-                        # First row: Axial and Volume (50% height)
-                        with vuetify.VRow(classes="ma-0", style="height: 50%;"):
-                            with vuetify.VCol(
-                                cols="6", classes="pa-1", style="height: 100%;"
-                            ):
-                                # Axial view
-                                axial_view = vtk_widgets.VtkRemoteView(
-                                    self.scene.axial_renderWindow,
-                                    style="height: 100%; width: 100%;",
-                                    interactive_ratio=0,
-                                )
-                            with vuetify.VCol(
-                                cols="6", classes="pa-1", style="height: 100%;"
-                            ):
-                                # Volume view (reuse existing render window)
-                                volume_view = vtk_widgets.VtkRemoteView(
-                                    self.scene.renderWindow,
-                                    style="height: 100%; width: 100%;",
-                                    interactive_ratio=1,
-                                )
+                    # First row: Axial and Volume (50% height)
+                    with vuetify.VRow(classes="ma-0", style="height: 50%;"):
+                        with vuetify.VCol(
+                            cols="6", classes="pa-1", style="height: 100%;"
+                        ):
+                            # Axial view
+                            axial_view = vtk_widgets.VtkRemoteView(
+                                self.scene.axial_renderWindow,
+                                style="height: 100%; width: 100%;",
+                                interactive_ratio=1,
+                            )
+                        with vuetify.VCol(
+                            cols="6", classes="pa-1", style="height: 100%;"
+                        ):
+                            # Volume view (reuse existing render window)
+                            volume_view = vtk_widgets.VtkRemoteView(
+                                self.scene.renderWindow,
+                                style="height: 100%; width: 100%;",
+                                interactive_ratio=1,
+                            )
 
-                        # Second row: Coronal and Sagittal (50% height)
-                        with vuetify.VRow(classes="ma-0", style="height: 50%;"):
-                            with vuetify.VCol(
-                                cols="6", classes="pa-1", style="height: 100%;"
-                            ):
-                                # Coronal view
-                                coronal_view = vtk_widgets.VtkRemoteView(
-                                    self.scene.coronal_renderWindow,
-                                    style="height: 100%; width: 100%;",
-                                    interactive_ratio=0,
-                                )
-                            with vuetify.VCol(
-                                cols="6", classes="pa-1", style="height: 100%;"
-                            ):
-                                # Sagittal view
-                                sagittal_view = vtk_widgets.VtkRemoteView(
-                                    self.scene.sagittal_renderWindow,
-                                    style="height: 100%; width: 100%;",
-                                    interactive_ratio=0,
-                                )
+                    # Second row: Coronal and Sagittal (50% height)
+                    with vuetify.VRow(classes="ma-0", style="height: 50%;"):
+                        with vuetify.VCol(
+                            cols="6", classes="pa-1", style="height: 100%;"
+                        ):
+                            # Coronal view
+                            coronal_view = vtk_widgets.VtkRemoteView(
+                                self.scene.coronal_renderWindow,
+                                style="height: 100%; width: 100%;",
+                                interactive_ratio=1,
+                            )
+                        with vuetify.VCol(
+                            cols="6", classes="pa-1", style="height: 100%;"
+                        ):
+                            # Sagittal view
+                            sagittal_view = vtk_widgets.VtkRemoteView(
+                                self.scene.sagittal_renderWindow,
+                                style="height: 100%; width: 100%;",
+                                interactive_ratio=1,
+                            )
 
-                        # Set up controller functions for MPR mode
-                        self.server.controller.view_update = self._update_all_mpr_views
-                        self.server.controller.view_reset_camera = (
-                            volume_view.reset_camera
-                        )
-                        self.server.controller.on_server_ready.add(
-                            self._update_all_mpr_views
-                        )
+                    # Set up controller functions for MPR mode
+                    self.server.controller.view_update = self._update_all_mpr_views
+                    self.server.controller.view_reset_camera = volume_view.reset_camera
+                    self.server.controller.on_server_ready.add(
+                        self._update_all_mpr_views
+                    )
 
-                        # Store individual view update functions
-                        self.server.controller.axial_update = axial_view.update
-                        self.server.controller.coronal_update = coronal_view.update
-                        self.server.controller.sagittal_update = sagittal_view.update
-                        self.server.controller.volume_update = volume_view.update
+                    # Store individual view update functions
+                    self.server.controller.axial_update = axial_view.update
+                    self.server.controller.coronal_update = coronal_view.update
+                    self.server.controller.sagittal_update = sagittal_view.update
+                    self.server.controller.volume_update = volume_view.update
 
             with layout.drawer:
                 # MPR Mode Toggle (only show when volumes are present)
                 if self.scene.volumes:
-                    vuetify.VSubheader("View Mode")
+                    vuetify.VListSubheader("View Mode")
                     vuetify.VCheckbox(
                         v_model=("mpr_enabled", False),
                         label="Multi-Planar Reconstruction (MPR)",
@@ -176,17 +150,16 @@ class UI:
                     vuetify.VSelect(
                         v_if="mpr_enabled",
                         v_model=("active_volume_label", ""),
-                        items=[
-                            {"text": volume.label, "value": volume.label}
-                            for volume in self.scene.volumes
-                        ],
+                        items=("volume_items", []),
+                        item_title="text",
+                        item_value="value",
                         title="Select which volume to use for MPR",
                         dense=True,
                         hide_details=True,
                     )
 
                     # Window/Level controls for MPR
-                    vuetify.VSubheader(
+                    vuetify.VListSubheader(
                         "Window/Level", v_if="mpr_enabled && active_volume_label"
                     )
 
@@ -194,6 +167,8 @@ class UI:
                         v_if="mpr_enabled && active_volume_label",
                         v_model=("mpr_window_level_preset", 7),
                         items=("mpr_presets", []),
+                        item_title="text",
+                        item_value="value",
                         label="Preset",
                         dense=True,
                         hide_details=True,
@@ -226,7 +201,7 @@ class UI:
                     )
 
                     # Slice position controls (only show when MPR is enabled and volume is selected)
-                    vuetify.VSubheader(
+                    vuetify.VListSubheader(
                         "Slice Positions", v_if="mpr_enabled && active_volume_label"
                     )
 
@@ -270,7 +245,7 @@ class UI:
                     )
 
                     # MPR Rotation controls
-                    vuetify.VSubheader(
+                    vuetify.VListSubheader(
                         "Rotations", v_if="mpr_enabled && active_volume_label"
                     )
 
@@ -335,7 +310,7 @@ class UI:
 
                     vuetify.VDivider(classes="my-2")
 
-                vuetify.VSubheader("Playback Controls")
+                vuetify.VListSubheader("Playback Controls")
 
                 with vuetify.VToolbar(dense=True, flat=True):
                     # NOTE: Previous/Next controls should be VBtn components, but we use
@@ -343,8 +318,8 @@ class UI:
                     # This may be easier to fix in Vuetify 3.
                     vuetify.VCheckbox(
                         value=False,
-                        on_icon="mdi-skip-previous-circle",
-                        off_icon="mdi-skip-previous-circle",
+                        true_icon="mdi-skip-previous-circle",
+                        false_icon="mdi-skip-previous-circle",
                         hide_details=True,
                         title="Previous",
                         click=self.server.controller.decrement_frame,
@@ -355,8 +330,8 @@ class UI:
 
                     vuetify.VCheckbox(
                         value=False,
-                        on_icon="mdi-skip-next-circle",
-                        off_icon="mdi-skip-next-circle",
+                        true_icon="mdi-skip-next-circle",
+                        false_icon="mdi-skip-next-circle",
                         hide_details=True,
                         title="Next",
                         click=self.server.controller.increment_frame,
@@ -367,8 +342,8 @@ class UI:
 
                     vuetify.VCheckbox(
                         v_model=("playing", False),
-                        on_icon="mdi-pause-circle",
-                        off_icon="mdi-play-circle",
+                        true_icon="mdi-pause-circle",
+                        false_icon="mdi-play-circle",
                         title="Play/Pause",
                         hide_details=True,
                     )
@@ -377,8 +352,8 @@ class UI:
 
                     vuetify.VCheckbox(
                         v_model=("incrementing", True),
-                        on_icon="mdi-movie-open-outline",
-                        off_icon="mdi-movie-open-off-outline",
+                        true_icon="mdi-movie-open-outline",
+                        false_icon="mdi-movie-open-off-outline",
                         hide_details=True,
                         title="Incrementing",
                     )
@@ -387,8 +362,8 @@ class UI:
 
                     vuetify.VCheckbox(
                         v_model=("rotating", False),
-                        on_icon="mdi-autorenew",
-                        off_icon="mdi-autorenew-off",
+                        true_icon="mdi-autorenew",
+                        false_icon="mdi-autorenew-off",
                         hide_details=True,
                         title="Rotating",
                     )
@@ -443,10 +418,10 @@ class UI:
                         title=f"Capture cine to {self.scene.screenshot_directory}",
                     )
 
-                vuetify.VSubheader("Appearance and Visibility")
+                vuetify.VListSubheader("Appearance and Visibility")
 
                 if self.scene.meshes:
-                    vuetify.VSubheader("Meshes", classes="text-caption pl-4")
+                    vuetify.VListSubheader("Meshes", classes="text-caption pl-4")
                     for i, m in enumerate(self.scene.meshes):
                         vuetify.VCheckbox(
                             v_model=f"mesh_visibility_{m.label}",
@@ -483,8 +458,8 @@ class UI:
                                     style="max-width: 270px;",
                                 ):
                                     with vuetify.VExpansionPanel():
-                                        vuetify.VExpansionPanelHeader("Clip Bounds")
-                                        with vuetify.VExpansionPanelContent():
+                                        vuetify.VExpansionPanelTitle("Clip Bounds")
+                                        with vuetify.VExpansionPanelText():
                                             # X bounds
                                             vuetify.VRangeSlider(
                                                 v_model=(
@@ -529,7 +504,7 @@ class UI:
                                             )
 
                 if self.scene.volumes:
-                    vuetify.VSubheader("Volumes", classes="text-caption pl-4")
+                    vuetify.VListSubheader("Volumes", classes="text-caption pl-4")
                     for i, v in enumerate(self.scene.volumes):
                         vuetify.VCheckbox(
                             v_model=f"volume_visibility_{v.label}",
@@ -556,8 +531,8 @@ class UI:
                             style="max-width: 270px;",
                         ):
                             with vuetify.VExpansionPanel():
-                                vuetify.VExpansionPanelHeader("Transfer Function")
-                                with vuetify.VExpansionPanelContent():
+                                vuetify.VExpansionPanelTitle("Transfer Function")
+                                with vuetify.VExpansionPanelText():
                                     with vuetify.VRadioGroup(
                                         v_model=f"volume_preset_{v.label}",
                                         dense=True,
@@ -597,8 +572,8 @@ class UI:
                                     style="max-width: 270px;",
                                 ):
                                     with vuetify.VExpansionPanel():
-                                        vuetify.VExpansionPanelHeader("Clip Bounds")
-                                        with vuetify.VExpansionPanelContent():
+                                        vuetify.VExpansionPanelTitle("Clip Bounds")
+                                        with vuetify.VExpansionPanelText():
                                             # X bounds
                                             vuetify.VRangeSlider(
                                                 v_model=(
@@ -643,7 +618,7 @@ class UI:
                                             )
 
                 if self.scene.segmentations:
-                    vuetify.VSubheader("Segmentations", classes="text-caption pl-4")
+                    vuetify.VListSubheader("Segmentations", classes="text-caption pl-4")
                     for i, s in enumerate(self.scene.segmentations):
                         vuetify.VCheckbox(
                             v_model=f"segmentation_visibility_{s.label}",
@@ -681,8 +656,8 @@ class UI:
                                     style="max-width: 270px;",
                                 ):
                                     with vuetify.VExpansionPanel():
-                                        vuetify.VExpansionPanelHeader("Clip Bounds")
-                                        with vuetify.VExpansionPanelContent():
+                                        vuetify.VExpansionPanelTitle("Clip Bounds")
+                                        with vuetify.VExpansionPanelText():
                                             # X bounds
                                             vuetify.VRangeSlider(
                                                 v_model=(
