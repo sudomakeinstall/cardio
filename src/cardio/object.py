@@ -28,7 +28,7 @@ class Object(pc.BaseModel):
     visible: bool = pc.Field(
         default=True, description="Whether object is initially visible"
     )
-    clipping_enabled: bool = pc.Field(default=False)
+    clipping_enabled: bool = pc.Field(default=True)
 
     @pc.field_validator("label")
     @classmethod
