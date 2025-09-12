@@ -263,7 +263,6 @@ class UI:
                                 dense=True,
                                 outlined=True,
                                 color="primary",
-                                prepend_icon="mdi-rotate-3d-variant",
                             )
                         with vuetify.VCol(cols="4"):
                             vuetify.VBtn(
@@ -273,7 +272,6 @@ class UI:
                                 dense=True,
                                 outlined=True,
                                 color="primary",
-                                prepend_icon="mdi-rotate-3d-variant",
                             )
                         with vuetify.VCol(cols="4"):
                             vuetify.VBtn(
@@ -283,7 +281,6 @@ class UI:
                                 dense=True,
                                 outlined=True,
                                 color="primary",
-                                prepend_icon="mdi-rotate-3d-variant",
                             )
 
                     # Reset rotations button
