@@ -21,6 +21,12 @@ class Logic:
             for volume in self.scene.volumes
         ]
 
+        # Initialize angle units items for dropdown
+        self.server.state.angle_units_items = [
+            {"text": "Degrees", "value": "degrees"},
+            {"text": "Radians", "value": "radians"},
+        ]
+
         self.server.state.change("frame")(self.update_frame)
         self.server.state.change("playing")(self.play)
         self.server.state.change("theme_mode")(self.sync_background_color)
@@ -34,6 +40,7 @@ class Logic:
         )
         self.server.state.change("mpr_window_level_preset")(self.update_mpr_preset)
         self.server.state.change("mpr_rotation_sequence")(self.update_mpr_rotation)
+        self.server.state.change("angle_units")(self.sync_angle_units)
 
         # Add handlers for individual rotation angles and visibility
         for i in range(self.scene.max_mpr_rotations):
@@ -125,6 +132,7 @@ class Logic:
         self.server.controller.increment_frame = self.increment_frame
         self.server.controller.decrement_frame = self.decrement_frame
         self.server.controller.screenshot = self.screenshot
+        self.server.controller.save_rotation_angles = self.save_rotation_angles
         self.server.controller.reset_all = self.reset_all
         self.server.controller.close_application = self.close_application
 
@@ -145,6 +153,7 @@ class Logic:
         self.server.state.mpr_level = self.scene.mpr_level
         self.server.state.mpr_window_level_preset = self.scene.mpr_window_level_preset
         self.server.state.mpr_rotation_sequence = self.scene.mpr_rotation_sequence
+        self.server.state.angle_units = self.scene.angle_units.value
 
         # Initialize MPR presets data
         try:
@@ -421,7 +430,7 @@ class Logic:
 
     @asynchronous.task
     async def screenshot(self):
-        dr = dt.datetime.now().strftime(self.scene.screenshot_subdirectory_format)
+        dr = dt.datetime.now().strftime(self.scene.timestamp_format)
         dr = self.scene.screenshot_directory / dr
         dr.mkdir(parents=True, exist_ok=True)
 
@@ -446,6 +455,67 @@ class Logic:
                         1 / self.server.state.bpm * 60 / self.scene.nframes
                     )
 
+    @asynchronous.task
+    async def save_rotation_angles(self):
+        """Save current rotation angles to a TOML file."""
+        import tomlkit as tk
+
+        # Get current timestamp
+        timestamp = dt.datetime.now()
+        timestamp_str = timestamp.strftime(self.scene.timestamp_format)
+        iso_timestamp = timestamp.isoformat()
+
+        # Get active volume label
+        active_volume_label = getattr(self.server.state, "active_volume_label", "")
+        if not active_volume_label:
+            print("Warning: No active volume selected for rotation saving")
+            return
+
+        # Create directory structure
+        save_dir = self.scene.rotations_directory / active_volume_label
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create TOML structure
+        doc = tk.document()
+
+        # Metadata section
+        metadata = tk.table()
+        metadata["coordinate_system"] = self.scene.coordinate_system
+        metadata["units"] = self.scene.angle_units.value
+        metadata["timestamp"] = iso_timestamp
+        metadata["volume_label"] = active_volume_label
+        doc["metadata"] = metadata
+
+        # Slice positions section
+        slice_positions = tk.table()
+        slice_positions["axial"] = getattr(self.server.state, "axial_slice", 0.5)
+        slice_positions["sagittal"] = getattr(self.server.state, "sagittal_slice", 0.5)
+        slice_positions["coronal"] = getattr(self.server.state, "coronal_slice", 0.5)
+        doc["slice_positions"] = slice_positions
+
+        # Rotations section (array of tables)
+        rotation_sequence = getattr(self.server.state, "mpr_rotation_sequence", [])
+        rotations_array = tk.aot()
+
+        for i, rotation_def in enumerate(rotation_sequence):
+            rotation = tk.table()
+            rotation["axis"] = rotation_def["axis"]
+            angle = getattr(self.server.state, f"mpr_rotation_angle_{i}", 0)
+            rotation["angle"] = float(angle)
+            rotation["visible"] = getattr(
+                self.server.state, f"mpr_rotation_visible_{i}", True
+            )
+            rotations_array.append(rotation)
+
+        doc["rotations"] = rotations_array
+
+        # Save to file
+        output_path = save_dir / f"{timestamp_str}.toml"
+        with open(output_path, "w") as f:
+            f.write(tk.dumps(doc))
+
+        print(f"Rotation angles saved to: {output_path}")
+
     def reset_all(self):
         self.server.state.frame = 0
         self.server.state.playing = False
@@ -468,6 +538,16 @@ class Logic:
                 *self.scene.background.light,
             )
         self.server.controller.view_update()
+
+    def sync_angle_units(self, angle_units, **kwargs):
+        """Sync angle units selection - updates the scene configuration."""
+        from .utils import AngleUnit
+
+        # Update the scene's angle_units field based on UI selection
+        if angle_units == "degrees":
+            self.scene.angle_units = AngleUnit.DEGREES
+        elif angle_units == "radians":
+            self.scene.angle_units = AngleUnit.RADIANS
 
     def _initialize_clipping_state(self):
         """Initialize clipping state variables for all objects."""

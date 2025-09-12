@@ -262,6 +262,8 @@ class UI:
                                 small=True,
                                 dense=True,
                                 outlined=True,
+                                color="primary",
+                                prepend_icon="mdi-rotate-3d-variant",
                             )
                         with vuetify.VCol(cols="4"):
                             vuetify.VBtn(
@@ -270,6 +272,8 @@ class UI:
                                 small=True,
                                 dense=True,
                                 outlined=True,
+                                color="primary",
+                                prepend_icon="mdi-rotate-3d-variant",
                             )
                         with vuetify.VCol(cols="4"):
                             vuetify.VBtn(
@@ -278,6 +282,8 @@ class UI:
                                 small=True,
                                 dense=True,
                                 outlined=True,
+                                color="primary",
+                                prepend_icon="mdi-rotate-3d-variant",
                             )
 
                     # Reset rotations button
@@ -291,6 +297,7 @@ class UI:
                         color="warning",
                         block=True,
                         classes="mb-2",
+                        prepend_icon="mdi-refresh",
                     )
 
                     # Individual rotation sliders
@@ -324,6 +331,39 @@ class UI:
                                     dense=True,
                                     title="Toggle this rotation and all subsequent ones",
                                 )
+
+                    # Angle units selector
+                    with vuetify.VRow(
+                        v_if="mpr_enabled && active_volume_label",
+                        no_gutters=True,
+                        classes="align-center mb-2 mt-2",
+                    ):
+                        with vuetify.VCol(cols="4"):
+                            vuetify.VLabel("Units:")
+                        with vuetify.VCol(cols="8"):
+                            vuetify.VSelect(
+                                v_model=("angle_units", "degrees"),
+                                items=("angle_units_items", []),
+                                item_title="text",
+                                item_value="value",
+                                dense=True,
+                                hide_details=True,
+                                outlined=True,
+                            )
+
+                    # Save rotations button
+                    vuetify.VBtn(
+                        "Save Rotations",
+                        v_if="mpr_enabled && active_volume_label && mpr_rotation_sequence && mpr_rotation_sequence.length > 0",
+                        click=self.server.controller.save_rotation_angles,
+                        small=True,
+                        dense=True,
+                        outlined=True,
+                        color="success",
+                        block=True,
+                        classes="mb-2",
+                        prepend_icon="mdi-content-save",
+                    )
 
                     vuetify.VDivider(classes="my-2")
 
@@ -431,8 +471,13 @@ class UI:
                     vuetify.VBtn(
                         f"Capture Cine",
                         small=True,
+                        dense=True,
+                        outlined=True,
+                        color="info",
+                        block=True,
                         click=self.server.controller.screenshot,
                         title=f"Capture cine to {self.scene.screenshot_directory}",
+                        prepend_icon="mdi-video",
                     )
 
                 vuetify.VListSubheader("Appearance and Visibility")

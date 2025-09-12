@@ -13,6 +13,13 @@ class InterpolatorType(enum.Enum):
     NEAREST = "nearest"
 
 
+class AngleUnit(enum.Enum):
+    """Units for angle measurements."""
+
+    DEGREES = "degrees"
+    RADIANS = "radians"
+
+
 def reset_direction(
     image, interpolator_type: InterpolatorType = InterpolatorType.LINEAR
 ):

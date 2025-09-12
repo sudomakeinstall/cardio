@@ -16,6 +16,7 @@ from pydantic import Field, PrivateAttr, TypeAdapter, field_validator, model_val
 from .mesh import Mesh
 from .segmentation import Segmentation
 from .types import RGBColor
+from .utils import AngleUnit
 from .volume import Volume
 
 MeshListAdapter = TypeAdapter(list[Mesh])
@@ -92,8 +93,14 @@ class Scene(ps.BaseSettings):
 
     project_name: str = "Cardio"
     current_frame: int = 0
-    screenshot_directory: pl.Path = pl.Path("./data/screenshots")
-    screenshot_subdirectory_format: str = "%Y-%m-%d-%H-%M-%S"
+    serialization_directory: pl.Path = Field(
+        default=pl.Path("./data"),
+        description="Base directory for all serialized data (screenshots, exports, etc.)",
+    )
+    timestamp_format: str = Field(
+        default="%Y-%m-%d-%H-%M-%S",
+        description="Timestamp format for serialized data subdirectories",
+    )
     rotation_factor: float = 3.0
     background: Background = Field(
         default_factory=Background,
@@ -135,6 +142,13 @@ class Scene(ps.BaseSettings):
     max_mpr_rotations: int = Field(
         default=20,
         description="Maximum number of MPR rotations supported",
+    )
+    angle_units: AngleUnit = Field(
+        default=AngleUnit.DEGREES,
+        description="Units for angle measurements in rotation serialization",
+    )
+    coordinate_system: str = Field(
+        default="LAS", description="Coordinate system orientation (e.g., LAS, RAS, LPS)"
     )
 
     # Field validators for JSON string inputs
@@ -267,6 +281,16 @@ class Scene(ps.BaseSettings):
             raise ValueError(
                 "Active volume label specified but no volumes are available"
             )
+
+    @property
+    def screenshot_directory(self) -> pl.Path:
+        """Computed property that returns the screenshots subdirectory."""
+        return self.serialization_directory / "screenshots"
+
+    @property
+    def rotations_directory(self) -> pl.Path:
+        """Computed property that returns the rotations subdirectory."""
+        return self.serialization_directory / "rotations"
 
     @property
     def nframes(self) -> int:
