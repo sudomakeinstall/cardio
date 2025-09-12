@@ -5,10 +5,9 @@ import pydantic_settings as ps
 import tomlkit as tk
 import trame as tm
 
+# Internal
 from . import __version__
 from .logic import Logic
-
-# Internal
 from .scene import Scene
 from .ui import UI
 

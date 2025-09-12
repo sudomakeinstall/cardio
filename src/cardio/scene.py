@@ -1,16 +1,13 @@
 # System
 import logging
 import pathlib as pl
-
-# Type adapters for list types to improve CLI integration
-from typing import Annotated
+import typing as ty
 
 # Third Party
 import numpy as np
 import pydantic as pc
 import pydantic_settings as ps
 import vtk
-from pydantic import Field, PrivateAttr, TypeAdapter, field_validator, model_validator
 
 # Internal
 from .mesh import Mesh
@@ -19,37 +16,37 @@ from .types import RGBColor
 from .utils import AngleUnit
 from .volume import Volume
 
-MeshListAdapter = TypeAdapter(list[Mesh])
-VolumeListAdapter = TypeAdapter(list[Volume])
-SegmentationListAdapter = TypeAdapter(list[Segmentation])
+MeshListAdapter = pc.TypeAdapter(list[Mesh])
+VolumeListAdapter = pc.TypeAdapter(list[Volume])
+SegmentationListAdapter = pc.TypeAdapter(list[Segmentation])
 
 # Create annotated types for better CLI integration
-MeshList = Annotated[
+MeshList = ty.Annotated[
     list[Mesh],
-    Field(
+    pc.Field(
         description='List of mesh objects. CLI usage: --meshes \'[{"label":"mesh1","directory":"./data/mesh1"}]\''
     ),
 ]
-VolumeList = Annotated[
+VolumeList = ty.Annotated[
     list[Volume],
-    Field(
+    pc.Field(
         description='Volume objects. CLI: --volumes \'[{"label":"vol1","directory":"./data/vol1"}]\''
     ),
 ]
-SegmentationList = Annotated[
+SegmentationList = ty.Annotated[
     list[Segmentation],
-    Field(
+    pc.Field(
         description='Segmentation objects. CLI: --segmentations \'[{"label":"seg1","directory":"./data/seg1"}]\''
     ),
 ]
 
 
 class Background(pc.BaseModel):
-    light: RGBColor = Field(
+    light: RGBColor = pc.Field(
         default=(1.0, 1.0, 1.0),
         description="Background color in light mode.  CLI usage: --background.light '[0.8,0.9,1.0]'",
     )
-    dark: RGBColor = Field(
+    dark: RGBColor = pc.Field(
         default=(0.0, 0.0, 0.0),
         description="Background color in dark mode.  CLI usage: --background.dark '[0.1,0.1,0.2]'",
     )
@@ -93,80 +90,80 @@ class Scene(ps.BaseSettings):
 
     project_name: str = "Cardio"
     current_frame: int = 0
-    serialization_directory: pl.Path = Field(
+    serialization_directory: pl.Path = pc.Field(
         default=pl.Path("./data"),
         description="Base directory for all serialized data (screenshots, exports, etc.)",
     )
-    timestamp_format: str = Field(
+    timestamp_format: str = pc.Field(
         default="%Y-%m-%d-%H-%M-%S",
         description="Timestamp format for serialized data subdirectories",
     )
     rotation_factor: float = 3.0
-    background: Background = Field(
+    background: Background = pc.Field(
         default_factory=Background,
         description='Background colors. CLI usage: \'{"light": [0.8, 0.9, 1.0], "dark": [0.1, 0.1, 0.2]}\'',
     )
-    meshes: MeshList = Field(default_factory=list)
-    volumes: VolumeList = Field(default_factory=list)
-    segmentations: SegmentationList = Field(default_factory=list)
-    mpr_enabled: bool = Field(
+    meshes: MeshList = pc.Field(default_factory=list)
+    volumes: VolumeList = pc.Field(default_factory=list)
+    segmentations: SegmentationList = pc.Field(default_factory=list)
+    mpr_enabled: bool = pc.Field(
         default=False,
         description="Enable multi-planar reconstruction (MPR) mode with quad-view layout",
     )
-    active_volume_label: str = Field(
+    active_volume_label: str = pc.Field(
         default="",
         description="Label of the volume to use for multi-planar reconstruction",
     )
-    axial_slice: float = Field(
+    axial_slice: float = pc.Field(
         default=0.5, description="Axial slice position as fraction (0.0 to 1.0)"
     )
-    sagittal_slice: float = Field(
+    sagittal_slice: float = pc.Field(
         default=0.5, description="Sagittal slice position as fraction (0.0 to 1.0)"
     )
-    coronal_slice: float = Field(
+    coronal_slice: float = pc.Field(
         default=0.5, description="Coronal slice position as fraction (0.0 to 1.0)"
     )
-    mpr_window: float = Field(
+    mpr_window: float = pc.Field(
         default=800.0, description="Window width for MPR image display"
     )
-    mpr_level: float = Field(
+    mpr_level: float = pc.Field(
         default=200.0, description="Window level for MPR image display"
     )
-    mpr_window_level_preset: int = Field(
+    mpr_window_level_preset: int = pc.Field(
         default=7, description="Window/level preset key for MPR views"
     )
-    mpr_rotation_sequence: list = Field(
+    mpr_rotation_sequence: list = pc.Field(
         default_factory=list,
         description="Dynamic rotation sequence for MPR views - list of rotation steps",
     )
-    max_mpr_rotations: int = Field(
+    max_mpr_rotations: int = pc.Field(
         default=20,
         description="Maximum number of MPR rotations supported",
     )
-    angle_units: AngleUnit = Field(
+    angle_units: AngleUnit = pc.Field(
         default=AngleUnit.DEGREES,
         description="Units for angle measurements in rotation serialization",
     )
-    coordinate_system: str = Field(
+    coordinate_system: str = pc.Field(
         default="LAS", description="Coordinate system orientation (e.g., LAS, RAS, LPS)"
     )
 
     # Field validators for JSON string inputs
-    @field_validator("meshes", mode="before")
+    @pc.field_validator("meshes", mode="before")
     @classmethod
     def validate_meshes(cls, v):
         if isinstance(v, str):
             return MeshListAdapter.validate_json(v)
         return v
 
-    @field_validator("volumes", mode="before")
+    @pc.field_validator("volumes", mode="before")
     @classmethod
     def validate_volumes(cls, v):
         if isinstance(v, str):
             return VolumeListAdapter.validate_json(v)
         return v
 
-    @field_validator("segmentations", mode="before")
+    @pc.field_validator("segmentations", mode="before")
     @classmethod
     def validate_segmentations(cls, v):
         if isinstance(v, str):
@@ -174,18 +171,18 @@ class Scene(ps.BaseSettings):
         return v
 
     # VTK objects as private attributes
-    _renderer: vtk.vtkRenderer = PrivateAttr(default_factory=vtk.vtkRenderer)
-    _renderWindow: vtk.vtkRenderWindow = PrivateAttr(
+    _renderer: vtk.vtkRenderer = pc.PrivateAttr(default_factory=vtk.vtkRenderer)
+    _renderWindow: vtk.vtkRenderWindow = pc.PrivateAttr(
         default_factory=vtk.vtkRenderWindow
     )
-    _renderWindowInteractor: vtk.vtkRenderWindowInteractor = PrivateAttr(
+    _renderWindowInteractor: vtk.vtkRenderWindowInteractor = pc.PrivateAttr(
         default_factory=vtk.vtkRenderWindowInteractor
     )
 
     # MPR render windows
-    _axial_renderWindow: vtk.vtkRenderWindow = PrivateAttr(default=None)
-    _coronal_renderWindow: vtk.vtkRenderWindow = PrivateAttr(default=None)
-    _sagittal_renderWindow: vtk.vtkRenderWindow = PrivateAttr(default=None)
+    _axial_renderWindow: vtk.vtkRenderWindow = pc.PrivateAttr(default=None)
+    _coronal_renderWindow: vtk.vtkRenderWindow = pc.PrivateAttr(default=None)
+    _sagittal_renderWindow: vtk.vtkRenderWindow = pc.PrivateAttr(default=None)
 
     @property
     def renderer(self) -> vtk.vtkRenderer:
@@ -211,7 +208,7 @@ class Scene(ps.BaseSettings):
     def sagittal_renderWindow(self) -> vtk.vtkRenderWindow:
         return self._sagittal_renderWindow
 
-    @model_validator(mode="after")
+    @pc.model_validator(mode="after")
     def setup_scene(self):
         # Validate unique labels
         self._validate_unique_labels()
