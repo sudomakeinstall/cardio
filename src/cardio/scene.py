@@ -132,6 +132,10 @@ class Scene(ps.BaseSettings):
         default_factory=list,
         description="Dynamic rotation sequence for MPR views - list of rotation steps",
     )
+    max_mpr_rotations: int = Field(
+        default=20,
+        description="Maximum number of MPR rotations supported",
+    )
 
     # Field validators for JSON string inputs
     @field_validator("meshes", mode="before")

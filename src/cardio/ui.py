@@ -293,20 +293,37 @@ class UI:
                         classes="mb-2",
                     )
 
-                    # Individual rotation sliders (show up to 10)
-                    for i in range(10):
-                        vuetify.VSlider(
+                    # Individual rotation sliders
+                    for i in range(self.scene.max_mpr_rotations):
+                        with vuetify.VRow(
                             v_if=f"mpr_enabled && active_volume_label && mpr_rotation_sequence && mpr_rotation_sequence.length > {i}",
-                            v_model=(f"mpr_rotation_angle_{i}", 0),
-                            min=-180,
-                            max=180,
-                            step=1,
-                            hint=(f"mpr_rotation_axis_{i}", f"Rotation {i + 1}"),
-                            persistent_hint=True,
-                            dense=True,
-                            hide_details=False,
-                            thumb_label=True,
-                        )
+                            no_gutters=True,
+                            classes="align-center mb-1",
+                        ):
+                            with vuetify.VCol(cols="10"):
+                                vuetify.VSlider(
+                                    v_model=(f"mpr_rotation_angle_{i}", 0),
+                                    min=-180,
+                                    max=180,
+                                    step=1,
+                                    hint=(
+                                        f"mpr_rotation_axis_{i}",
+                                        f"Rotation {i + 1}",
+                                    ),
+                                    persistent_hint=True,
+                                    dense=True,
+                                    hide_details=False,
+                                    thumb_label=True,
+                                )
+                            with vuetify.VCol(cols="2"):
+                                vuetify.VCheckbox(
+                                    v_model=(f"mpr_rotation_visible_{i}", True),
+                                    true_icon="mdi-eye",
+                                    false_icon="mdi-eye-off",
+                                    hide_details=True,
+                                    dense=True,
+                                    title="Toggle this rotation and all subsequent ones",
+                                )
 
                     vuetify.VDivider(classes="my-2")
 

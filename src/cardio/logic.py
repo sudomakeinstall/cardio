@@ -35,9 +35,12 @@ class Logic:
         self.server.state.change("mpr_window_level_preset")(self.update_mpr_preset)
         self.server.state.change("mpr_rotation_sequence")(self.update_mpr_rotation)
 
-        # Add handlers for individual rotation angles
-        for i in range(20):
+        # Add handlers for individual rotation angles and visibility
+        for i in range(self.scene.max_mpr_rotations):
             self.server.state.change(f"mpr_rotation_angle_{i}")(
+                self.update_mpr_rotation
+            )
+            self.server.state.change(f"mpr_rotation_visible_{i}")(
                 self.update_mpr_rotation
             )
 
@@ -154,10 +157,11 @@ class Logic:
             print(f"Error initializing MPR presets: {e}")
             self.server.state.mpr_presets = []
 
-        # Initialize rotation angle states (up to 20 rotations like app.py)
-        for i in range(20):
+        # Initialize rotation angle states
+        for i in range(self.scene.max_mpr_rotations):
             setattr(self.server.state, f"mpr_rotation_angle_{i}", 0)
             setattr(self.server.state, f"mpr_rotation_axis_{i}", f"Rotation {i + 1}")
+            setattr(self.server.state, f"mpr_rotation_visible_{i}", True)
 
         # Apply initial preset to ensure window/level values are set correctly
         # Only update state values, don't call update methods yet since MPR may not be enabled
@@ -704,13 +708,17 @@ class Logic:
         coronal_slice = getattr(self.server.state, "coronal_slice", 0.5)
         current_frame = getattr(self.server.state, "frame", 0)
 
-        # Get rotation data
+        # Get rotation data - include all visible rotations
         rotation_sequence = getattr(self.server.state, "mpr_rotation_sequence", [])
         rotation_angles = {}
+
+        # Include all visible rotations regardless of position
         for i in range(len(rotation_sequence)):
-            rotation_angles[i] = getattr(
-                self.server.state, f"mpr_rotation_angle_{i}", 0
-            )
+            is_visible = getattr(self.server.state, f"mpr_rotation_visible_{i}", True)
+            if is_visible:
+                rotation_angles[i] = getattr(
+                    self.server.state, f"mpr_rotation_angle_{i}", 0
+                )
 
         # Update slice positions with rotation
         active_volume.update_slice_positions(
@@ -744,7 +752,7 @@ class Logic:
             self.server.state.mpr_rotation_sequence = sequence
 
             # Reset angle states for all removed rotations
-            for i in range(index, 20):
+            for i in range(index, self.scene.max_mpr_rotations):
                 setattr(self.server.state, f"mpr_rotation_angle_{i}", 0)
 
             self.update_mpr_rotation_labels()
@@ -752,8 +760,9 @@ class Logic:
     def reset_mpr_rotations(self):
         """Reset all MPR rotations."""
         self.server.state.mpr_rotation_sequence = []
-        for i in range(20):
+        for i in range(self.scene.max_mpr_rotations):
             setattr(self.server.state, f"mpr_rotation_angle_{i}", 0)
+            setattr(self.server.state, f"mpr_rotation_visible_{i}", True)
         self.update_mpr_rotation_labels()
 
     def update_mpr_rotation_labels(self):
@@ -766,7 +775,7 @@ class Logic:
                 f"{rotation['axis']} ({i + 1})",
             )
         # Clear unused labels
-        for i in range(len(rotation_sequence), 20):
+        for i in range(len(rotation_sequence), self.scene.max_mpr_rotations):
             setattr(self.server.state, f"mpr_rotation_axis_{i}", f"Rotation {i + 1}")
 
     @asynchronous.task
