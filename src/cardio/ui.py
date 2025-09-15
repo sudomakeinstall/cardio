@@ -207,10 +207,9 @@ class UI:
 
                     vuetify.VSlider(
                         v_if="mpr_enabled && active_volume_label",
-                        v_model=("axial_slice", 0.5),
-                        min=0.0,
-                        max=1.0,
-                        step=0.01,
+                        v_model=("axial_slice", 0.0),
+                        min=("axial_slice_bounds[0]", 0.0),
+                        max=("axial_slice_bounds[1]", 100.0),
                         hint="A (I ↔ S)",
                         persistent_hint=True,
                         dense=True,
@@ -220,10 +219,9 @@ class UI:
 
                     vuetify.VSlider(
                         v_if="mpr_enabled && active_volume_label",
-                        v_model=("sagittal_slice", 0.5),
-                        min=0.0,
-                        max=1.0,
-                        step=0.01,
+                        v_model=("sagittal_slice", 0.0),
+                        min=("sagittal_slice_bounds[0]", 0.0),
+                        max=("sagittal_slice_bounds[1]", 100.0),
                         hint="S (R ↔ L)",
                         persistent_hint=True,
                         dense=True,
@@ -233,10 +231,9 @@ class UI:
 
                     vuetify.VSlider(
                         v_if="mpr_enabled && active_volume_label",
-                        v_model=("coronal_slice", 0.5),
-                        min=0.0,
-                        max=1.0,
-                        step=0.01,
+                        v_model=("coronal_slice", 0.0),
+                        min=("coronal_slice_bounds[0]", 0.0),
+                        max=("coronal_slice_bounds[1]", 100.0),
                         hint="C (P ↔ A)",
                         persistent_hint=True,
                         dense=True,

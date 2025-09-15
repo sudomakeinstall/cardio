@@ -20,53 +20,6 @@ class AngleUnit(enum.Enum):
     RADIANS = "radians"
 
 
-def reset_direction(
-    image, interpolator_type: InterpolatorType = InterpolatorType.LINEAR
-):
-    """Reset image direction to identity matrix, preserving origin.
-
-    This function handles the VTK reader issue where origin is not retained
-    by using ITK to properly transform the image coordinates.
-
-    Args:
-        image: ITK image object
-        interpolator_type: InterpolatorType enum for interpolation method
-    """
-    origin = np.asarray(itk.origin(image))
-    spacing = np.asarray(itk.spacing(image))
-    size = np.asarray(itk.size(image))
-    direction = np.asarray(image.GetDirection())
-
-    direction[direction == 1] = 0
-    origin += np.dot(size, np.dot(np.diag(spacing), direction))
-    direction = np.identity(3)
-
-    origin = itk.Point[itk.F, 3](origin)
-    spacing = itk.spacing(image)
-    size = itk.size(image)
-    direction = itk.matrix_from_array(direction)
-
-    # Select interpolator based on type
-    match interpolator_type:
-        case InterpolatorType.NEAREST:
-            interpolator = itk.NearestNeighborInterpolateImageFunction.New(image)
-        case InterpolatorType.LINEAR:
-            interpolator = itk.LinearInterpolateImageFunction.New(image)
-        case _:
-            raise ValueError(f"Unsupported interpolator type: {interpolator_type}")
-
-    output = itk.resample_image_filter(
-        image,
-        size=size,
-        interpolator=interpolator,
-        output_spacing=spacing,
-        output_origin=origin,
-        output_direction=direction,
-    )
-
-    return output
-
-
 def calculate_combined_bounds(actors):
     """Calculate combined bounds encompassing all VTK actors.
 

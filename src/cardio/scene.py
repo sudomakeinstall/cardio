@@ -115,13 +115,16 @@ class Scene(ps.BaseSettings):
         description="Label of the volume to use for multi-planar reconstruction",
     )
     axial_slice: float = pc.Field(
-        default=0.5, description="Axial slice position as fraction (0.0 to 1.0)"
+        default=0.0,
+        description="Axial slice position in physical coordinates (LAS Z axis)",
     )
     sagittal_slice: float = pc.Field(
-        default=0.5, description="Sagittal slice position as fraction (0.0 to 1.0)"
+        default=0.0,
+        description="Sagittal slice position in physical coordinates (LAS X axis)",
     )
     coronal_slice: float = pc.Field(
-        default=0.5, description="Coronal slice position as fraction (0.0 to 1.0)"
+        default=0.0,
+        description="Coronal slice position in physical coordinates (LAS Y axis)",
     )
     mpr_window: float = pc.Field(
         default=800.0, description="Window width for MPR image display"

@@ -8,9 +8,11 @@ import pydantic as pc
 import vtk
 
 # Internal
+from .orientation import (
+    reset_direction,
+)
 from .object import Object
 from .property_config import vtkPropertyConfig
-from .utils import InterpolatorType, reset_direction
 
 
 class Segmentation(Object):
@@ -35,7 +37,7 @@ class Segmentation(Object):
 
             # Read and process segmentation image
             image = itk.imread(path)
-            image = reset_direction(image, InterpolatorType.NEAREST)
+            image = reset_direction(image)
             vtk_image = itk.vtk_image_from_image(image)
 
             # Create SurfaceNets3D filter

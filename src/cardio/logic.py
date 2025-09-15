@@ -27,6 +27,11 @@ class Logic:
             {"text": "Radians", "value": "radians"},
         ]
 
+        # Initialize slice bounds (will be updated when active volume changes)
+        self.server.state.axial_slice_bounds = [0.0, 100.0]
+        self.server.state.sagittal_slice_bounds = [0.0, 100.0]
+        self.server.state.coronal_slice_bounds = [0.0, 100.0]
+
         self.server.state.change("frame")(self.update_frame)
         self.server.state.change("playing")(self.play)
         self.server.state.change("theme_mode")(self.sync_background_color)
@@ -514,8 +519,6 @@ class Logic:
         with open(output_path, "w") as f:
             f.write(tk.dumps(doc))
 
-        print(f"Rotation angles saved to: {output_path}")
-
     def reset_all(self):
         self.server.state.frame = 0
         self.server.state.playing = False
@@ -628,6 +631,28 @@ class Logic:
                 break
 
         if not active_volume:
+            return
+
+        # Update slice bounds based on active volume
+        try:
+            bounds = active_volume.get_physical_bounds()
+            self.server.state.axial_slice_bounds = [bounds[4], bounds[5]]  # Z bounds
+            self.server.state.sagittal_slice_bounds = [bounds[0], bounds[1]]  # X bounds
+            self.server.state.coronal_slice_bounds = [bounds[2], bounds[3]]  # Y bounds
+
+            # Initialize slice positions to volume center if they are currently 0.0 (scene defaults)
+            if self.server.state.axial_slice == 0.0:
+                self.server.state.axial_slice = (bounds[4] + bounds[5]) / 2  # Z center
+            if self.server.state.sagittal_slice == 0.0:
+                self.server.state.sagittal_slice = (
+                    bounds[0] + bounds[1]
+                ) / 2  # X center
+            if self.server.state.coronal_slice == 0.0:
+                self.server.state.coronal_slice = (
+                    bounds[2] + bounds[3]
+                ) / 2  # Y center
+        except (RuntimeError, IndexError) as e:
+            print(f"Error: Cannot get bounds for volume '{active_volume_label}': {e}")
             return
 
         # Create MPR actors for current frame

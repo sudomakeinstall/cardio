@@ -6,38 +6,14 @@ import pydantic as pc
 import vtk
 
 from .object import Object
-from .utils import InterpolatorType, reset_direction
+from .orientation import (
+    EulerAxis,
+    axcode_transform_matrix,
+    create_vtk_reslice_matrix,
+    euler_angle_to_rotation_matrix,
+    reset_direction,
+)
 from .volume_property_presets import load_volume_property_preset
-
-
-def create_rotation_matrix(axis, angle_degrees):
-    """Create rotation matrix for given axis and angle."""
-    angle = np.radians(angle_degrees)
-    cos_a, sin_a = np.cos(angle), np.sin(angle)
-    if axis == "X":
-        return np.array([[1, 0, 0], [0, cos_a, -sin_a], [0, sin_a, cos_a]])
-    elif axis == "Y":
-        return np.array([[cos_a, 0, sin_a], [0, 1, 0], [-sin_a, 0, cos_a]])
-    elif axis == "Z":
-        return np.array([[cos_a, -sin_a, 0], [sin_a, cos_a, 0], [0, 0, 1]])
-    return np.eye(3)
-
-
-def create_reslice_matrix(normal, up, origin):
-    """Create a 4x4 reslice matrix from normal vector, up vector, and origin"""
-    normal = normal / np.linalg.norm(normal)
-    up = up / np.linalg.norm(up)
-    right = np.cross(normal, up)
-    right = right / np.linalg.norm(right)
-    up = np.cross(right, normal)
-    matrix = vtk.vtkMatrix4x4()
-    for i in range(3):
-        matrix.SetElement(i, 0, right[i])
-        matrix.SetElement(i, 1, up[i])
-        matrix.SetElement(i, 2, normal[i])
-        matrix.SetElement(i, 3, origin[i])
-    matrix.SetElement(3, 3, 1.0)
-    return matrix
 
 
 class Volume(Object):
@@ -62,7 +38,7 @@ class Volume(Object):
             logging.info(f"{self.label}: Loading frame {frame}.")
 
             image = itk.imread(path)
-            image = reset_direction(image, InterpolatorType.LINEAR)
+            image = reset_direction(image)
             image = itk.vtk_image_from_image(image)
 
             mapper = vtk.vtkGPUVolumeRayCastMapper()
@@ -113,12 +89,12 @@ class Volume(Object):
             reslice.SetInputData(image_data)
             reslice.SetOutputDimensionality(2)
             reslice.SetInterpolationModeToLinear()
-            reslice.SetBackgroundLevel(-1000.0)  # Set background to air value
+            reslice.SetBackgroundLevel(-1000.0)
 
             # Create image actor
             actor = vtk.vtkImageActor()
             actor.GetMapper().SetInputConnection(reslice.GetOutputPort())
-            actor.SetVisibility(False)  # Start hidden
+            actor.SetVisibility(False)
 
             mpr_actors[orientation] = {"reslice": reslice, "actor": actor}
 
@@ -133,40 +109,19 @@ class Volume(Object):
         return mpr_actors
 
     def _setup_center_slices(self, image_data, frame: int):
-        """Set up reslice matrices to show center slices using LAS coordinate system."""
+        """Set up reslice matrices to show center slices using axcode-based coordinate systems."""
         center = image_data.GetCenter()
-
         actors = self._mpr_actors[frame]
 
-        # Base LAS vectors (Left-Anterior-Superior coordinate system)
-        base_axial_normal = np.array([0.0, 0.0, 1.0])  # Z axis (Superior)
-        base_axial_up = np.array([0.0, -1.0, 0.0])  # -Y axis (Anterior)
+        # Get coordinate system transformations for each MPR view
+        transforms = self._get_mpr_coordinate_systems()
 
-        base_sagittal_normal = np.array([1.0, 0.0, 0.0])  # X axis (Left)
-        base_sagittal_up = np.array([0.0, 0.0, 1.0])  # Z axis (Superior)
+        # Create reslice matrices directly from transforms
+        origin = [center[0], center[1], center[2]]
 
-        base_coronal_normal = np.array([0.0, 1.0, 0.0])  # Y axis (Posterior in data)
-        base_coronal_up = np.array([0.0, 0.0, 1.0])  # Z axis (Superior)
-
-        # Create reslice matrices with proper LAS vectors
-        axial_origin = [center[0], center[1], center[2]]
-        axial_matrix = create_reslice_matrix(
-            base_axial_normal, base_axial_up, axial_origin
-        )
-        actors["axial"]["reslice"].SetResliceAxes(axial_matrix)
-
-        sagittal_origin = [center[0], center[1], center[2]]
-        sagittal_matrix = create_reslice_matrix(
-            base_sagittal_normal, base_sagittal_up, sagittal_origin
-        )
-        actors["sagittal"]["reslice"].SetResliceAxes(sagittal_matrix)
-
-        # Coronal view: LPS->LAS Y coordinate conversion
-        coronal_origin = [center[0], center[1], center[2]]
-        coronal_matrix = create_reslice_matrix(
-            base_coronal_normal, base_coronal_up, coronal_origin
-        )
-        actors["coronal"]["reslice"].SetResliceAxes(coronal_matrix)
+        for orientation in ["axial", "sagittal", "coronal"]:
+            mat = create_vtk_reslice_matrix(transforms[orientation], origin)
+            actors[orientation]["reslice"].SetResliceAxes(mat)
 
     @property
     def mpr_actors(self) -> dict[str, list[vtk.vtkImageActor]]:
@@ -179,16 +134,86 @@ class Volume(Object):
             return self.create_mpr_actors(frame)
         return self._mpr_actors[frame]
 
+    def _get_mpr_coordinate_systems(self):
+        """Get coordinate system transformation matrices for MPR views."""
+        view_axcodes = {
+            "axial": "LAS",  # Left-Anterior-Superior
+            "sagittal": "ASL",  # Anterior-Superior-Left
+            "coronal": "LSA",  # Left-Superior-Anterior
+        }
+
+        transforms = {}
+        for view, target_axcode in view_axcodes.items():
+            transforms[view] = axcode_transform_matrix("LPS", target_axcode)
+
+        return transforms
+
+    def get_physical_bounds(
+        self, frame: int = 0
+    ) -> tuple[float, float, float, float, float, float]:
+        """Get physical coordinate bounds for the volume.
+
+        Returns:
+            (x_min, x_max, y_min, y_max, z_min, z_max) in LAS coordinate system
+        """
+        if not self._actors:
+            raise RuntimeError(f"No actors configured for volume '{self.label}'")
+        if frame >= len(self._actors):
+            raise IndexError(
+                f"Frame {frame} out of range for volume '{self.label}' (max: {len(self._actors) - 1})"
+            )
+
+        volume_actor = self._actors[frame]
+        image_data = volume_actor.GetMapper().GetInput()
+
+        # Get VTK image metadata
+        origin = np.array(image_data.GetOrigin())
+        spacing = np.array(image_data.GetSpacing())
+        dimensions = np.array(image_data.GetDimensions())
+        direction_matrix = np.array(
+            [
+                [image_data.GetDirectionMatrix().GetElement(i, j) for j in range(3)]
+                for i in range(3)
+            ]
+        )
+
+        # Calculate antiorigin using direction matrix
+        antiorigin = origin + direction_matrix @ (spacing * (dimensions - 1))
+
+        # Transform both corners from LPS to LAS
+        transform = axcode_transform_matrix("LPS", "LAS")
+        origin_las = origin @ transform.T
+        antiorigin_las = antiorigin @ transform.T
+
+        # Interleave coordinates directly without min/max
+        bounds = (
+            origin_las[0],
+            antiorigin_las[0],  # x bounds
+            origin_las[1],
+            antiorigin_las[1],  # y bounds
+            origin_las[2],
+            antiorigin_las[2],  # z bounds
+        )
+
+        return bounds
+
     def update_slice_positions(
         self,
         frame: int,
-        axial_frac: float,
-        sagittal_frac: float,
-        coronal_frac: float,
+        axial_pos: float,
+        sagittal_pos: float,
+        coronal_pos: float,
         rotation_sequence: list = None,
         rotation_angles: dict = None,
     ):
-        """Update slice positions for MPR views with optional rotation."""
+        """Update slice positions for MPR views with optional rotation.
+
+        Args:
+            frame: Frame index
+            axial_pos: Physical position along Z axis (LAS Superior)
+            sagittal_pos: Physical position along X axis (LAS Left)
+            coronal_pos: Physical position along Y axis (LAS Anterior)
+        """
         if frame not in self._mpr_actors:
             return
 
@@ -198,65 +223,49 @@ class Volume(Object):
 
         actors = self._mpr_actors[frame]
 
-        # Calculate slice positions from fractions
-        axial_pos = bounds[4] + axial_frac * (bounds[5] - bounds[4])  # Z bounds
-        sagittal_pos = bounds[0] + sagittal_frac * (bounds[1] - bounds[0])  # X bounds
-        # Coronal: LPS->LAS Y coordinate conversion (flip direction)
-        coronal_pos = bounds[3] - coronal_frac * (
-            bounds[3] - bounds[2]
-        )  # Flipped Y bounds
+        # Clamp positions to volume bounds
+        axial_pos = max(bounds[4], min(bounds[5], axial_pos))  # Z bounds
+        sagittal_pos = max(bounds[0], min(bounds[1], sagittal_pos))  # X bounds
+        coronal_pos = max(bounds[2], min(bounds[3], coronal_pos))  # Y bounds
 
-        # Base LAS vectors (Left-Anterior-Superior coordinate system)
-        base_axial_normal = np.array([0.0, 0.0, 1.0])  # Z axis (Superior)
-        base_axial_up = np.array([0.0, -1.0, 0.0])  # -Y axis (Anterior)
-        base_sagittal_normal = np.array([1.0, 0.0, 0.0])  # X axis (Left)
-        base_sagittal_up = np.array([0.0, 0.0, 1.0])  # Z axis (Superior)
-        base_coronal_normal = np.array([0.0, 1.0, 0.0])  # Y axis (Posterior in data)
-        base_coronal_up = np.array([0.0, 0.0, 1.0])  # Z axis (Superior)
+        # Get coordinate system transformations for each MPR view
+        transforms = self._get_mpr_coordinate_systems()
 
-        # Apply cumulative rotation if provided
+        center = image_data.GetCenter()
+
+        # Step 1: Apply translation to determine slice origins in physical space
+        axial_origin = [center[0], center[1], axial_pos]
+        sagittal_origin = [sagittal_pos, center[1], center[2]]
+        coronal_origin = [center[0], coronal_pos, center[2]]
+
+        # Step 2: Apply cumulative rotation around the translated origins
         if rotation_sequence and rotation_angles:
             cumulative_rotation = np.eye(3)
             for i, rotation in enumerate(rotation_sequence):
                 angle = rotation_angles.get(i, 0)
-                rotation_matrix = create_rotation_matrix(rotation["axis"], angle)
+                rotation_matrix = euler_angle_to_rotation_matrix(
+                    EulerAxis(rotation["axis"]), angle
+                )
                 cumulative_rotation = cumulative_rotation @ rotation_matrix
 
-            # Apply rotation to base view vectors
-            axial_normal = cumulative_rotation @ base_axial_normal
-            axial_up = cumulative_rotation @ base_axial_up
-            sagittal_normal = cumulative_rotation @ base_sagittal_normal
-            sagittal_up = cumulative_rotation @ base_sagittal_up
-            coronal_normal = cumulative_rotation @ base_coronal_normal
-            coronal_up = cumulative_rotation @ base_coronal_up
+            # Apply rotation to base transforms
+            axial_transform = cumulative_rotation @ transforms["axial"]
+            sagittal_transform = cumulative_rotation @ transforms["sagittal"]
+            coronal_transform = cumulative_rotation @ transforms["coronal"]
         else:
-            # Use base vectors without rotation
-            axial_normal = base_axial_normal
-            axial_up = base_axial_up
-            sagittal_normal = base_sagittal_normal
-            sagittal_up = base_sagittal_up
-            coronal_normal = base_coronal_normal
-            coronal_up = base_coronal_up
+            # Use base transforms without rotation
+            axial_transform = transforms["axial"]
+            sagittal_transform = transforms["sagittal"]
+            coronal_transform = transforms["coronal"]
 
-        center = image_data.GetCenter()
-
-        # Update axial slice
-        axial_origin = [center[0], center[1], axial_pos]
-        axial_matrix = create_reslice_matrix(axial_normal, axial_up, axial_origin)
+        # Update slices with translated origins and rotated transforms
+        axial_matrix = create_vtk_reslice_matrix(axial_transform, axial_origin)
         actors["axial"]["reslice"].SetResliceAxes(axial_matrix)
 
-        # Update sagittal slice
-        sagittal_origin = [sagittal_pos, center[1], center[2]]
-        sagittal_matrix = create_reslice_matrix(
-            sagittal_normal, sagittal_up, sagittal_origin
-        )
+        sagittal_matrix = create_vtk_reslice_matrix(sagittal_transform, sagittal_origin)
         actors["sagittal"]["reslice"].SetResliceAxes(sagittal_matrix)
 
-        # Update coronal slice
-        coronal_origin = [center[0], coronal_pos, center[2]]
-        coronal_matrix = create_reslice_matrix(
-            coronal_normal, coronal_up, coronal_origin
-        )
+        coronal_matrix = create_vtk_reslice_matrix(coronal_transform, coronal_origin)
         actors["coronal"]["reslice"].SetResliceAxes(coronal_matrix)
 
     def update_mpr_window_level(self, frame: int, window: float, level: float):
