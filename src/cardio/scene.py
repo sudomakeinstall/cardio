@@ -344,6 +344,7 @@ class Scene(ps.BaseSettings):
 
             # Create and set interactor for axial
             axial_interactor = vtk.vtkRenderWindowInteractor()
+            axial_interactor.SetInteractorStyle(vtk.vtkInteractorStyle())
             self._axial_renderWindow.SetInteractor(axial_interactor)
 
             # Create coronal render window
@@ -355,6 +356,7 @@ class Scene(ps.BaseSettings):
 
             # Create and set interactor for coronal
             coronal_interactor = vtk.vtkRenderWindowInteractor()
+            coronal_interactor.SetInteractorStyle(vtk.vtkInteractorStyle())
             self._coronal_renderWindow.SetInteractor(coronal_interactor)
 
             # Create sagittal render window
@@ -366,6 +368,7 @@ class Scene(ps.BaseSettings):
 
             # Create and set interactor for sagittal
             sagittal_interactor = vtk.vtkRenderWindowInteractor()
+            sagittal_interactor.SetInteractorStyle(vtk.vtkInteractorStyle())
             self._sagittal_renderWindow.SetInteractor(sagittal_interactor)
 
     def hide_all_frames(self):

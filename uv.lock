@@ -154,7 +154,7 @@ wheels = [
 
 [[package]]
 name = "cardio"
-version = "2025.8.1"
+version = "2025.9.0"
 source = { editable = "." }
 dependencies = [
     { name = "itk" },

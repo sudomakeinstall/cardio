@@ -1,15 +1,72 @@
+import functools as ft
+
 from trame.ui.vuetify3 import SinglePageWithDrawerLayout
 from trame.widgets import vtk as vtk_widgets
 from trame.widgets import vuetify3 as vuetify
 
 from .scene import Scene
 from .volume_property_presets import list_volume_property_presets
+from .window_level import presets
 
 
 class UI:
+    @property
+    def handled_events(self):
+        return [
+            "MouseMove",
+            "LeftButtonPress",
+            "LeftButtonRelease",
+            "KeyPress",
+        ]
+
+    def event_listeners_for_view(self, view_name):
+        """Create event listeners for a specific view."""
+        result = {}
+        for event in self.handled_events:
+            callback = ft.partial(self.on_event, view_name=view_name)
+            result[event] = (callback, "[utils.vtk.event($event)]")
+        return result
+
+    def on_event(self, *args, view_name=None, **kwargs):
+        if args[0]["type"] == "KeyPress":
+            if int(args[0]["key"]) in presets.keys():
+                self.server.state.mpr_window_level_preset = int(args[0]["key"])
+        elif args[0]["type"] == "LeftButtonPress":
+            self.left_dragging = True
+            if view_name and "position" in args[0]:
+                self.last_mouse_pos[view_name] = [
+                    args[0]["position"]["x"],
+                    args[0]["position"]["y"],
+                ]
+        elif args[0]["type"] == "LeftButtonRelease":
+            self.left_dragging = False
+        elif self.left_dragging and args[0]["type"] == "MouseMove":
+            if (
+                view_name in {"axial", "sagittal", "coronal"}
+                and view_name in self.last_mouse_pos
+                and "position" in args[0]
+            ):
+                current_pos = [args[0]["position"]["x"], args[0]["position"]["y"]]
+                dx = current_pos[0] - self.last_mouse_pos[view_name][0]
+                dy = current_pos[1] - self.last_mouse_pos[view_name][1]
+                self.last_mouse_pos[view_name] = current_pos
+
+                current_window = getattr(self.server.state, "mpr_window", 400.0)
+                current_level = getattr(self.server.state, "mpr_level", 40.0)
+
+                window_delta = -dx * 5.0
+                level_delta = -dy * 2.0
+                new_window = max(1.0, current_window + window_delta)
+                new_level = current_level + level_delta
+
+                self.server.state.mpr_window = new_window
+                self.server.state.mpr_level = new_level
+
     def __init__(self, server, scene: Scene):
         self.server = server
         self.scene: Scene = scene
+        self.left_dragging = False
+        self.last_mouse_pos = {}
 
         self.setup()
 
@@ -63,7 +120,10 @@ class UI:
                     classes="pa-0 fill-height",
                 ):
                     view = vtk_widgets.VtkRemoteView(
-                        self.scene.renderWindow, interactive_ratio=1
+                        self.scene.renderWindow,
+                        interactor_events=("event_types", self.handled_events),
+                        **self.event_listeners_for_view("volume"),
+                        interactive_ratio=1,
                     )
                     self.server.controller.view_update = view.update
                     self.server.controller.view_reset_camera = view.reset_camera
@@ -88,15 +148,19 @@ class UI:
                             axial_view = vtk_widgets.VtkRemoteView(
                                 self.scene.axial_renderWindow,
                                 style="height: 100%; width: 100%;",
+                                interactor_events=("event_types", self.handled_events),
+                                **self.event_listeners_for_view("axial"),
                                 interactive_ratio=1,
                             )
                         with vuetify.VCol(
                             cols="6", classes="pa-1", style="height: 100%;"
                         ):
-                            # Volume view (reuse existing render window)
+                            # Volume view
                             volume_view = vtk_widgets.VtkRemoteView(
                                 self.scene.renderWindow,
                                 style="height: 100%; width: 100%;",
+                                interactor_events=("event_types", self.handled_events),
+                                **self.event_listeners_for_view("volume_mpr"),
                                 interactive_ratio=1,
                             )
 
@@ -109,6 +173,8 @@ class UI:
                             coronal_view = vtk_widgets.VtkRemoteView(
                                 self.scene.coronal_renderWindow,
                                 style="height: 100%; width: 100%;",
+                                interactor_events=("event_types", self.handled_events),
+                                **self.event_listeners_for_view("coronal"),
                                 interactive_ratio=1,
                             )
                         with vuetify.VCol(
@@ -118,6 +184,8 @@ class UI:
                             sagittal_view = vtk_widgets.VtkRemoteView(
                                 self.scene.sagittal_renderWindow,
                                 style="height: 100%; width: 100%;",
+                                interactor_events=("event_types", self.handled_events),
+                                **self.event_listeners_for_view("sagittal"),
                                 interactive_ratio=1,
                             )
 
