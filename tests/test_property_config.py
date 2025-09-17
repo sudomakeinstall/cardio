@@ -31,11 +31,11 @@ def test_property_config_from_toml():
     assert config.color == (0.8, 0.4, 0.2)
 
     # Verify visibility values were parsed correctly
-    assert config.edge_visibility == True
-    assert config.vertex_visibility == False
+    assert config.edge_visibility
+    assert not config.vertex_visibility
 
     # Verify shading value was parsed correctly
-    assert config.shading == False
+    assert not config.shading
 
     # Verify interpolation value was parsed correctly
     assert config.interpolation == Interpolation.Phong
@@ -73,11 +73,11 @@ def test_vtk_property_creation():
     assert color[2] == pt.approx(0.2)
 
     # Verify visibility settings were set correctly
-    assert vtk_prop.GetEdgeVisibility() == True
-    assert vtk_prop.GetVertexVisibility() == False
+    assert vtk_prop.GetEdgeVisibility()
+    assert not vtk_prop.GetVertexVisibility()
 
     # Verify shading setting was set correctly
-    assert vtk_prop.GetShading() == False
+    assert not vtk_prop.GetShading()
 
     # Verify interpolation setting was set correctly
     assert vtk_prop.GetInterpolation() == 2  # Phong

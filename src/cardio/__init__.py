@@ -23,6 +23,7 @@ __all__ = [
     "Logic",
     "load_volume_property_preset",
     "list_volume_property_presets",
+    "window_level",
 ]
 
 __version__ = "2025.9.0"

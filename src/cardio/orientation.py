@@ -175,7 +175,6 @@ def reset_direction(image):
             pixel_array = np.flip(pixel_array, axis=i)
 
     new_spacing = spacing[permutation]
-    new_size = size[permutation]
 
     adjusted_origin = origin.copy()
     for i, should_flip in enumerate(flips):

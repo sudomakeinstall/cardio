@@ -708,10 +708,6 @@ class UI:
 
                         # Preset selection in collapsible panel
                         available_presets = list_volume_property_presets()
-                        current_preset = self.server.state[f"volume_preset_{v.label}"]
-                        current_desc = available_presets.get(
-                            current_preset, current_preset
-                        )
 
                         with vuetify.VExpansionPanels(
                             v_model=f"preset_panel_{v.label}",
