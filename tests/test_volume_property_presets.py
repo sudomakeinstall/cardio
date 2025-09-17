@@ -1,10 +1,8 @@
 """Test volume_property_presets module."""
 
-import pathlib as pl
 from unittest.mock import mock_open, patch
 
 import pytest as pt
-import tomlkit as tk
 
 from cardio.volume_property import VolumePropertyConfig
 from cardio.volume_property_presets import (

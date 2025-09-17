@@ -3,7 +3,6 @@ import enum
 import logging
 
 # Third Party
-import numpy as np
 import pydantic as pc
 import vtk
 

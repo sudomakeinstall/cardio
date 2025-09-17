@@ -2,7 +2,6 @@
 
 import pathlib as pl
 
-import pytest as pt
 import tomlkit as tk
 from vtkmodules.vtkCommonDataModel import vtkPiecewiseFunction
 from vtkmodules.vtkRenderingCore import vtkColorTransferFunction

@@ -2,9 +2,6 @@
 
 import enum
 
-import itk
-import numpy as np
-
 
 class InterpolatorType(enum.Enum):
     """Interpolation methods for image resampling."""
