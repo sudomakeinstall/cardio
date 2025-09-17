@@ -16,6 +16,8 @@ class UI:
             "MouseMove",
             "LeftButtonPress",
             "LeftButtonRelease",
+            "RightButtonPress",
+            "RightButtonRelease",
             "KeyPress",
         ]
 
@@ -40,6 +42,15 @@ class UI:
                 ]
         elif args[0]["type"] == "LeftButtonRelease":
             self.left_dragging = False
+        elif args[0]["type"] == "RightButtonPress":
+            self.right_dragging = True
+            if view_name and "position" in args[0]:
+                self.last_mouse_pos[view_name] = [
+                    args[0]["position"]["x"],
+                    args[0]["position"]["y"],
+                ]
+        elif args[0]["type"] == "RightButtonRelease":
+            self.right_dragging = False
         elif self.left_dragging and args[0]["type"] == "MouseMove":
             if (
                 view_name in {"axial", "sagittal", "coronal"}
@@ -54,19 +65,74 @@ class UI:
                 current_window = getattr(self.server.state, "mpr_window", 400.0)
                 current_level = getattr(self.server.state, "mpr_level", 40.0)
 
-                window_delta = -dx * 5.0
-                level_delta = -dy * 2.0
+                window_delta = -dx * self.window_sensitivity
+                level_delta = -dy * self.level_sensitivity
                 new_window = max(1.0, current_window + window_delta)
                 new_level = current_level + level_delta
 
                 self.server.state.mpr_window = new_window
                 self.server.state.mpr_level = new_level
+        elif self.right_dragging and args[0]["type"] == "MouseMove":
+            if (
+                view_name in {"axial", "sagittal", "coronal"}
+                and view_name in self.last_mouse_pos
+                and "position" in args[0]
+            ):
+                current_pos = [args[0]["position"]["x"], args[0]["position"]["y"]]
+                dy = current_pos[1] - self.last_mouse_pos[view_name][1]
+                self.last_mouse_pos[view_name] = current_pos
+
+                base_slice_delta = dy * self.slice_sensitivity
+
+                if view_name == "axial":
+                    current_slice = getattr(self.server.state, "axial_slice", 0.0)
+                    bounds = getattr(
+                        self.server.state, "axial_slice_bounds", [0.0, 100.0]
+                    )
+                    min_bound, max_bound = min(bounds), max(bounds)
+                    slice_delta = (
+                        base_slice_delta if bounds[1] > bounds[0] else -base_slice_delta
+                    )
+                    new_slice = max(
+                        min_bound, min(max_bound, current_slice + slice_delta)
+                    )
+                    self.server.state.axial_slice = new_slice
+                elif view_name == "sagittal":
+                    current_slice = getattr(self.server.state, "sagittal_slice", 0.0)
+                    bounds = getattr(
+                        self.server.state, "sagittal_slice_bounds", [0.0, 100.0]
+                    )
+                    min_bound, max_bound = min(bounds), max(bounds)
+                    slice_delta = (
+                        base_slice_delta if bounds[1] > bounds[0] else -base_slice_delta
+                    )
+                    new_slice = max(
+                        min_bound, min(max_bound, current_slice + slice_delta)
+                    )
+                    self.server.state.sagittal_slice = new_slice
+                elif view_name == "coronal":
+                    current_slice = getattr(self.server.state, "coronal_slice", 0.0)
+                    bounds = getattr(
+                        self.server.state, "coronal_slice_bounds", [0.0, 100.0]
+                    )
+                    min_bound, max_bound = min(bounds), max(bounds)
+                    slice_delta = (
+                        base_slice_delta if bounds[1] > bounds[0] else -base_slice_delta
+                    )
+                    new_slice = max(
+                        min_bound, min(max_bound, current_slice + slice_delta)
+                    )
+                    self.server.state.coronal_slice = new_slice
 
     def __init__(self, server, scene: Scene):
         self.server = server
         self.scene: Scene = scene
         self.left_dragging = False
+        self.right_dragging = False
         self.last_mouse_pos = {}
+        self.window_sensitivity = 5.0
+        self.level_sensitivity = 2.0
+        self.slice_sensitivity = 1.0
 
         self.setup()
 
@@ -531,7 +597,7 @@ class UI:
 
                 with vuetify.VRow(justify="center", classes="my-3"):
                     vuetify.VBtn(
-                        f"Capture Cine",
+                        "Capture Cine",
                         small=True,
                         dense=True,
                         outlined=True,
