@@ -30,99 +30,99 @@ class UI:
         return result
 
     def on_event(self, *args, view_name=None, **kwargs):
-        if args[0]["type"] == "KeyPress":
-            if int(args[0]["key"]) in presets.keys():
-                self.server.state.mpr_window_level_preset = int(args[0]["key"])
-        elif args[0]["type"] == "LeftButtonPress":
-            self.left_dragging = True
-            if view_name and "position" in args[0]:
-                self.last_mouse_pos[view_name] = [
-                    args[0]["position"]["x"],
-                    args[0]["position"]["y"],
-                ]
-        elif args[0]["type"] == "LeftButtonRelease":
-            self.left_dragging = False
-        elif args[0]["type"] == "RightButtonPress":
-            self.right_dragging = True
-            if view_name and "position" in args[0]:
-                self.last_mouse_pos[view_name] = [
-                    args[0]["position"]["x"],
-                    args[0]["position"]["y"],
-                ]
-        elif args[0]["type"] == "RightButtonRelease":
-            self.right_dragging = False
-        elif self.left_dragging and args[0]["type"] == "MouseMove":
-            if (
-                view_name in {"axial", "sagittal", "coronal"}
-                and view_name in self.last_mouse_pos
-                and "position" in args[0]
-            ):
-                current_pos = [args[0]["position"]["x"], args[0]["position"]["y"]]
-                dx = current_pos[0] - self.last_mouse_pos[view_name][0]
-                dy = current_pos[1] - self.last_mouse_pos[view_name][1]
-                self.last_mouse_pos[view_name] = current_pos
+        if not args:
+            return
 
-                current_window = getattr(self.server.state, "mpr_window", 400.0)
-                current_level = getattr(self.server.state, "mpr_level", 40.0)
+        event = args[0]
 
-                window_delta = -dx * self.window_sensitivity
-                level_delta = -dy * self.level_sensitivity
-                new_window = max(1.0, current_window + window_delta)
-                new_level = current_level + level_delta
+        match event["type"]:
+            case "KeyPress":
+                if int(event["key"]) in presets.keys():
+                    self.server.state.mpr_window_level_preset = int(event["key"])
 
-                self.server.state.mpr_window = new_window
-                self.server.state.mpr_level = new_level
-        elif self.right_dragging and args[0]["type"] == "MouseMove":
-            if (
-                view_name in {"axial", "sagittal", "coronal"}
-                and view_name in self.last_mouse_pos
-                and "position" in args[0]
-            ):
-                current_pos = [args[0]["position"]["x"], args[0]["position"]["y"]]
-                dy = current_pos[1] - self.last_mouse_pos[view_name][1]
-                self.last_mouse_pos[view_name] = current_pos
+            case "LeftButtonPress":
+                self.left_dragging = True
+                self._store_mouse_position(view_name, event)
 
-                base_slice_delta = dy * self.slice_sensitivity
+            case "LeftButtonRelease":
+                self.left_dragging = False
 
-                if view_name == "axial":
-                    current_slice = getattr(self.server.state, "axial_slice", 0.0)
-                    bounds = getattr(
-                        self.server.state, "axial_slice_bounds", [0.0, 100.0]
-                    )
-                    min_bound, max_bound = min(bounds), max(bounds)
-                    slice_delta = (
-                        base_slice_delta if bounds[1] > bounds[0] else -base_slice_delta
-                    )
-                    new_slice = max(
-                        min_bound, min(max_bound, current_slice + slice_delta)
-                    )
-                    self.server.state.axial_slice = new_slice
-                elif view_name == "sagittal":
-                    current_slice = getattr(self.server.state, "sagittal_slice", 0.0)
-                    bounds = getattr(
-                        self.server.state, "sagittal_slice_bounds", [0.0, 100.0]
-                    )
-                    min_bound, max_bound = min(bounds), max(bounds)
-                    slice_delta = (
-                        base_slice_delta if bounds[1] > bounds[0] else -base_slice_delta
-                    )
-                    new_slice = max(
-                        min_bound, min(max_bound, current_slice + slice_delta)
-                    )
-                    self.server.state.sagittal_slice = new_slice
-                elif view_name == "coronal":
-                    current_slice = getattr(self.server.state, "coronal_slice", 0.0)
-                    bounds = getattr(
-                        self.server.state, "coronal_slice_bounds", [0.0, 100.0]
-                    )
-                    min_bound, max_bound = min(bounds), max(bounds)
-                    slice_delta = (
-                        base_slice_delta if bounds[1] > bounds[0] else -base_slice_delta
-                    )
-                    new_slice = max(
-                        min_bound, min(max_bound, current_slice + slice_delta)
-                    )
-                    self.server.state.coronal_slice = new_slice
+            case "RightButtonPress":
+                self.right_dragging = True
+                self._store_mouse_position(view_name, event)
+
+            case "RightButtonRelease":
+                self.right_dragging = False
+
+            case "MouseMove" if self.left_dragging:
+                if (
+                    view_name in {"axial", "sagittal", "coronal"}
+                    and view_name in self.last_mouse_pos
+                    and "position" in event
+                ):
+                    current_pos = [event["position"]["x"], event["position"]["y"]]
+                    dx = current_pos[0] - self.last_mouse_pos[view_name][0]
+                    dy = current_pos[1] - self.last_mouse_pos[view_name][1]
+                    self.last_mouse_pos[view_name] = current_pos
+
+                    current_window = getattr(self.server.state, "mpr_window", 400.0)
+                    current_level = getattr(self.server.state, "mpr_level", 40.0)
+
+                    window_delta = -dx * self.window_sensitivity
+                    level_delta = -dy * self.level_sensitivity
+                    new_window = max(1.0, current_window + window_delta)
+                    new_level = current_level + level_delta
+
+                    self.server.state.mpr_window = new_window
+                    self.server.state.mpr_level = new_level
+
+            case "MouseMove" if self.right_dragging:
+                if (
+                    view_name in {"axial", "sagittal", "coronal"}
+                    and view_name in self.last_mouse_pos
+                    and "position" in event
+                ):
+                    current_pos = [event["position"]["x"], event["position"]["y"]]
+                    dy = current_pos[1] - self.last_mouse_pos[view_name][1]
+                    self.last_mouse_pos[view_name] = current_pos
+
+                    base_slice_delta = dy * self.slice_sensitivity
+                    self._handle_slice_scroll(view_name, base_slice_delta)
+
+    def _store_mouse_position(self, view_name, event):
+        """Store mouse position for drag operations."""
+        if view_name and "position" in event:
+            self.last_mouse_pos[view_name] = [
+                event["position"]["x"],
+                event["position"]["y"],
+            ]
+
+    def _handle_slice_scroll(self, view_name, base_slice_delta):
+        """Handle slice scrolling for a specific view."""
+        match view_name:
+            case "axial":
+                current_slice = getattr(self.server.state, "axial_slice", 0.0)
+                bounds = getattr(self.server.state, "axial_slice_bounds", [0.0, 100.0])
+                slice_attr = "axial_slice"
+            case "sagittal":
+                current_slice = getattr(self.server.state, "sagittal_slice", 0.0)
+                bounds = getattr(
+                    self.server.state, "sagittal_slice_bounds", [0.0, 100.0]
+                )
+                slice_attr = "sagittal_slice"
+            case "coronal":
+                current_slice = getattr(self.server.state, "coronal_slice", 0.0)
+                bounds = getattr(
+                    self.server.state, "coronal_slice_bounds", [0.0, 100.0]
+                )
+                slice_attr = "coronal_slice"
+            case _:
+                return
+
+        min_bound, max_bound = min(bounds), max(bounds)
+        slice_delta = base_slice_delta if bounds[1] > bounds[0] else -base_slice_delta
+        new_slice = max(min_bound, min(max_bound, current_slice + slice_delta))
+        setattr(self.server.state, slice_attr, new_slice)
 
     def __init__(self, server, scene: Scene):
         self.server = server
