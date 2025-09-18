@@ -37,8 +37,10 @@ class UI:
 
         match event["type"]:
             case "KeyPress":
-                if int(event["key"]) in presets.keys():
-                    self.server.state.mpr_window_level_preset = int(event["key"])
+                if event["key"].isdigit():
+                    key_num = int(event["key"])
+                    if key_num in presets.keys():
+                        self.server.state.mpr_window_level_preset = key_num
 
             case "LeftButtonPress":
                 self.left_dragging = True
@@ -435,7 +437,7 @@ class UI:
                             no_gutters=True,
                             classes="align-center mb-1",
                         ):
-                            with vuetify.VCol(cols="10"):
+                            with vuetify.VCol(cols="8"):
                                 vuetify.VSlider(
                                     v_model=(f"mpr_rotation_angle_{i}", 0),
                                     min=-180,
@@ -458,6 +460,17 @@ class UI:
                                     hide_details=True,
                                     dense=True,
                                     title="Toggle this rotation and all subsequent ones",
+                                )
+                            with vuetify.VCol(cols="2"):
+                                vuetify.VBtn(
+                                    icon="mdi-delete",
+                                    click=ft.partial(
+                                        self.server.controller.remove_rotation_event, i
+                                    ),
+                                    small=True,
+                                    dense=True,
+                                    color="error",
+                                    title="Remove this rotation and all subsequent ones",
                                 )
 
                     # Angle units selector
