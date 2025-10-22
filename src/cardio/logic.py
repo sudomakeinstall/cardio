@@ -165,8 +165,8 @@ class Logic:
             from .window_level import presets
 
             self.server.state.mpr_presets = [
-                {"text": preset.name, "value": key} for key, preset in presets.items()
-            ]
+                {"text": "Select W/L...", "value": None}
+            ] + [{"text": preset.name, "value": key} for key, preset in presets.items()]
         except Exception as e:
             print(f"Error initializing MPR presets: {e}")
             self.server.state.mpr_presets = []
@@ -770,6 +770,14 @@ class Logic:
         level = getattr(self.server.state, "mpr_level", 40.0)
         current_frame = getattr(self.server.state, "frame", 0)
 
+        # Check if this change is from manual adjustment (not from preset)
+        # by checking if we're not in the middle of a preset update
+        if not getattr(self, "_updating_from_preset", False):
+            # Reset preset selection when manually adjusting window/level
+            current_preset = getattr(self.server.state, "mpr_window_level_preset", None)
+            if current_preset is not None:
+                self.server.state.mpr_window_level_preset = None
+
         # Update window/level for MPR actors
         active_volume.update_mpr_window_level(current_frame, window, level)
 
@@ -780,13 +788,24 @@ class Logic:
         """Update MPR window/level when preset changes."""
         from .window_level import presets
 
+        # Handle None value (Select W/L... option) - do nothing
+        if mpr_window_level_preset is None:
+            return
+
         if mpr_window_level_preset in presets:
             preset = presets[mpr_window_level_preset]
-            self.server.state.mpr_window = preset.window
-            self.server.state.mpr_level = preset.level
 
-            # Update the actual MPR views with new window/level
-            self.update_mpr_window_level()
+            # Set flag to indicate we're updating from preset
+            self._updating_from_preset = True
+            try:
+                self.server.state.mpr_window = preset.window
+                self.server.state.mpr_level = preset.level
+
+                # Update the actual MPR views with new window/level
+                self.update_mpr_window_level()
+            finally:
+                # Always clear the flag
+                self._updating_from_preset = False
 
     def update_mpr_rotation(self, **kwargs):
         """Update MPR views when rotation changes."""
