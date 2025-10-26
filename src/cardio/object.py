@@ -80,7 +80,6 @@ class Object(pc.BaseModel):
         if self.pattern is None:
             raise ValueError("Cannot use path_for_frame with static file_paths")
         filename = self.pattern.format(frame=frame)
-        print(filename)
         return self.directory / filename
 
     @functools.cached_property
