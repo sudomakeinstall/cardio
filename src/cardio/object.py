@@ -3,7 +3,6 @@ import functools
 import logging
 import pathlib as pl
 import re
-import string
 
 # Third Party
 import pydantic as pc
@@ -22,6 +21,8 @@ class Object(pc.BaseModel):
     pattern: str | None = pc.Field(
         default=None, description="Filename pattern with ${frame} placeholder"
     )
+    frame_start: pc.NonNegativeInt = 0
+    frame_interval: pc.PositiveInt = 1
     file_paths: list[str] | None = pc.Field(
         default=None, description="Static list of file paths relative to directory"
     )
@@ -54,10 +55,10 @@ class Object(pc.BaseModel):
         if not isinstance(v, str):
             raise ValueError("pattern must be a string")
 
-        if not re.match(r"^[a-zA-Z0-9_\-.${}]+$", v):
+        if not re.match(r"^[a-zA-Z0-9_\-.${}:]+$", v):
             raise ValueError("Pattern contains unsafe characters")
 
-        if "${frame}" not in v and "$frame" not in v:
+        if "frame" not in v:
             raise ValueError("Pattern must contain $frame placeholder")
 
         return v
@@ -78,8 +79,8 @@ class Object(pc.BaseModel):
     def path_for_frame(self, frame: int) -> pl.Path:
         if self.pattern is None:
             raise ValueError("Cannot use path_for_frame with static file_paths")
-        template = string.Template(self.pattern)
-        filename = template.safe_substitute(frame=frame)
+        filename = self.pattern.format(frame=frame)
+        print(filename)
         return self.directory / filename
 
     @functools.cached_property
@@ -89,13 +90,13 @@ class Object(pc.BaseModel):
             return [self.directory / path for path in self.file_paths]
 
         paths = []
-        frame = 0
+        frame = self.frame_start
         while True:
             path = self.path_for_frame(frame)
             if not path.is_file():
                 break
             paths.append(path)
-            frame += 1
+            frame += self.frame_interval
         return paths
 
     @property
