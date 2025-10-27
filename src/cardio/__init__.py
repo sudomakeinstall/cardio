@@ -26,4 +26,4 @@ __all__ = [
     "window_level",
 ]
 
-__version__ = "2025.10.0"
+__version__ = "2025.10.1"
