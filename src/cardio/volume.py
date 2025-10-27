@@ -20,7 +20,7 @@ class Volume(Object):
     """Volume object with transfer functions and clipping support."""
 
     pattern: str = pc.Field(
-        default="${frame}.nii.gz",
+        default="{frame}.nii.gz",
         description="Filename pattern with $frame placeholder",
     )
     transfer_function_preset: str = pc.Field(

@@ -19,7 +19,7 @@ class Segmentation(Object):
     """Segmentation object with multi-label mesh extraction using SurfaceNets."""
 
     pattern: str = pc.Field(
-        default="${frame}.nii.gz",
+        default="{frame}.nii.gz",
         description="Filename pattern with $frame placeholder",
     )
     _actors: list[vtk.vtkActor] = pc.PrivateAttr(default_factory=list)
