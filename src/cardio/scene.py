@@ -107,7 +107,7 @@ class Scene(ps.BaseSettings):
     volumes: VolumeList = pc.Field(default_factory=list)
     segmentations: SegmentationList = pc.Field(default_factory=list)
     mpr_enabled: bool = pc.Field(
-        default=False,
+        default=True,
         description="Enable multi-planar reconstruction (MPR) mode with quad-view layout",
     )
     active_volume_label: str = pc.Field(

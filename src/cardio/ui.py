@@ -5,6 +5,7 @@ import numpy as np
 from trame.ui.vuetify3 import SinglePageWithDrawerLayout
 from trame.widgets import vtk as vtk_widgets
 from trame.widgets import vuetify3 as vuetify
+from trame.widgets import html
 
 from .orientation import EulerAxis, euler_angle_to_rotation_matrix
 from .scene import Scene
@@ -54,9 +55,32 @@ class UI:
                     key_num = int(key)
                     if key_num in presets.keys():
                         self.server.state.mpr_window_level_preset = key_num
-                elif key.lower() == "l":
+                elif key == "l":
                     current = getattr(self.server.state, "mpr_crosshairs_enabled", True)
                     self.server.state.mpr_crosshairs_enabled = not current
+                elif key == "h":
+                    current = getattr(self.server.state, "help_overlay_visible", False)
+                    self.server.state.help_overlay_visible = not current
+                elif key == "v":
+                    current = getattr(self.server.state, "maximized_view", "")
+                    self.server.state.maximized_view = (
+                        "" if current == "volume" else "volume"
+                    )
+                elif key == "a":
+                    current = getattr(self.server.state, "maximized_view", "")
+                    self.server.state.maximized_view = (
+                        "" if current == "axial" else "axial"
+                    )
+                elif key == "c":
+                    current = getattr(self.server.state, "maximized_view", "")
+                    self.server.state.maximized_view = (
+                        "" if current == "coronal" else "coronal"
+                    )
+                elif key == "s":
+                    current = getattr(self.server.state, "maximized_view", "")
+                    self.server.state.maximized_view = (
+                        "" if current == "sagittal" else "sagittal"
+                    )
 
             case "LeftButtonPress":
                 self.left_dragging = True
@@ -173,6 +197,8 @@ class UI:
         self.slice_sensitivity = 1.0
         self.last_keypress_time = {}
         self.keypress_debounce_ms = 100
+        self.server.state.help_overlay_visible = False
+        self.server.state.maximized_view = ""
 
         self.setup()
 
@@ -219,9 +245,9 @@ class UI:
                 )
 
             with layout.content:
-                # Single VR view (default mode)
+                # Single VR view (volume maximized)
                 with vuetify.VContainer(
-                    v_if="!mpr_enabled",
+                    v_if="maximized_view === 'volume'",
                     fluid=True,
                     classes="pa-0 fill-height",
                 ):
@@ -235,9 +261,9 @@ class UI:
                     self.server.controller.view_reset_camera = view.reset_camera
                     self.server.controller.on_server_ready.add(view.update)
 
-                # Quad-view layout (MPR mode) - directly in content like app.py
+                # Quad-view layout (MPR mode - default)
                 with vuetify.VContainer(
-                    v_if="mpr_enabled",
+                    v_if="!maximized_view",
                     fluid=True,
                     classes="pa-0",
                     style="height: calc(100vh - 85px);",
@@ -308,21 +334,131 @@ class UI:
                     self.server.controller.sagittal_update = sagittal_view.update
                     self.server.controller.volume_update = volume_view.update
 
-            with layout.drawer:
-                # MPR Mode Toggle (only show when volumes are present)
-                if self.scene.volumes:
-                    vuetify.VListSubheader("View Mode")
-                    vuetify.VCheckbox(
-                        v_model=("mpr_enabled", False),
-                        label="Multi-Planar Reconstruction (MPR)",
-                        title="Toggle between single 3D view and quad-view with slice planes",
-                        dense=True,
-                        hide_details=True,
+                # Maximized axial view
+                with vuetify.VContainer(
+                    v_if="maximized_view === 'axial'",
+                    fluid=True,
+                    classes="pa-0 fill-height",
+                ):
+                    axial_maximized_view = vtk_widgets.VtkRemoteView(
+                        self.scene.axial_renderWindow,
+                        interactor_events=("event_types", self.handled_events),
+                        **self.event_listeners_for_view("axial"),
+                        interactive_ratio=1,
                     )
 
-                    # Volume selection dropdown (only show when MPR is enabled)
+                # Maximized coronal view
+                with vuetify.VContainer(
+                    v_if="maximized_view === 'coronal'",
+                    fluid=True,
+                    classes="pa-0 fill-height",
+                ):
+                    coronal_maximized_view = vtk_widgets.VtkRemoteView(
+                        self.scene.coronal_renderWindow,
+                        interactor_events=("event_types", self.handled_events),
+                        **self.event_listeners_for_view("coronal"),
+                        interactive_ratio=1,
+                    )
+
+                # Maximized sagittal view
+                with vuetify.VContainer(
+                    v_if="maximized_view === 'sagittal'",
+                    fluid=True,
+                    classes="pa-0 fill-height",
+                ):
+                    sagittal_maximized_view = vtk_widgets.VtkRemoteView(
+                        self.scene.sagittal_renderWindow,
+                        interactor_events=("event_types", self.handled_events),
+                        **self.event_listeners_for_view("sagittal"),
+                        interactive_ratio=1,
+                    )
+
+                with vuetify.VDialog(
+                    v_model=("help_overlay_visible", False),
+                    max_width="700px",
+                    scrim="rgba(0, 0, 0, 0.7)",
+                ):
+                    with vuetify.VCard(
+                        classes="pa-6",
+                        style="background: rgba(33, 33, 33, 0.95);",
+                    ):
+                        vuetify.VCardTitle(
+                            "Keyboard Shortcuts & Controls", classes="text-h5 mb-4"
+                        )
+
+                        with vuetify.VCardText():
+                            html.H3("Keyboard Shortcuts", classes="text-h6 mb-3")
+                            with vuetify.VTable(density="compact", classes="mb-4"):
+                                with html.Thead():
+                                    with html.Tr():
+                                        html.Th("Key")
+                                        html.Th("Action")
+                                with html.Tbody():
+                                    with html.Tr():
+                                        html.Td("h")
+                                        html.Td("Toggle this help window")
+                                    with html.Tr():
+                                        html.Td("v")
+                                        html.Td("Toggle 3D volume view")
+                                    with html.Tr():
+                                        html.Td("a")
+                                        html.Td("Toggle axial view")
+                                    with html.Tr():
+                                        html.Td("c")
+                                        html.Td("Toggle coronal view")
+                                    with html.Tr():
+                                        html.Td("s")
+                                        html.Td("Toggle sagittal view")
+                                    with html.Tr():
+                                        html.Td("l")
+                                        html.Td("Toggle crosshairs")
+
+                            html.H3("Window/Level Presets", classes="text-h6 mb-3")
+                            with vuetify.VTable(density="compact", classes="mb-4"):
+                                with html.Thead():
+                                    with html.Tr():
+                                        html.Th("Key")
+                                        html.Th("Preset")
+                                        html.Th("Window")
+                                        html.Th("Level")
+                                with html.Tbody():
+                                    for key, preset in presets.items():
+                                        with html.Tr():
+                                            html.Td(str(key))
+                                            html.Td(preset.name)
+                                            html.Td(str(preset.window))
+                                            html.Td(str(preset.level))
+
+                            html.H3("Mouse Controls (MPR Mode)", classes="text-h6 mb-3")
+                            with vuetify.VTable(density="compact"):
+                                with html.Thead():
+                                    with html.Tr():
+                                        html.Th("Action")
+                                        html.Th("Effect")
+                                with html.Tbody():
+                                    with html.Tr():
+                                        html.Td("Left Drag ←/→")
+                                        html.Td("Narrow/widen window")
+                                    with html.Tr():
+                                        html.Td("Left Drag ↑/↓")
+                                        html.Td("Increase/decrease level")
+                                    with html.Tr():
+                                        html.Td("Right Drag ↑/↓")
+                                        html.Td("Scroll through slices")
+
+                        with vuetify.VCardActions():
+                            vuetify.VSpacer()
+                            vuetify.VBtn(
+                                "Close",
+                                click="help_overlay_visible = false",
+                                variant="text",
+                            )
+
+            with layout.drawer:
+                # Volume selection dropdown
+                if self.scene.volumes:
                     vuetify.VSelect(
-                        v_if="mpr_enabled",
+                        v_if="!maximized_view || maximized_view === 'volume'",
                         v_model=("active_volume_label", ""),
                         items=("volume_items", []),
                         item_title="text",
@@ -334,11 +470,11 @@ class UI:
 
                     # Window/Level controls for MPR
                     vuetify.VListSubheader(
-                        "Window/Level", v_if="mpr_enabled && active_volume_label"
+                        "Window/Level", v_if="!maximized_view && active_volume_label"
                     )
 
                     vuetify.VSelect(
-                        v_if="mpr_enabled && active_volume_label",
+                        v_if="!maximized_view && active_volume_label",
                         v_model=("mpr_window_level_preset", 7),
                         items=("mpr_presets", []),
                         item_title="text",
@@ -349,7 +485,7 @@ class UI:
                     )
 
                     vuetify.VSlider(
-                        v_if="mpr_enabled && active_volume_label",
+                        v_if="!maximized_view && active_volume_label",
                         v_model="mpr_window",
                         min=1.0,
                         max=2000.0,
@@ -362,7 +498,7 @@ class UI:
                     )
 
                     vuetify.VSlider(
-                        v_if="mpr_enabled && active_volume_label",
+                        v_if="!maximized_view && active_volume_label",
                         v_model="mpr_level",
                         min=-1000.0,
                         max=1000.0,
@@ -375,7 +511,7 @@ class UI:
                     )
 
                     vuetify.VCheckbox(
-                        v_if="mpr_enabled && active_volume_label",
+                        v_if="!maximized_view && active_volume_label",
                         v_model=("mpr_crosshairs_enabled", True),
                         label="Show Crosshairs",
                         dense=True,
@@ -385,12 +521,12 @@ class UI:
 
                     # MPR Rotation controls
                     vuetify.VListSubheader(
-                        "Rotations", v_if="mpr_enabled && active_volume_label"
+                        "Rotations", v_if="!maximized_view && active_volume_label"
                     )
 
                     # Rotation buttons
                     with vuetify.VRow(
-                        v_if="mpr_enabled && active_volume_label",
+                        v_if="!maximized_view && active_volume_label",
                         no_gutters=True,
                         classes="mb-2",
                     ):
@@ -425,7 +561,7 @@ class UI:
                     # Reset rotations button
                     vuetify.VBtn(
                         "Reset",
-                        v_if="mpr_enabled && active_volume_label && mpr_rotation_sequence && mpr_rotation_sequence.length > 0",
+                        v_if="!maximized_view && active_volume_label && mpr_rotation_sequence && mpr_rotation_sequence.length > 0",
                         click=self.server.controller.reset_rotations,
                         small=True,
                         dense=True,
@@ -439,7 +575,7 @@ class UI:
                     # Individual rotation sliders
                     for i in range(self.scene.max_mpr_rotations):
                         with vuetify.VRow(
-                            v_if=f"mpr_enabled && active_volume_label && mpr_rotation_sequence && mpr_rotation_sequence.length > {i}",
+                            v_if=f"!maximized_view && active_volume_label && mpr_rotation_sequence && mpr_rotation_sequence.length > {i}",
                             no_gutters=True,
                             classes="align-center mb-1",
                         ):
@@ -481,7 +617,7 @@ class UI:
 
                     # Angle units selector
                     with vuetify.VRow(
-                        v_if="mpr_enabled && active_volume_label",
+                        v_if="!maximized_view && active_volume_label",
                         no_gutters=True,
                         classes="align-center mb-2 mt-2",
                     ):
@@ -501,7 +637,7 @@ class UI:
                     # Save rotations button
                     vuetify.VBtn(
                         "Save Rotations",
-                        v_if="mpr_enabled && active_volume_label && mpr_rotation_sequence && mpr_rotation_sequence.length > 0",
+                        v_if="!maximized_view && active_volume_label && mpr_rotation_sequence && mpr_rotation_sequence.length > 0",
                         click=self.server.controller.save_rotation_angles,
                         small=True,
                         dense=True,

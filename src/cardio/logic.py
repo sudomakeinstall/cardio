@@ -46,7 +46,6 @@ class Logic:
         self.server.state.change("frame")(self.update_frame)
         self.server.state.change("playing")(self.play)
         self.server.state.change("theme_mode")(self.sync_background_color)
-        self.server.state.change("mpr_enabled")(self.sync_mpr_mode)
         self.server.state.change("active_volume_label")(self.sync_active_volume)
         self.server.state.change("mpr_origin")(self.update_slice_positions)
         self.server.state.change("mpr_crosshairs_enabled")(
@@ -162,7 +161,11 @@ class Logic:
 
         # Initialize MPR state
         self.server.state.mpr_enabled = self.scene.mpr_enabled
-        self.server.state.active_volume_label = self.scene.active_volume_label
+        # Set active volume to first volume if not specified
+        if self.scene.volumes and not self.scene.active_volume_label:
+            self.server.state.active_volume_label = self.scene.volumes[0].label
+        else:
+            self.server.state.active_volume_label = self.scene.active_volume_label
         self.server.state.mpr_origin = list(self.scene.mpr_origin)
         self.server.state.mpr_window = self.scene.mpr_window
         self.server.state.mpr_level = self.scene.mpr_level
@@ -246,6 +249,10 @@ class Logic:
         # Get or create MPR actors for the new frame
         mpr_actors = active_volume.get_mpr_actors_for_frame(frame)
 
+        # Get crosshair visibility state
+        crosshairs_visible = getattr(self.server.state, "mpr_crosshairs_enabled", True)
+        crosshairs = active_volume.crosshair_actors
+
         # Update each MPR renderer with the new frame's actors
         if self.scene.axial_renderWindow:
             axial_renderer = (
@@ -255,8 +262,11 @@ class Logic:
                 axial_renderer.RemoveAllViewProps()
                 axial_renderer.AddActor(mpr_actors["axial"]["actor"])
                 mpr_actors["axial"]["actor"].SetVisibility(True)
-                # Apply current slice position and window/level
-                self._apply_current_mpr_settings(active_volume, frame)
+                # Re-add crosshairs
+                if crosshairs and "axial" in crosshairs:
+                    for line_data in crosshairs["axial"].values():
+                        axial_renderer.AddActor2D(line_data["actor"])
+                        line_data["actor"].SetVisibility(crosshairs_visible)
                 axial_renderer.ResetCamera()
 
         if self.scene.coronal_renderWindow:
@@ -267,6 +277,11 @@ class Logic:
                 coronal_renderer.RemoveAllViewProps()
                 coronal_renderer.AddActor(mpr_actors["coronal"]["actor"])
                 mpr_actors["coronal"]["actor"].SetVisibility(True)
+                # Re-add crosshairs
+                if crosshairs and "coronal" in crosshairs:
+                    for line_data in crosshairs["coronal"].values():
+                        coronal_renderer.AddActor2D(line_data["actor"])
+                        line_data["actor"].SetVisibility(crosshairs_visible)
                 coronal_renderer.ResetCamera()
 
         if self.scene.sagittal_renderWindow:
@@ -277,7 +292,15 @@ class Logic:
                 sagittal_renderer.RemoveAllViewProps()
                 sagittal_renderer.AddActor(mpr_actors["sagittal"]["actor"])
                 mpr_actors["sagittal"]["actor"].SetVisibility(True)
+                # Re-add crosshairs
+                if crosshairs and "sagittal" in crosshairs:
+                    for line_data in crosshairs["sagittal"].values():
+                        sagittal_renderer.AddActor2D(line_data["actor"])
+                        line_data["actor"].SetVisibility(crosshairs_visible)
                 sagittal_renderer.ResetCamera()
+
+        # Apply current slice position and window/level to all views
+        self._apply_current_mpr_settings(active_volume, frame)
 
     def _apply_current_mpr_settings(self, active_volume, frame):
         """Apply current slice positions and window/level to MPR actors."""
