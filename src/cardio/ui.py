@@ -1,4 +1,5 @@
 import functools as ft
+import time
 
 import numpy as np
 from trame.ui.vuetify3 import SinglePageWithDrawerLayout
@@ -39,10 +40,23 @@ class UI:
 
         match event["type"]:
             case "KeyPress":
-                if event["key"].isdigit():
-                    key_num = int(event["key"])
+                key = event["key"]
+                current_time = time.time() * 1000
+
+                if key in self.last_keypress_time:
+                    time_since_last = current_time - self.last_keypress_time[key]
+                    if time_since_last < self.keypress_debounce_ms:
+                        return
+
+                self.last_keypress_time[key] = current_time
+
+                if key.isdigit():
+                    key_num = int(key)
                     if key_num in presets.keys():
                         self.server.state.mpr_window_level_preset = key_num
+                elif key.lower() == "l":
+                    current = getattr(self.server.state, "mpr_crosshairs_enabled", True)
+                    self.server.state.mpr_crosshairs_enabled = not current
 
             case "LeftButtonPress":
                 self.left_dragging = True
@@ -157,6 +171,8 @@ class UI:
         self.window_sensitivity = 5.0
         self.level_sensitivity = 2.0
         self.slice_sensitivity = 1.0
+        self.last_keypress_time = {}
+        self.keypress_debounce_ms = 100
 
         self.setup()
 
