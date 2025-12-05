@@ -219,24 +219,36 @@ class Volume(Object):
 
         volume_actor = self._actors[frame]
         image_data = volume_actor.GetMapper().GetInput()
-        bounds = image_data.GetBounds()
+        las_bounds = self.get_physical_bounds(frame)
 
         actors = self._mpr_actors[frame]
 
-        # Clamp positions to volume bounds
-        axial_pos = max(bounds[4], min(bounds[5], axial_pos))  # Z bounds
-        sagittal_pos = max(bounds[0], min(bounds[1], sagittal_pos))  # X bounds
-        coronal_pos = max(bounds[2], min(bounds[3], coronal_pos))  # Y bounds
+        # Clamp positions to volume bounds (LAS coordinates from sliders)
+        axial_pos = max(
+            min(las_bounds[4], las_bounds[5]),
+            min(max(las_bounds[4], las_bounds[5]), axial_pos),
+        )
+        sagittal_pos = max(
+            min(las_bounds[0], las_bounds[1]),
+            min(max(las_bounds[0], las_bounds[1]), sagittal_pos),
+        )
+        coronal_pos = max(
+            min(las_bounds[2], las_bounds[3]),
+            min(max(las_bounds[2], las_bounds[3]), coronal_pos),
+        )
+
+        # Convert coronal position from LAS to LPS (negate Y axis)
+        coronal_pos_lps = -coronal_pos
 
         # Get coordinate system transformations for each MPR view
         transforms = self._get_mpr_coordinate_systems()
 
         center = image_data.GetCenter()
 
-        # Step 1: Apply translation to determine slice origins in physical space
+        # Step 1: Apply translation to determine slice origins in physical space (LPS)
         axial_origin = [center[0], center[1], axial_pos]
         sagittal_origin = [sagittal_pos, center[1], center[2]]
-        coronal_origin = [center[0], coronal_pos, center[2]]
+        coronal_origin = [center[0], coronal_pos_lps, center[2]]
 
         # Step 2: Apply cumulative rotation around the translated origins
         if rotation_sequence and rotation_angles:

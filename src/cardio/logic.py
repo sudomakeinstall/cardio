@@ -638,7 +638,10 @@ class Logic:
             bounds = active_volume.get_physical_bounds()
             self.server.state.axial_slice_bounds = [bounds[4], bounds[5]]  # Z bounds
             self.server.state.sagittal_slice_bounds = [bounds[0], bounds[1]]  # X bounds
-            self.server.state.coronal_slice_bounds = [bounds[2], bounds[3]]  # Y bounds
+            self.server.state.coronal_slice_bounds = [
+                bounds[3],
+                bounds[2],
+            ]  # Y bounds (swapped for correct direction)
 
             # Initialize slice positions to volume center if they are currently 0.0 (scene defaults)
             if self.server.state.axial_slice == 0.0:
