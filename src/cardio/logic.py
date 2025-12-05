@@ -8,6 +8,18 @@ from .screenshot import Screenshot
 
 
 class Logic:
+    def _get_visible_rotation_data(self):
+        """Get rotation sequence and angles for visible rotations only."""
+        rotation_sequence = getattr(self.server.state, "mpr_rotation_sequence", [])
+        rotation_angles = {}
+        for i in range(len(rotation_sequence)):
+            is_visible = getattr(self.server.state, f"mpr_rotation_visible_{i}", True)
+            if is_visible:
+                rotation_angles[i] = getattr(
+                    self.server.state, f"mpr_rotation_angle_{i}", 0
+                )
+        return rotation_sequence, rotation_angles
+
     def __init__(self, server, scene: Scene):
         self.server = server
         self.scene = scene
@@ -276,13 +288,7 @@ class Logic:
         sagittal_slice = getattr(self.server.state, "sagittal_slice", 0.5)
         coronal_slice = getattr(self.server.state, "coronal_slice", 0.5)
 
-        # Get rotation data
-        rotation_sequence = getattr(self.server.state, "mpr_rotation_sequence", [])
-        rotation_angles = {}
-        for i in range(len(rotation_sequence)):
-            rotation_angles[i] = getattr(
-                self.server.state, f"mpr_rotation_angle_{i}", 0
-            )
+        rotation_sequence, rotation_angles = self._get_visible_rotation_data()
 
         active_volume.update_slice_positions(
             frame,
@@ -727,13 +733,7 @@ class Logic:
         coronal_slice = getattr(self.server.state, "coronal_slice", 0.5)
         current_frame = getattr(self.server.state, "frame", 0)
 
-        # Get rotation data
-        rotation_sequence = getattr(self.server.state, "mpr_rotation_sequence", [])
-        rotation_angles = {}
-        for i in range(len(rotation_sequence)):
-            rotation_angles[i] = getattr(
-                self.server.state, f"mpr_rotation_angle_{i}", 0
-            )
+        rotation_sequence, rotation_angles = self._get_visible_rotation_data()
 
         # Update slice positions with rotation
         active_volume.update_slice_positions(
@@ -835,17 +835,7 @@ class Logic:
         coronal_slice = getattr(self.server.state, "coronal_slice", 0.5)
         current_frame = getattr(self.server.state, "frame", 0)
 
-        # Get rotation data - include all visible rotations
-        rotation_sequence = getattr(self.server.state, "mpr_rotation_sequence", [])
-        rotation_angles = {}
-
-        # Include all visible rotations regardless of position
-        for i in range(len(rotation_sequence)):
-            is_visible = getattr(self.server.state, f"mpr_rotation_visible_{i}", True)
-            if is_visible:
-                rotation_angles[i] = getattr(
-                    self.server.state, f"mpr_rotation_angle_{i}", 0
-                )
+        rotation_sequence, rotation_angles = self._get_visible_rotation_data()
 
         # Update slice positions with rotation
         active_volume.update_slice_positions(
