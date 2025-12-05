@@ -197,12 +197,54 @@ class Volume(Object):
 
         return bounds
 
+    def _build_cumulative_rotation(
+        self, rotation_sequence: list, rotation_angles: dict
+    ) -> np.ndarray:
+        """Build cumulative rotation matrix from sequence of rotations."""
+        cumulative_rotation = np.eye(3)
+        if rotation_sequence and rotation_angles:
+            for i, rotation in enumerate(rotation_sequence):
+                angle = rotation_angles.get(i, 0)
+                rotation_matrix = euler_angle_to_rotation_matrix(
+                    EulerAxis(rotation["axis"]), angle
+                )
+                cumulative_rotation = cumulative_rotation @ rotation_matrix
+        return cumulative_rotation
+
+    def get_scroll_vector(
+        self,
+        view_name: str,
+        rotation_sequence: list = None,
+        rotation_angles: dict = None,
+    ) -> np.ndarray:
+        """Get the current normal vector for a view after rotation.
+
+        Args:
+            view_name: One of "axial", "sagittal", "coronal"
+            rotation_sequence: List of rotation definitions
+            rotation_angles: Dict mapping rotation index to angle
+
+        Returns:
+            3D unit vector representing the scroll direction for this view
+        """
+        base_normals = {
+            "axial": np.array([0.0, 0.0, 1.0]),
+            "sagittal": np.array([1.0, 0.0, 0.0]),
+            "coronal": np.array([0.0, 1.0, 0.0]),
+        }
+
+        if view_name not in base_normals:
+            return np.array([0.0, 0.0, 1.0])
+
+        cumulative_rotation = self._build_cumulative_rotation(
+            rotation_sequence, rotation_angles
+        )
+        return cumulative_rotation @ base_normals[view_name]
+
     def update_slice_positions(
         self,
         frame: int,
-        axial_pos: float,
-        sagittal_pos: float,
-        coronal_pos: float,
+        origin: list,
         rotation_sequence: list = None,
         rotation_angles: dict = None,
     ):
@@ -210,74 +252,36 @@ class Volume(Object):
 
         Args:
             frame: Frame index
-            axial_pos: Physical position along Z axis (LAS Superior)
-            sagittal_pos: Physical position along X axis (LAS Left)
-            coronal_pos: Physical position along Y axis (LAS Anterior)
+            origin: [x, y, z] position in LPS coordinates (shared by all views)
+            rotation_sequence: List of rotation definitions
+            rotation_angles: Dict mapping rotation index to angle
         """
         if frame not in self._mpr_actors:
             return
 
-        volume_actor = self._actors[frame]
-        image_data = volume_actor.GetMapper().GetInput()
-        las_bounds = self.get_physical_bounds(frame)
-
         actors = self._mpr_actors[frame]
-
-        # Clamp positions to volume bounds (LAS coordinates from sliders)
-        axial_pos = max(
-            min(las_bounds[4], las_bounds[5]),
-            min(max(las_bounds[4], las_bounds[5]), axial_pos),
-        )
-        sagittal_pos = max(
-            min(las_bounds[0], las_bounds[1]),
-            min(max(las_bounds[0], las_bounds[1]), sagittal_pos),
-        )
-        coronal_pos = max(
-            min(las_bounds[2], las_bounds[3]),
-            min(max(las_bounds[2], las_bounds[3]), coronal_pos),
-        )
-
-        # Convert coronal position from LAS to LPS (negate Y axis)
-        coronal_pos_lps = -coronal_pos
 
         # Get coordinate system transformations for each MPR view
         transforms = self._get_mpr_coordinate_systems()
 
-        center = image_data.GetCenter()
+        # Build cumulative rotation matrix
+        cumulative_rotation = self._build_cumulative_rotation(
+            rotation_sequence, rotation_angles
+        )
 
-        # Step 1: Apply translation to determine slice origins in physical space (LPS)
-        axial_origin = [center[0], center[1], axial_pos]
-        sagittal_origin = [sagittal_pos, center[1], center[2]]
-        coronal_origin = [center[0], coronal_pos_lps, center[2]]
+        # Apply rotation to base transforms
+        axial_transform = cumulative_rotation @ transforms["axial"]
+        sagittal_transform = cumulative_rotation @ transforms["sagittal"]
+        coronal_transform = cumulative_rotation @ transforms["coronal"]
 
-        # Step 2: Apply cumulative rotation around the translated origins
-        if rotation_sequence and rotation_angles:
-            cumulative_rotation = np.eye(3)
-            for i, rotation in enumerate(rotation_sequence):
-                angle = rotation_angles.get(i, 0)
-                rotation_matrix = euler_angle_to_rotation_matrix(
-                    EulerAxis(rotation["axis"]), angle
-                )
-                cumulative_rotation = cumulative_rotation @ rotation_matrix
-
-            # Apply rotation to base transforms
-            axial_transform = cumulative_rotation @ transforms["axial"]
-            sagittal_transform = cumulative_rotation @ transforms["sagittal"]
-            coronal_transform = cumulative_rotation @ transforms["coronal"]
-        else:
-            # Use base transforms without rotation
-            axial_transform = transforms["axial"]
-            sagittal_transform = transforms["sagittal"]
-            coronal_transform = transforms["coronal"]
-
-        # Update slices with translated origins and rotated transforms
-        axial_matrix = create_vtk_reslice_matrix(axial_transform, axial_origin)
+        # All views share the same origin
+        axial_matrix = create_vtk_reslice_matrix(axial_transform, origin)
         actors["axial"]["reslice"].SetResliceAxes(axial_matrix)
 
-        sagittal_matrix = create_vtk_reslice_matrix(sagittal_transform, sagittal_origin)
+        sagittal_matrix = create_vtk_reslice_matrix(sagittal_transform, origin)
         actors["sagittal"]["reslice"].SetResliceAxes(sagittal_matrix)
 
-        coronal_matrix = create_vtk_reslice_matrix(coronal_transform, coronal_origin)
+        coronal_matrix = create_vtk_reslice_matrix(coronal_transform, origin)
         actors["coronal"]["reslice"].SetResliceAxes(coronal_matrix)
 
     def update_mpr_window_level(self, frame: int, window: float, level: float):

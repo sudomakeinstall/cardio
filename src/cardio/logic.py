@@ -39,19 +39,15 @@ class Logic:
             {"text": "Radians", "value": "radians"},
         ]
 
-        # Initialize slice bounds (will be updated when active volume changes)
-        self.server.state.axial_slice_bounds = [0.0, 100.0]
-        self.server.state.sagittal_slice_bounds = [0.0, 100.0]
-        self.server.state.coronal_slice_bounds = [0.0, 100.0]
+        # Initialize MPR origin (will be updated when active volume changes)
+        self.server.state.mpr_origin = [0.0, 0.0, 0.0]
 
         self.server.state.change("frame")(self.update_frame)
         self.server.state.change("playing")(self.play)
         self.server.state.change("theme_mode")(self.sync_background_color)
         self.server.state.change("mpr_enabled")(self.sync_mpr_mode)
         self.server.state.change("active_volume_label")(self.sync_active_volume)
-        self.server.state.change("axial_slice", "sagittal_slice", "coronal_slice")(
-            self.update_slice_positions
-        )
+        self.server.state.change("mpr_origin")(self.update_slice_positions)
         self.server.state.change("mpr_window", "mpr_level")(
             self.update_mpr_window_level
         )
@@ -163,9 +159,7 @@ class Logic:
         # Initialize MPR state
         self.server.state.mpr_enabled = self.scene.mpr_enabled
         self.server.state.active_volume_label = self.scene.active_volume_label
-        self.server.state.axial_slice = self.scene.axial_slice
-        self.server.state.sagittal_slice = self.scene.sagittal_slice
-        self.server.state.coronal_slice = self.scene.coronal_slice
+        self.server.state.mpr_origin = list(self.scene.mpr_origin)
         self.server.state.mpr_window = self.scene.mpr_window
         self.server.state.mpr_level = self.scene.mpr_level
         self.server.state.mpr_window_level_preset = self.scene.mpr_window_level_preset
@@ -284,17 +278,12 @@ class Logic:
     def _apply_current_mpr_settings(self, active_volume, frame):
         """Apply current slice positions and window/level to MPR actors."""
         # Apply slice positions
-        axial_slice = getattr(self.server.state, "axial_slice", 0.5)
-        sagittal_slice = getattr(self.server.state, "sagittal_slice", 0.5)
-        coronal_slice = getattr(self.server.state, "coronal_slice", 0.5)
-
+        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
         rotation_sequence, rotation_angles = self._get_visible_rotation_data()
 
         active_volume.update_slice_positions(
             frame,
-            axial_slice,
-            sagittal_slice,
-            coronal_slice,
+            origin,
             rotation_sequence,
             rotation_angles,
         )
@@ -497,12 +486,13 @@ class Logic:
         metadata["volume_label"] = active_volume_label
         doc["metadata"] = metadata
 
-        # Slice positions section
-        slice_positions = tk.table()
-        slice_positions["axial"] = getattr(self.server.state, "axial_slice", 0.5)
-        slice_positions["sagittal"] = getattr(self.server.state, "sagittal_slice", 0.5)
-        slice_positions["coronal"] = getattr(self.server.state, "coronal_slice", 0.5)
-        doc["slice_positions"] = slice_positions
+        # Origin position section
+        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+        origin_table = tk.table()
+        origin_table["x"] = origin[0]
+        origin_table["y"] = origin[1]
+        origin_table["z"] = origin[2]
+        doc["origin"] = origin_table
 
         # Rotations section (array of tables)
         rotation_sequence = getattr(self.server.state, "mpr_rotation_sequence", [])
@@ -639,29 +629,19 @@ class Logic:
         if not active_volume:
             return
 
-        # Update slice bounds based on active volume
+        # Initialize origin to volume center (in LPS coordinates)
         try:
-            bounds = active_volume.get_physical_bounds()
-            self.server.state.axial_slice_bounds = [bounds[4], bounds[5]]  # Z bounds
-            self.server.state.sagittal_slice_bounds = [bounds[0], bounds[1]]  # X bounds
-            self.server.state.coronal_slice_bounds = [
-                bounds[3],
-                bounds[2],
-            ]  # Y bounds (swapped for correct direction)
+            current_frame = getattr(self.server.state, "frame", 0)
+            volume_actor = active_volume.actors[current_frame]
+            image_data = volume_actor.GetMapper().GetInput()
+            center = image_data.GetCenter()
 
-            # Initialize slice positions to volume center if they are currently 0.0 (scene defaults)
-            if self.server.state.axial_slice == 0.0:
-                self.server.state.axial_slice = (bounds[4] + bounds[5]) / 2  # Z center
-            if self.server.state.sagittal_slice == 0.0:
-                self.server.state.sagittal_slice = (
-                    bounds[0] + bounds[1]
-                ) / 2  # X center
-            if self.server.state.coronal_slice == 0.0:
-                self.server.state.coronal_slice = (
-                    bounds[2] + bounds[3]
-                ) / 2  # Y center
+            # Set origin to volume center if it's at default [0,0,0]
+            current_origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+            if current_origin == [0.0, 0.0, 0.0]:
+                self.server.state.mpr_origin = list(center)
         except (RuntimeError, IndexError) as e:
-            print(f"Error: Cannot get bounds for volume '{active_volume_label}': {e}")
+            print(f"Error: Cannot get center for volume '{active_volume_label}': {e}")
             return
 
         # Create MPR actors for current frame
@@ -727,10 +707,8 @@ class Logic:
         if not active_volume:
             return
 
-        # Get current slice positions
-        axial_slice = getattr(self.server.state, "axial_slice", 0.5)
-        sagittal_slice = getattr(self.server.state, "sagittal_slice", 0.5)
-        coronal_slice = getattr(self.server.state, "coronal_slice", 0.5)
+        # Get current origin and frame
+        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
         current_frame = getattr(self.server.state, "frame", 0)
 
         rotation_sequence, rotation_angles = self._get_visible_rotation_data()
@@ -738,9 +716,7 @@ class Logic:
         # Update slice positions with rotation
         active_volume.update_slice_positions(
             current_frame,
-            axial_slice,
-            sagittal_slice,
-            coronal_slice,
+            origin,
             rotation_sequence,
             rotation_angles,
         )
@@ -829,10 +805,8 @@ class Logic:
         if not active_volume:
             return
 
-        # Get current slice positions
-        axial_slice = getattr(self.server.state, "axial_slice", 0.5)
-        sagittal_slice = getattr(self.server.state, "sagittal_slice", 0.5)
-        coronal_slice = getattr(self.server.state, "coronal_slice", 0.5)
+        # Get current origin and frame
+        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
         current_frame = getattr(self.server.state, "frame", 0)
 
         rotation_sequence, rotation_angles = self._get_visible_rotation_data()
@@ -840,9 +814,7 @@ class Logic:
         # Update slice positions with rotation
         active_volume.update_slice_positions(
             current_frame,
-            axial_slice,
-            sagittal_slice,
-            coronal_slice,
+            origin,
             rotation_sequence,
             rotation_angles,
         )

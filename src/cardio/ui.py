@@ -1,9 +1,11 @@
 import functools as ft
 
+import numpy as np
 from trame.ui.vuetify3 import SinglePageWithDrawerLayout
 from trame.widgets import vtk as vtk_widgets
 from trame.widgets import vuetify3 as vuetify
 
+from .orientation import EulerAxis, euler_angle_to_rotation_matrix
 from .scene import Scene
 from .volume_property_presets import list_volume_property_presets
 from .window_level import presets
@@ -99,32 +101,52 @@ class UI:
                 event["position"]["y"],
             ]
 
-    def _handle_slice_scroll(self, view_name, base_slice_delta):
-        """Handle slice scrolling for a specific view."""
-        match view_name:
-            case "axial":
-                current_slice = getattr(self.server.state, "axial_slice", 0.0)
-                bounds = getattr(self.server.state, "axial_slice_bounds", [0.0, 100.0])
-                slice_attr = "axial_slice"
-            case "sagittal":
-                current_slice = getattr(self.server.state, "sagittal_slice", 0.0)
-                bounds = getattr(
-                    self.server.state, "sagittal_slice_bounds", [0.0, 100.0]
-                )
-                slice_attr = "sagittal_slice"
-            case "coronal":
-                current_slice = getattr(self.server.state, "coronal_slice", 0.0)
-                bounds = getattr(
-                    self.server.state, "coronal_slice_bounds", [0.0, 100.0]
-                )
-                slice_attr = "coronal_slice"
-            case _:
-                return
+    def _get_scroll_vector(self, view_name):
+        """Get the current normal vector for a view after rotation."""
+        base_normals = {
+            "axial": np.array([0.0, 0.0, 1.0]),
+            "sagittal": np.array([1.0, 0.0, 0.0]),
+            "coronal": np.array([0.0, 1.0, 0.0]),
+        }
 
-        min_bound, max_bound = min(bounds), max(bounds)
-        slice_delta = base_slice_delta if bounds[1] > bounds[0] else -base_slice_delta
-        new_slice = max(min_bound, min(max_bound, current_slice + slice_delta))
-        setattr(self.server.state, slice_attr, new_slice)
+        if view_name not in base_normals:
+            return np.array([0.0, 0.0, 1.0])
+
+        # Build cumulative rotation from visible rotations
+        rotation_sequence = getattr(self.server.state, "mpr_rotation_sequence", [])
+        cumulative_rotation = np.eye(3)
+
+        for i in range(len(rotation_sequence)):
+            is_visible = getattr(self.server.state, f"mpr_rotation_visible_{i}", True)
+            if is_visible:
+                angle = getattr(self.server.state, f"mpr_rotation_angle_{i}", 0)
+                rotation = rotation_sequence[i]
+                rotation_matrix = euler_angle_to_rotation_matrix(
+                    EulerAxis(rotation["axis"]), angle
+                )
+                cumulative_rotation = cumulative_rotation @ rotation_matrix
+
+        return cumulative_rotation @ base_normals[view_name]
+
+    def _handle_slice_scroll(self, view_name, base_slice_delta):
+        """Handle slice scrolling for a specific view using rotated scroll vectors."""
+        if view_name not in {"axial", "sagittal", "coronal"}:
+            return
+
+        # Get current origin
+        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+
+        # Get scroll vector for this view (considering rotation)
+        scroll_vector = self._get_scroll_vector(view_name)
+
+        # Update origin along the rotated scroll direction
+        new_origin = [
+            origin[0] + base_slice_delta * scroll_vector[0],
+            origin[1] + base_slice_delta * scroll_vector[1],
+            origin[2] + base_slice_delta * scroll_vector[2],
+        ]
+
+        self.server.state.mpr_origin = new_origin
 
     def __init__(self, server, scene: Scene):
         self.server = server
@@ -330,47 +352,6 @@ class UI:
                         max=1000.0,
                         step=1.0,
                         hint="Level",
-                        persistent_hint=True,
-                        dense=True,
-                        hide_details=False,
-                        thumb_label=True,
-                    )
-
-                    # Slice position controls (only show when MPR is enabled and volume is selected)
-                    vuetify.VListSubheader(
-                        "Slice Positions", v_if="mpr_enabled && active_volume_label"
-                    )
-
-                    vuetify.VSlider(
-                        v_if="mpr_enabled && active_volume_label",
-                        v_model=("axial_slice", 0.0),
-                        min=("axial_slice_bounds[0]", 0.0),
-                        max=("axial_slice_bounds[1]", 100.0),
-                        hint="A (I ↔ S)",
-                        persistent_hint=True,
-                        dense=True,
-                        hide_details=False,
-                        thumb_label=True,
-                    )
-
-                    vuetify.VSlider(
-                        v_if="mpr_enabled && active_volume_label",
-                        v_model=("sagittal_slice", 0.0),
-                        min=("sagittal_slice_bounds[0]", 0.0),
-                        max=("sagittal_slice_bounds[1]", 100.0),
-                        hint="S (R ↔ L)",
-                        persistent_hint=True,
-                        dense=True,
-                        hide_details=False,
-                        thumb_label=True,
-                    )
-
-                    vuetify.VSlider(
-                        v_if="mpr_enabled && active_volume_label",
-                        v_model=("coronal_slice", 0.0),
-                        min=("coronal_slice_bounds[0]", 0.0),
-                        max=("coronal_slice_bounds[1]", 100.0),
-                        hint="C (P ↔ A)",
                         persistent_hint=True,
                         dense=True,
                         hide_details=False,
