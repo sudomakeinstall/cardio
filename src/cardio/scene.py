@@ -142,6 +142,20 @@ class Scene(ps.BaseSettings):
     coordinate_system: str = pc.Field(
         default="LAS", description="Coordinate system orientation (e.g., LAS, RAS, LPS)"
     )
+    mpr_crosshairs_enabled: bool = pc.Field(
+        default=True, description="Show crosshair lines indicating slice intersections"
+    )
+    mpr_crosshair_colors: dict = pc.Field(
+        default_factory=lambda: {
+            "axial": (0.0, 0.5, 1.0),
+            "sagittal": (1.0, 0.3, 0.3),
+            "coronal": (0.3, 1.0, 0.3),
+        },
+        description="RGB colors for crosshair lines (keyed by view name)",
+    )
+    mpr_crosshair_width: float = pc.Field(
+        default=1.5, description="Line width for crosshair lines"
+    )
 
     # Field validators for JSON string inputs
     @pc.field_validator("meshes", mode="before")

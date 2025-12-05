@@ -358,6 +358,15 @@ class UI:
                         thumb_label=True,
                     )
 
+                    vuetify.VCheckbox(
+                        v_if="mpr_enabled && active_volume_label",
+                        v_model=("mpr_crosshairs_enabled", True),
+                        label="Show Crosshairs",
+                        dense=True,
+                        hide_details=True,
+                        classes="mt-2",
+                    )
+
                     # MPR Rotation controls
                     vuetify.VListSubheader(
                         "Rotations", v_if="mpr_enabled && active_volume_label"

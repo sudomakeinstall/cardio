@@ -41,6 +41,7 @@ class Logic:
 
         # Initialize MPR origin (will be updated when active volume changes)
         self.server.state.mpr_origin = [0.0, 0.0, 0.0]
+        self.server.state.mpr_crosshairs_enabled = self.scene.mpr_crosshairs_enabled
 
         self.server.state.change("frame")(self.update_frame)
         self.server.state.change("playing")(self.play)
@@ -48,6 +49,9 @@ class Logic:
         self.server.state.change("mpr_enabled")(self.sync_mpr_mode)
         self.server.state.change("active_volume_label")(self.sync_active_volume)
         self.server.state.change("mpr_origin")(self.update_slice_positions)
+        self.server.state.change("mpr_crosshairs_enabled")(
+            self.sync_crosshairs_visibility
+        )
         self.server.state.change("mpr_window", "mpr_level")(
             self.update_mpr_window_level
         )
@@ -648,6 +652,13 @@ class Logic:
         current_frame = getattr(self.server.state, "frame", 0)
         mpr_actors = active_volume.get_mpr_actors_for_frame(current_frame)
 
+        # Create crosshair actors
+        crosshairs = active_volume.create_crosshair_actors(
+            colors=self.scene.mpr_crosshair_colors,
+            line_width=self.scene.mpr_crosshair_width,
+        )
+        crosshairs_visible = getattr(self.server.state, "mpr_crosshairs_enabled", True)
+
         # Add MPR actors to their respective renderers
         if self.scene.axial_renderWindow:
             axial_renderer = (
@@ -657,6 +668,10 @@ class Logic:
                 axial_renderer.RemoveAllViewProps()  # Clear existing actors
                 axial_renderer.AddActor(mpr_actors["axial"]["actor"])
                 mpr_actors["axial"]["actor"].SetVisibility(True)
+                # Add 2D crosshair overlay actors
+                for line_data in crosshairs["axial"].values():
+                    axial_renderer.AddActor2D(line_data["actor"])
+                    line_data["actor"].SetVisibility(crosshairs_visible)
                 axial_renderer.ResetCamera()
 
         if self.scene.coronal_renderWindow:
@@ -667,6 +682,10 @@ class Logic:
                 coronal_renderer.RemoveAllViewProps()
                 coronal_renderer.AddActor(mpr_actors["coronal"]["actor"])
                 mpr_actors["coronal"]["actor"].SetVisibility(True)
+                # Add 2D crosshair overlay actors
+                for line_data in crosshairs["coronal"].values():
+                    coronal_renderer.AddActor2D(line_data["actor"])
+                    line_data["actor"].SetVisibility(crosshairs_visible)
                 coronal_renderer.ResetCamera()
 
         if self.scene.sagittal_renderWindow:
@@ -677,6 +696,10 @@ class Logic:
                 sagittal_renderer.RemoveAllViewProps()
                 sagittal_renderer.AddActor(mpr_actors["sagittal"]["actor"])
                 mpr_actors["sagittal"]["actor"].SetVisibility(True)
+                # Add 2D crosshair overlay actors
+                for line_data in crosshairs["sagittal"].values():
+                    sagittal_renderer.AddActor2D(line_data["actor"])
+                    line_data["actor"].SetVisibility(crosshairs_visible)
                 sagittal_renderer.ResetCamera()
 
         # Apply current window/level settings to the MPR actors
@@ -820,6 +843,29 @@ class Logic:
         )
 
         # Update all views
+        self.server.controller.view_update()
+
+    def sync_crosshairs_visibility(self, **kwargs):
+        """Toggle crosshair visibility on all MPR views."""
+        if not getattr(self.server.state, "mpr_enabled", False):
+            return
+
+        active_volume_label = getattr(self.server.state, "active_volume_label", "")
+        if not active_volume_label:
+            return
+
+        # Find the active volume
+        active_volume = None
+        for volume in self.scene.volumes:
+            if volume.label == active_volume_label:
+                active_volume = volume
+                break
+
+        if not active_volume:
+            return
+
+        visible = getattr(self.server.state, "mpr_crosshairs_enabled", True)
+        active_volume.set_crosshairs_visible(visible)
         self.server.controller.view_update()
 
     def add_mpr_rotation(self, axis):

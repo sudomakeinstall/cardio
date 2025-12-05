@@ -30,6 +30,9 @@ class Volume(Object):
     _mpr_actors: dict[str, list[vtk.vtkImageActor]] = pc.PrivateAttr(
         default_factory=dict
     )
+    _crosshair_actors: dict[str, dict[str, vtk.vtkActor]] = pc.PrivateAttr(
+        default_factory=dict
+    )
 
     @pc.model_validator(mode="after")
     def initialize_volume(self):
@@ -133,6 +136,104 @@ class Volume(Object):
         if frame not in self._mpr_actors:
             return self.create_mpr_actors(frame)
         return self._mpr_actors[frame]
+
+    def create_crosshair_actors(self, colors: dict, line_width: float = 1.5) -> dict:
+        """Create 2D crosshair overlay actors for each MPR view.
+
+        Uses screen-space 2D actors that always appear centered in the view.
+
+        Args:
+            colors: Dict mapping view names to RGB tuples
+            line_width: Width of the crosshair lines
+
+        Returns:
+            Dict mapping view names to dicts with line actors
+        """
+        crosshairs = {}
+
+        for view_name in ["axial", "sagittal", "coronal"]:
+            view_crosshairs = {}
+
+            for line_name in ["line1", "line2"]:
+                # Create 2D line using normalized viewport coordinates
+                points = vtk.vtkPoints()
+                lines = vtk.vtkCellArray()
+
+                # Placeholder points - will set based on line orientation
+                if line_name == "line1":
+                    # Vertical line (one of the other planes)
+                    points.InsertNextPoint(0.5, 0.0, 0.0)
+                    points.InsertNextPoint(0.5, 1.0, 0.0)
+                else:
+                    # Horizontal line (other plane)
+                    points.InsertNextPoint(0.0, 0.5, 0.0)
+                    points.InsertNextPoint(1.0, 0.5, 0.0)
+
+                line = vtk.vtkLine()
+                line.GetPointIds().SetId(0, 0)
+                line.GetPointIds().SetId(1, 1)
+                lines.InsertNextCell(line)
+
+                polydata = vtk.vtkPolyData()
+                polydata.SetPoints(points)
+                polydata.SetLines(lines)
+
+                # Use coordinate transform to map normalized coords to viewport
+                coord = vtk.vtkCoordinate()
+                coord.SetCoordinateSystemToNormalizedViewport()
+
+                mapper = vtk.vtkPolyDataMapper2D()
+                mapper.SetInputData(polydata)
+                mapper.SetTransformCoordinate(coord)
+
+                actor = vtk.vtkActor2D()
+                actor.SetMapper(mapper)
+                actor.GetProperty().SetLineWidth(line_width)
+                actor.SetVisibility(False)
+
+                view_crosshairs[line_name] = {
+                    "polydata": polydata,
+                    "actor": actor,
+                }
+
+            # Set colors based on which planes the lines represent
+            if view_name == "axial":
+                view_crosshairs["line1"]["actor"].GetProperty().SetColor(
+                    *colors.get("sagittal", (1, 0, 0))
+                )
+                view_crosshairs["line2"]["actor"].GetProperty().SetColor(
+                    *colors.get("coronal", (0, 1, 0))
+                )
+            elif view_name == "sagittal":
+                view_crosshairs["line1"]["actor"].GetProperty().SetColor(
+                    *colors.get("axial", (0, 0, 1))
+                )
+                view_crosshairs["line2"]["actor"].GetProperty().SetColor(
+                    *colors.get("coronal", (0, 1, 0))
+                )
+            else:  # coronal
+                view_crosshairs["line1"]["actor"].GetProperty().SetColor(
+                    *colors.get("axial", (0, 0, 1))
+                )
+                view_crosshairs["line2"]["actor"].GetProperty().SetColor(
+                    *colors.get("sagittal", (1, 0, 0))
+                )
+
+            crosshairs[view_name] = view_crosshairs
+
+        self._crosshair_actors = crosshairs
+        return crosshairs
+
+    @property
+    def crosshair_actors(self) -> dict:
+        """Get crosshair actors."""
+        return self._crosshair_actors
+
+    def set_crosshairs_visible(self, visible: bool):
+        """Set visibility of all crosshair actors."""
+        for view_crosshairs in self._crosshair_actors.values():
+            for line_data in view_crosshairs.values():
+                line_data["actor"].SetVisibility(visible)
 
     def _get_mpr_coordinate_systems(self):
         """Get coordinate system transformation matrices for MPR views."""
