@@ -1,7 +1,4 @@
-# System
 import numpy as np
-
-# Third Party
 import vtk
 
 

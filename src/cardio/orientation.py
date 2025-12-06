@@ -1,9 +1,7 @@
-# System
 from enum import Enum
 
-# Third Party
-import numpy as np
 import itk
+import numpy as np
 
 
 # DICOM LPS canonical orientation vector mappings

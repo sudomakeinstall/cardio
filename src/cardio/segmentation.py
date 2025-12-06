@@ -1,17 +1,14 @@
-# System
 import logging
 
-# Third Party
 import itk
 import numpy as np
 import pydantic as pc
 import vtk
 
-# Internal
+from .object import Object
 from .orientation import (
     reset_direction,
 )
-from .object import Object
 from .property_config import vtkPropertyConfig
 
 

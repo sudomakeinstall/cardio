@@ -1,7 +1,5 @@
-# System
 import typing
 
-# Third Party
 import pydantic as pc
 
 ScalarComponent: typing.TypeAlias = typing.Annotated[

@@ -1,8 +1,6 @@
-# Third Party
 import pydantic as pc
 import vtk
 
-# Internal
 from .color_transfer_function import ColorTransferFunctionConfig
 from .piecewise_function import PiecewiseFunctionConfig
 

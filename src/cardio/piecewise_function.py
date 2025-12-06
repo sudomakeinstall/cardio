@@ -1,8 +1,6 @@
-# Third Party
 import pydantic as pc
 import vtk
 
-# Internal
 from .types import ScalarComponent
 
 

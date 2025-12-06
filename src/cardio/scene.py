@@ -1,15 +1,12 @@
-# System
 import logging
 import pathlib as pl
 import typing as ty
 
-# Third Party
 import numpy as np
 import pydantic as pc
 import pydantic_settings as ps
 import vtk
 
-# Internal
 from .mesh import Mesh
 from .segmentation import Segmentation
 from .types import RGBColor

@@ -1,10 +1,8 @@
-# System
 import functools
 import logging
 import pathlib as pl
 import re
 
-# Third Party
 import pydantic as pc
 import vtk
 

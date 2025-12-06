@@ -1,8 +1,6 @@
-# Third Party
 import pydantic as pc
 import vtk
 
-# Internal
 from .blend_transfer_functions import blend_transfer_functions
 from .transfer_function_pair import TransferFunctionPairConfig
 from .types import ScalarComponent

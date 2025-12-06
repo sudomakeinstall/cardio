@@ -1,12 +1,9 @@
-# System
 import enum
 import logging
 
-# Third Party
 import pydantic as pc
 import vtk
 
-# Internal
 from .object import Object
 from .property_config import Representation, vtkPropertyConfig
 

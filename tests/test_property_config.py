@@ -1,15 +1,11 @@
 """Test vtkPropertyConfig."""
 
-# System
 import pathlib as pl
 
 import pytest as pt
-
-# Third Party
 import tomlkit as tk
 import vtk
 
-# Internal
 from cardio.property_config import Interpolation, Representation, vtkPropertyConfig
 
 

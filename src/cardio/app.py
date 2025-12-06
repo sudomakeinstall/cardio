@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 
-# Third Party
 import pydantic_settings as ps
 import trame as tm
 import trame.decorators
 
-# Internal
 from . import __version__
 from .logic import Logic
 from .scene import Scene

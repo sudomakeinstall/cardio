@@ -1,11 +1,7 @@
-# System
+import itk
+import numpy as np
 import pytest
 
-# Third Party
-import numpy as np
-import itk
-
-# Internal
 from cardio.orientation import (
     AngleUnits,
     EulerAxis,

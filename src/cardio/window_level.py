@@ -1,7 +1,5 @@
-# System
 import functools as ft
 
-# Third Party
 import pydantic as pc
 
 

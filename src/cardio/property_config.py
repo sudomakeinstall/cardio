@@ -1,12 +1,9 @@
-# System
 import enum
 import functools
 
-# Third Party
 import pydantic as pc
 import vtk
 
-# Internal
 from .types import RGBColor, ScalarComponent
 
 

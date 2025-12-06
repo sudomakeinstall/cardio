@@ -1,11 +1,8 @@
-# System
 import pathlib as pl
 
-# Third Party
 import pydantic as pc
 import tomlkit as tk
 
-# Internal
 from .volume_property import VolumePropertyConfig
 
 
