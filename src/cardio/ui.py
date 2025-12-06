@@ -327,6 +327,10 @@ class UI:
                     self.server.controller.on_server_ready.add(
                         self._update_all_mpr_views
                     )
+                    # Finalize MPR initialization after UI is ready to avoid race condition
+                    self.server.controller.on_server_ready.add(
+                        self.server.controller.finalize_mpr_initialization
+                    )
 
                     # Store individual view update functions
                     self.server.controller.axial_update = axial_view.update

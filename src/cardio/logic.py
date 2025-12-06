@@ -151,6 +151,9 @@ class Logic:
         self.server.controller.save_rotation_angles = self.save_rotation_angles
         self.server.controller.reset_all = self.reset_all
         self.server.controller.close_application = self.close_application
+        self.server.controller.finalize_mpr_initialization = (
+            self.finalize_mpr_initialization
+        )
 
         # MPR rotation controllers
         self.server.controller.add_x_rotation = lambda: self.add_mpr_rotation("X")
@@ -161,11 +164,14 @@ class Logic:
 
         # Initialize MPR state
         self.server.state.mpr_enabled = self.scene.mpr_enabled
-        # Set active volume to first volume if not specified
-        if self.scene.volumes and not self.scene.active_volume_label:
-            self.server.state.active_volume_label = self.scene.volumes[0].label
-        else:
-            self.server.state.active_volume_label = self.scene.active_volume_label
+        # Initialize active_volume_label to empty string (actual value set after UI ready)
+        self.server.state.active_volume_label = ""
+        # Store the actual volume label to set later, avoiding race condition
+        self._pending_active_volume = (
+            self.scene.volumes[0].label
+            if self.scene.volumes and not self.scene.active_volume_label
+            else self.scene.active_volume_label
+        )
         self.server.state.mpr_origin = list(self.scene.mpr_origin)
         self.server.state.mpr_window = self.scene.mpr_window
         self.server.state.mpr_level = self.scene.mpr_level
@@ -935,6 +941,14 @@ class Logic:
         # Clear unused labels
         for i in range(len(rotation_sequence), self.scene.max_mpr_rotations):
             setattr(self.server.state, f"mpr_rotation_axis_{i}", f"Rotation {i + 1}")
+
+    def finalize_mpr_initialization(self, **kwargs):
+        """Set the active volume label after UI is ready to avoid race condition."""
+        if hasattr(self, "_pending_active_volume") and self._pending_active_volume:
+            self.server.state.active_volume_label = self._pending_active_volume
+            # Manually trigger sync_active_volume since state change may not fire during on_server_ready
+            self.sync_active_volume(self._pending_active_volume)
+            delattr(self, "_pending_active_volume")
 
     @asynchronous.task
     async def close_application(self):
