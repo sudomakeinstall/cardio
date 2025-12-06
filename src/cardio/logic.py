@@ -323,6 +323,7 @@ class Logic:
             origin,
             rotation_sequence,
             rotation_angles,
+            self.scene.angle_units,
         )
 
         # Apply window/level
@@ -577,13 +578,46 @@ class Logic:
 
     def sync_angle_units(self, angle_units, **kwargs):
         """Sync angle units selection - updates the scene configuration."""
-        from .utils import AngleUnit
+        import copy
+
+        import numpy as np
+
+        from .orientation import AngleUnits
+
+        # Get current units before changing
+        old_units = self.scene.angle_units
 
         # Update the scene's angle_units field based on UI selection
+        new_units = None
         if angle_units == "degrees":
-            self.scene.angle_units = AngleUnit.DEGREES
+            new_units = AngleUnits.DEGREES
         elif angle_units == "radians":
-            self.scene.angle_units = AngleUnit.RADIANS
+            new_units = AngleUnits.RADIANS
+
+        if new_units is None or old_units == new_units:
+            return
+
+        # Convert all existing rotation angles
+        rotation_data = getattr(
+            self.server.state, "mpr_rotation_data", {"angles_list": []}
+        )
+        if rotation_data.get("angles_list"):
+            updated_data = copy.deepcopy(rotation_data)
+
+            for rotation in updated_data["angles_list"]:
+                current_angle = rotation.get("angle", 0)
+
+                # Convert based on old -> new units
+                if old_units == AngleUnits.DEGREES and new_units == AngleUnits.RADIANS:
+                    rotation["angle"] = np.radians(current_angle)
+                elif (
+                    old_units == AngleUnits.RADIANS and new_units == AngleUnits.DEGREES
+                ):
+                    rotation["angle"] = np.degrees(current_angle)
+
+            self.server.state.mpr_rotation_data = updated_data
+
+        self.scene.angle_units = new_units
 
     def _initialize_clipping_state(self):
         """Initialize clipping state variables for all objects."""
@@ -775,6 +809,7 @@ class Logic:
             origin,
             rotation_sequence,
             rotation_angles,
+            self.scene.angle_units,
         )
 
         # Update all views
@@ -873,6 +908,7 @@ class Logic:
             origin,
             rotation_sequence,
             rotation_angles,
+            self.scene.angle_units,
         )
 
         # Update all views

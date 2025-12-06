@@ -10,13 +10,6 @@ class InterpolatorType(enum.Enum):
     NEAREST = "nearest"
 
 
-class AngleUnit(enum.Enum):
-    """Units for angle measurements."""
-
-    DEGREES = "degrees"
-    RADIANS = "radians"
-
-
 def calculate_combined_bounds(actors):
     """Calculate combined bounds encompassing all VTK actors.
 

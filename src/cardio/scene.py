@@ -8,9 +8,9 @@ import pydantic_settings as ps
 import vtk
 
 from .mesh import Mesh
+from .orientation import AngleUnits
 from .segmentation import Segmentation
 from .types import RGBColor
-from .utils import AngleUnit
 from .volume import Volume
 
 MeshListAdapter = pc.TypeAdapter(list[Mesh])
@@ -132,8 +132,8 @@ class Scene(ps.BaseSettings):
         default=20,
         description="Maximum number of MPR rotations supported",
     )
-    angle_units: AngleUnit = pc.Field(
-        default=AngleUnit.DEGREES,
+    angle_units: AngleUnits = pc.Field(
+        default=AngleUnits.RADIANS,
         description="Units for angle measurements in rotation serialization",
     )
     coordinate_system: str = pc.Field(

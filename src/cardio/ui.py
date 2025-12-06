@@ -8,7 +8,7 @@ from trame.widgets import html
 from trame.widgets import vtk as vtk_widgets
 from trame.widgets import vuetify3 as vuetify
 
-from .orientation import EulerAxis, euler_angle_to_rotation_matrix
+from .orientation import AngleUnits, EulerAxis, euler_angle_to_rotation_matrix
 from .scene import Scene
 from .volume_property_presets import list_volume_property_presets
 from .window_level import presets
@@ -158,11 +158,15 @@ class UI:
         angles_list = rotation_data.get("angles_list", [])
         cumulative_rotation = np.eye(3)
 
+        # Get current angle units
+        angle_units_str = getattr(self.server.state, "angle_units", "degrees")
+        angle_units = AngleUnits(angle_units_str)
+
         for rotation in angles_list:
             if rotation.get("visible", True):
                 angle = rotation.get("angle", 0)
                 rotation_matrix = euler_angle_to_rotation_matrix(
-                    EulerAxis(rotation["axis"]), angle
+                    EulerAxis(rotation["axis"]), angle, angle_units
                 )
                 cumulative_rotation = cumulative_rotation @ rotation_matrix
 
@@ -591,9 +595,13 @@ class UI:
                                         v_model=(
                                             f"mpr_rotation_data.angles_list[{i}].angle",
                                         ),
-                                        min=-180,
-                                        max=180,
-                                        step=1,
+                                        min=(
+                                            "angle_units === 'radians' ? -Math.PI : -180",
+                                        ),
+                                        max=(
+                                            "angle_units === 'radians' ? Math.PI : 180",
+                                        ),
+                                        step=("angle_units === 'radians' ? 0.01 : 1",),
                                         hint=(
                                             f"mpr_rotation_data.angles_list[{i}].label",
                                             f"Rotation {i + 1}",
@@ -637,7 +645,7 @@ class UI:
                             vuetify.VLabel("Units:")
                         with vuetify.VCol(cols="8"):
                             vuetify.VSelect(
-                                v_model=("angle_units", "degrees"),
+                                v_model=("angle_units", "radians"),
                                 items=("angle_units_items", []),
                                 item_title="text",
                                 item_value="value",

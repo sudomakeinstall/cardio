@@ -299,15 +299,20 @@ class Volume(Object):
         return bounds
 
     def _build_cumulative_rotation(
-        self, rotation_sequence: list, rotation_angles: dict
+        self, rotation_sequence: list, rotation_angles: dict, angle_units=None
     ) -> np.ndarray:
         """Build cumulative rotation matrix from sequence of rotations."""
+        from .orientation import AngleUnits
+
+        if angle_units is None:
+            angle_units = AngleUnits.DEGREES
+
         cumulative_rotation = np.eye(3)
         if rotation_sequence and rotation_angles:
             for i, rotation in enumerate(rotation_sequence):
                 angle = rotation_angles.get(i, 0)
                 rotation_matrix = euler_angle_to_rotation_matrix(
-                    EulerAxis(rotation["axis"]), angle
+                    EulerAxis(rotation["axis"]), angle, angle_units
                 )
                 cumulative_rotation = cumulative_rotation @ rotation_matrix
         return cumulative_rotation
@@ -317,6 +322,7 @@ class Volume(Object):
         view_name: str,
         rotation_sequence: list = None,
         rotation_angles: dict = None,
+        angle_units=None,
     ) -> np.ndarray:
         """Get the current normal vector for a view after rotation.
 
@@ -324,6 +330,7 @@ class Volume(Object):
             view_name: One of "axial", "sagittal", "coronal"
             rotation_sequence: List of rotation definitions
             rotation_angles: Dict mapping rotation index to angle
+            angle_units: AngleUnits enum (degrees or radians)
 
         Returns:
             3D unit vector representing the scroll direction for this view
@@ -338,7 +345,7 @@ class Volume(Object):
             return np.array([0.0, 0.0, 1.0])
 
         cumulative_rotation = self._build_cumulative_rotation(
-            rotation_sequence, rotation_angles
+            rotation_sequence, rotation_angles, angle_units
         )
         return cumulative_rotation @ base_normals[view_name]
 
@@ -348,6 +355,7 @@ class Volume(Object):
         origin: list,
         rotation_sequence: list = None,
         rotation_angles: dict = None,
+        angle_units=None,
     ):
         """Update slice positions for MPR views with optional rotation.
 
@@ -356,7 +364,12 @@ class Volume(Object):
             origin: [x, y, z] position in LPS coordinates (shared by all views)
             rotation_sequence: List of rotation definitions
             rotation_angles: Dict mapping rotation index to angle
+            angle_units: AngleUnits enum (degrees or radians), defaults to DEGREES
         """
+        from .orientation import AngleUnits
+
+        if angle_units is None:
+            angle_units = AngleUnits.DEGREES
         if frame not in self._mpr_actors:
             return
 
@@ -367,7 +380,7 @@ class Volume(Object):
 
         # Build cumulative rotation matrix
         cumulative_rotation = self._build_cumulative_rotation(
-            rotation_sequence, rotation_angles
+            rotation_sequence, rotation_angles, angle_units
         )
 
         # Apply rotation to base transforms
