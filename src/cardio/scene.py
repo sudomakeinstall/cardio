@@ -140,7 +140,7 @@ class Scene(ps.BaseSettings):
         default="LAS", description="Coordinate system orientation (e.g., LAS, RAS, LPS)"
     )
     mpr_crosshairs_enabled: bool = pc.Field(
-        default=False, description="Show crosshair lines indicating slice intersections"
+        default=True, description="Show crosshair lines indicating slice intersections"
     )
     mpr_crosshair_colors: dict = pc.Field(
         default_factory=lambda: {
