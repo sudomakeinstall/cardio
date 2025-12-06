@@ -959,7 +959,7 @@ class Logic:
         self.server.state.mpr_rotation_data = current_data
 
     def remove_mpr_rotation(self, index):
-        """Remove a rotation at given index and all subsequent rotations."""
+        """Remove a rotation at given index."""
         import copy
 
         current_data = copy.deepcopy(
@@ -968,7 +968,7 @@ class Logic:
         angles_list = current_data["angles_list"]
 
         if 0 <= index < len(angles_list):
-            angles_list = angles_list[:index]
+            angles_list.pop(index)
 
             # Regenerate labels for remaining rotations
             for i, rotation in enumerate(angles_list):

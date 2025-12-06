@@ -570,7 +570,7 @@ class UI:
 
                     # Reset rotations button
                     vuetify.VBtn(
-                        "Reset",
+                        "Remove All Rotations",
                         v_if="!maximized_view && active_volume_label && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > 0",
                         click=self.server.controller.reset_rotations,
                         small=True,
@@ -632,7 +632,7 @@ class UI:
                                         small=True,
                                         dense=True,
                                         color="error",
-                                        title="Remove this rotation and all subsequent ones",
+                                        title="Remove this rotation",
                                     )
 
                     # Angle units selector
