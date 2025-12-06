@@ -10,14 +10,20 @@ from .screenshot import Screenshot
 class Logic:
     def _get_visible_rotation_data(self):
         """Get rotation sequence and angles for visible rotations only."""
-        rotation_sequence = getattr(self.server.state, "mpr_rotation_sequence", [])
+        rotation_data = getattr(
+            self.server.state, "mpr_rotation_data", {"angles_list": []}
+        )
+        angles_list = rotation_data.get("angles_list", [])
+
+        # Build rotation_sequence (list of {"axis": ...}) for visible rotations
+        rotation_sequence = []
         rotation_angles = {}
-        for i in range(len(rotation_sequence)):
-            is_visible = getattr(self.server.state, f"mpr_rotation_visible_{i}", True)
-            if is_visible:
-                rotation_angles[i] = getattr(
-                    self.server.state, f"mpr_rotation_angle_{i}", 0
-                )
+
+        for i, rotation in enumerate(angles_list):
+            if rotation.get("visible", True):
+                rotation_sequence.append({"axis": rotation["axis"]})
+                rotation_angles[i] = rotation.get("angle", 0)
+
         return rotation_sequence, rotation_angles
 
     def __init__(self, server, scene: Scene):
@@ -55,17 +61,8 @@ class Logic:
             self.update_mpr_window_level
         )
         self.server.state.change("mpr_window_level_preset")(self.update_mpr_preset)
-        self.server.state.change("mpr_rotation_sequence")(self.update_mpr_rotation)
+        self.server.state.change("mpr_rotation_data")(self.update_mpr_rotation)
         self.server.state.change("angle_units")(self.sync_angle_units)
-
-        # Add handlers for individual rotation angles and visibility
-        for i in range(self.scene.max_mpr_rotations):
-            self.server.state.change(f"mpr_rotation_angle_{i}")(
-                self.update_mpr_rotation
-            )
-            self.server.state.change(f"mpr_rotation_visible_{i}")(
-                self.update_mpr_rotation
-            )
 
         # Initialize visibility state variables
         for m in self.scene.meshes:
@@ -176,7 +173,20 @@ class Logic:
         self.server.state.mpr_window = self.scene.mpr_window
         self.server.state.mpr_level = self.scene.mpr_level
         self.server.state.mpr_window_level_preset = self.scene.mpr_window_level_preset
-        self.server.state.mpr_rotation_sequence = self.scene.mpr_rotation_sequence
+
+        # Initialize rotation data with nested list structure
+        self.server.state.mpr_rotation_data = {
+            "angles_list": [
+                {
+                    "axis": rotation["axis"],
+                    "angle": rotation.get("angle", 0),
+                    "visible": True,
+                    "label": f"{rotation['axis']} ({i + 1})",
+                }
+                for i, rotation in enumerate(self.scene.mpr_rotation_sequence)
+            ]
+        }
+
         self.server.state.angle_units = self.scene.angle_units.value
 
         # Initialize MPR presets data
@@ -189,12 +199,6 @@ class Logic:
         except Exception as e:
             print(f"Error initializing MPR presets: {e}")
             self.server.state.mpr_presets = []
-
-        # Initialize rotation angle states
-        for i in range(self.scene.max_mpr_rotations):
-            setattr(self.server.state, f"mpr_rotation_angle_{i}", 0)
-            setattr(self.server.state, f"mpr_rotation_axis_{i}", f"Rotation {i + 1}")
-            setattr(self.server.state, f"mpr_rotation_visible_{i}", True)
 
         # Apply initial preset to ensure window/level values are set correctly
         # Only update state values, don't call update methods yet since MPR may not be enabled
@@ -528,20 +532,20 @@ class Logic:
         doc["origin"] = origin_table
 
         # Rotations section (array of tables)
-        rotation_sequence = getattr(self.server.state, "mpr_rotation_sequence", [])
+        rotation_data = getattr(
+            self.server.state, "mpr_rotation_data", {"angles_list": []}
+        )
+        angles_list = rotation_data.get("angles_list", [])
         rotations_array = tk.aot()
 
-        for i, rotation_def in enumerate(rotation_sequence):
+        for rotation_def in angles_list:
             rotation = tk.table()
-            rotation["axis"] = rotation_def["axis"]
-            angle = getattr(self.server.state, f"mpr_rotation_angle_{i}", 0)
-            rotation["angle"] = float(angle)
-            rotation["visible"] = getattr(
-                self.server.state, f"mpr_rotation_visible_{i}", True
-            )
+            rotation["angles"] = [float(rotation_def.get("angle", 0))]
+            rotation["axes"] = rotation_def["axis"]
+            rotation["visible"] = rotation_def.get("visible", True)
             rotations_array.append(rotation)
 
-        doc["rotations"] = rotations_array
+        doc["angles_list"] = rotations_array
 
         # Save to file
         output_path = save_dir / f"{timestamp_str}.toml"
@@ -901,46 +905,45 @@ class Logic:
         """Add a new rotation to the MPR rotation sequence."""
         import copy
 
-        current_sequence = copy.deepcopy(
-            getattr(self.server.state, "mpr_rotation_sequence", [])
+        current_data = copy.deepcopy(
+            getattr(self.server.state, "mpr_rotation_data", {"angles_list": []})
         )
-        current_sequence.append({"axis": axis, "angle": 0})
-        self.server.state.mpr_rotation_sequence = current_sequence
-        self.update_mpr_rotation_labels()
+        angles_list = current_data["angles_list"]
+        new_index = len(angles_list)
+
+        angles_list.append(
+            {
+                "axis": axis,
+                "angle": 0,
+                "visible": True,
+                "label": f"{axis} ({new_index + 1})",
+            }
+        )
+
+        self.server.state.mpr_rotation_data = current_data
 
     def remove_mpr_rotation(self, index):
         """Remove a rotation at given index and all subsequent rotations."""
-        sequence = list(getattr(self.server.state, "mpr_rotation_sequence", []))
-        if 0 <= index < len(sequence):
-            sequence = sequence[:index]
-            self.server.state.mpr_rotation_sequence = sequence
+        import copy
 
-            # Reset angle states for all removed rotations
-            for i in range(index, self.scene.max_mpr_rotations):
-                setattr(self.server.state, f"mpr_rotation_angle_{i}", 0)
+        current_data = copy.deepcopy(
+            getattr(self.server.state, "mpr_rotation_data", {"angles_list": []})
+        )
+        angles_list = current_data["angles_list"]
 
-            self.update_mpr_rotation_labels()
+        if 0 <= index < len(angles_list):
+            angles_list = angles_list[:index]
+
+            # Regenerate labels for remaining rotations
+            for i, rotation in enumerate(angles_list):
+                rotation["label"] = f"{rotation['axis']} ({i + 1})"
+
+            current_data["angles_list"] = angles_list
+            self.server.state.mpr_rotation_data = current_data
 
     def reset_mpr_rotations(self):
         """Reset all MPR rotations."""
-        self.server.state.mpr_rotation_sequence = []
-        for i in range(self.scene.max_mpr_rotations):
-            setattr(self.server.state, f"mpr_rotation_angle_{i}", 0)
-            setattr(self.server.state, f"mpr_rotation_visible_{i}", True)
-        self.update_mpr_rotation_labels()
-
-    def update_mpr_rotation_labels(self):
-        """Update the rotation axis labels for display."""
-        rotation_sequence = getattr(self.server.state, "mpr_rotation_sequence", [])
-        for i, rotation in enumerate(rotation_sequence):
-            setattr(
-                self.server.state,
-                f"mpr_rotation_axis_{i}",
-                f"{rotation['axis']} ({i + 1})",
-            )
-        # Clear unused labels
-        for i in range(len(rotation_sequence), self.scene.max_mpr_rotations):
-            setattr(self.server.state, f"mpr_rotation_axis_{i}", f"Rotation {i + 1}")
+        self.server.state.mpr_rotation_data = {"angles_list": []}
 
     def finalize_mpr_initialization(self, **kwargs):
         """Set the active volume label after UI is ready to avoid race condition."""

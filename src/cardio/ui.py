@@ -3,6 +3,7 @@ import time
 
 import numpy as np
 from trame.ui.vuetify3 import SinglePageWithDrawerLayout
+from trame.widgets import client
 from trame.widgets import html
 from trame.widgets import vtk as vtk_widgets
 from trame.widgets import vuetify3 as vuetify
@@ -151,14 +152,15 @@ class UI:
             return np.array([0.0, 0.0, 1.0])
 
         # Build cumulative rotation from visible rotations
-        rotation_sequence = getattr(self.server.state, "mpr_rotation_sequence", [])
+        rotation_data = getattr(
+            self.server.state, "mpr_rotation_data", {"angles_list": []}
+        )
+        angles_list = rotation_data.get("angles_list", [])
         cumulative_rotation = np.eye(3)
 
-        for i in range(len(rotation_sequence)):
-            is_visible = getattr(self.server.state, f"mpr_rotation_visible_{i}", True)
-            if is_visible:
-                angle = getattr(self.server.state, f"mpr_rotation_angle_{i}", 0)
-                rotation = rotation_sequence[i]
+        for rotation in angles_list:
+            if rotation.get("visible", True):
+                angle = rotation.get("angle", 0)
                 rotation_matrix = euler_angle_to_rotation_matrix(
                     EulerAxis(rotation["axis"]), angle
                 )
@@ -565,7 +567,7 @@ class UI:
                     # Reset rotations button
                     vuetify.VBtn(
                         "Reset",
-                        v_if="!maximized_view && active_volume_label && mpr_rotation_sequence && mpr_rotation_sequence.length > 0",
+                        v_if="!maximized_view && active_volume_label && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > 0",
                         click=self.server.controller.reset_rotations,
                         small=True,
                         dense=True,
@@ -576,48 +578,54 @@ class UI:
                         prepend_icon="mdi-refresh",
                     )
 
-                    # Individual rotation sliders
-                    for i in range(self.scene.max_mpr_rotations):
-                        with vuetify.VRow(
-                            v_if=f"!maximized_view && active_volume_label && mpr_rotation_sequence && mpr_rotation_sequence.length > {i}",
-                            no_gutters=True,
-                            classes="align-center mb-1",
-                        ):
-                            with vuetify.VCol(cols="8"):
-                                vuetify.VSlider(
-                                    v_model=(f"mpr_rotation_angle_{i}", 0),
-                                    min=-180,
-                                    max=180,
-                                    step=1,
-                                    hint=(
-                                        f"mpr_rotation_axis_{i}",
-                                        f"Rotation {i + 1}",
-                                    ),
-                                    persistent_hint=True,
-                                    dense=True,
-                                    hide_details=False,
-                                    thumb_label=True,
-                                )
-                            with vuetify.VCol(cols="2"):
-                                vuetify.VCheckbox(
-                                    v_model=(f"mpr_rotation_visible_{i}", True),
-                                    true_icon="mdi-eye",
-                                    false_icon="mdi-eye-off",
-                                    hide_details=True,
-                                    dense=True,
-                                    title="Toggle this rotation and all subsequent ones",
-                                )
-                            with vuetify.VCol(cols="2"):
-                                vuetify.VBtn(
-                                    icon="mdi-delete",
-                                    click=ft.partial(
-                                        self.server.controller.remove_rotation_event, i
-                                    ),
-                                    small=True,
-                                    dense=True,
-                                    color="error",
-                                    title="Remove this rotation and all subsequent ones",
-                                )
+                    # Individual rotation sliders with DeepReactive
+                    with client.DeepReactive("mpr_rotation_data"):
+                        for i in range(self.scene.max_mpr_rotations):
+                            with vuetify.VRow(
+                                v_if=f"!maximized_view && active_volume_label && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > {i}",
+                                no_gutters=True,
+                                classes="align-center mb-1",
+                            ):
+                                with vuetify.VCol(cols="8"):
+                                    vuetify.VSlider(
+                                        v_model=(
+                                            f"mpr_rotation_data.angles_list[{i}].angle",
+                                        ),
+                                        min=-180,
+                                        max=180,
+                                        step=1,
+                                        hint=(
+                                            f"mpr_rotation_data.angles_list[{i}].label",
+                                            f"Rotation {i + 1}",
+                                        ),
+                                        persistent_hint=True,
+                                        dense=True,
+                                        hide_details=False,
+                                        thumb_label=True,
+                                    )
+                                with vuetify.VCol(cols="2"):
+                                    vuetify.VCheckbox(
+                                        v_model=(
+                                            f"mpr_rotation_data.angles_list[{i}].visible",
+                                        ),
+                                        true_icon="mdi-eye",
+                                        false_icon="mdi-eye-off",
+                                        hide_details=True,
+                                        dense=True,
+                                        title="Toggle this rotation",
+                                    )
+                                with vuetify.VCol(cols="2"):
+                                    vuetify.VBtn(
+                                        icon="mdi-delete",
+                                        click=ft.partial(
+                                            self.server.controller.remove_rotation_event,
+                                            i,
+                                        ),
+                                        small=True,
+                                        dense=True,
+                                        color="error",
+                                        title="Remove this rotation and all subsequent ones",
+                                    )
 
                     # Angle units selector
                     with vuetify.VRow(
@@ -641,7 +649,7 @@ class UI:
                     # Save rotations button
                     vuetify.VBtn(
                         "Save Rotations",
-                        v_if="!maximized_view && active_volume_label && mpr_rotation_sequence && mpr_rotation_sequence.length > 0",
+                        v_if="!maximized_view && active_volume_label && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > 0",
                         click=self.server.controller.save_rotation_angles,
                         small=True,
                         dense=True,
