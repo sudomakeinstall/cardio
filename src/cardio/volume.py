@@ -206,17 +206,17 @@ class Volume(Object):
                 )
             elif view_name == "sagittal":
                 view_crosshairs["line1"]["actor"].GetProperty().SetColor(
-                    *colors.get("axial", (0, 0, 1))
+                    *colors.get("coronal", (0, 1, 0))
                 )
                 view_crosshairs["line2"]["actor"].GetProperty().SetColor(
-                    *colors.get("coronal", (0, 1, 0))
+                    *colors.get("axial", (0, 0, 1))
                 )
             else:  # coronal
                 view_crosshairs["line1"]["actor"].GetProperty().SetColor(
-                    *colors.get("axial", (0, 0, 1))
+                    *colors.get("sagittal", (1, 0, 0))
                 )
                 view_crosshairs["line2"]["actor"].GetProperty().SetColor(
-                    *colors.get("sagittal", (1, 0, 0))
+                    *colors.get("axial", (0, 0, 1))
                 )
 
             crosshairs[view_name] = view_crosshairs
