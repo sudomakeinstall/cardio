@@ -19,10 +19,12 @@ class Logic:
         rotation_sequence = []
         rotation_angles = {}
 
-        for i, rotation in enumerate(angles_list):
+        visible_index = 0
+        for rotation in angles_list:
             if rotation.get("visible", True):
                 rotation_sequence.append({"axis": rotation["axes"]})
-                rotation_angles[i] = rotation["angles"][0]
+                rotation_angles[visible_index] = rotation["angles"][0]
+                visible_index += 1
 
         return rotation_sequence, rotation_angles
 
