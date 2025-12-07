@@ -159,6 +159,7 @@ class Logic:
         self.server.controller.add_y_rotation = lambda: self.add_mpr_rotation("Y")
         self.server.controller.add_z_rotation = lambda: self.add_mpr_rotation("Z")
         self.server.controller.remove_rotation_event = self.remove_mpr_rotation
+        self.server.controller.reset_rotation_angle = self.reset_rotation_angle
         self.server.controller.reset_rotations = self.reset_mpr_rotations
 
         # Initialize MPR state
@@ -187,6 +188,7 @@ class Logic:
                     "visible": rotation.get("visible", True),
                     "name": rotation.get("name", ""),
                     "name_editable": rotation.get("name_editable", True),
+                    "deletable": rotation.get("deletable", True),
                 }
                 for i, rotation in enumerate(self.scene.mpr_rotation_sequence)
             ]
@@ -959,6 +961,7 @@ class Logic:
                 "visible": True,
                 "name": "",
                 "name_editable": True,
+                "deletable": True,
             }
         )
 
@@ -975,6 +978,20 @@ class Logic:
 
         if 0 <= index < len(angles_list):
             angles_list.pop(index)
+            current_data["angles_list"] = angles_list
+            self.server.state.mpr_rotation_data = current_data
+
+    def reset_rotation_angle(self, index):
+        """Reset the angle of a rotation at given index to zero."""
+        import copy
+
+        current_data = copy.deepcopy(
+            getattr(self.server.state, "mpr_rotation_data", {"angles_list": []})
+        )
+        angles_list = current_data["angles_list"]
+
+        if 0 <= index < len(angles_list):
+            angles_list[index]["angles"][0] = 0
             current_data["angles_list"] = angles_list
             self.server.state.mpr_rotation_data = current_data
 

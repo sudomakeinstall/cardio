@@ -629,25 +629,19 @@ class UI:
                                 with vuetify.VRow(
                                     no_gutters=True, classes="align-center"
                                 ):
-                                    with vuetify.VCol(cols="8"):
-                                        with vuetify.VBtnToggle(
+                                    vuetify.VSpacer()
+                                    with vuetify.VCol(cols="4"):
+                                        vuetify.VSelect(
                                             v_model=(
                                                 f"mpr_rotation_data.angles_list[{i}].axes",
                                             ),
-                                            mandatory=True,
+                                            items=(["X", "Y", "Z"],),
                                             dense=True,
-                                            color="primary",
-                                        ):
-                                            vuetify.VBtn(
-                                                value="X", small=True, text="X"
-                                            )
-                                            vuetify.VBtn(
-                                                value="Y", small=True, text="Y"
-                                            )
-                                            vuetify.VBtn(
-                                                value="Z", small=True, text="Z"
-                                            )
-                                    with vuetify.VCol(cols="2"):
+                                            hide_details=True,
+                                            label="Axis",
+                                        )
+                                    vuetify.VSpacer()
+                                    with vuetify.VCol(cols="auto"):
                                         vuetify.VCheckbox(
                                             v_model=(
                                                 f"mpr_rotation_data.angles_list[{i}].visible",
@@ -658,7 +652,20 @@ class UI:
                                             dense=True,
                                             title="Toggle this rotation",
                                         )
-                                    with vuetify.VCol(cols="2"):
+                                    vuetify.VSpacer()
+                                    with vuetify.VCol(cols="auto"):
+                                        vuetify.VBtn(
+                                            icon="mdi-restore",
+                                            click=ft.partial(
+                                                self.server.controller.reset_rotation_angle,
+                                                i,
+                                            ),
+                                            small=True,
+                                            dense=True,
+                                            title="Reset angle to zero",
+                                        )
+                                    vuetify.VSpacer()
+                                    with vuetify.VCol(cols="auto"):
                                         vuetify.VBtn(
                                             icon="mdi-delete",
                                             click=ft.partial(
@@ -669,7 +676,11 @@ class UI:
                                             dense=True,
                                             color="error",
                                             title="Remove this rotation",
+                                            disabled=(
+                                                f"!mpr_rotation_data.angles_list[{i}].deletable",
+                                            ),
                                         )
+                                    vuetify.VSpacer()
 
                     # Angle units selector
                     with vuetify.VRow(
