@@ -21,8 +21,8 @@ class Logic:
 
         for i, rotation in enumerate(angles_list):
             if rotation.get("visible", True):
-                rotation_sequence.append({"axis": rotation["axis"]})
-                rotation_angles[i] = rotation.get("angle", 0)
+                rotation_sequence.append({"axis": rotation["axes"]})
+                rotation_angles[i] = rotation["angles"][0]
 
         return rotation_sequence, rotation_angles
 
@@ -178,10 +178,13 @@ class Logic:
         self.server.state.mpr_rotation_data = {
             "angles_list": [
                 {
-                    "axis": rotation["axis"],
-                    "angle": rotation.get("angle", 0),
-                    "visible": True,
-                    "label": f"{rotation['axis']} ({i + 1})",
+                    "axes": rotation.get("axes", rotation.get("axis", "X")),
+                    "angles": rotation.get("angles", [rotation.get("angle", 0)])
+                    if isinstance(rotation.get("angles"), list)
+                    else [rotation.get("angles", rotation.get("angle", 0))],
+                    "visible": rotation.get("visible", True),
+                    "name": rotation.get("name", ""),
+                    "name_editable": rotation.get("name_editable", True),
                 }
                 for i, rotation in enumerate(self.scene.mpr_rotation_sequence)
             ]
@@ -541,9 +544,9 @@ class Logic:
 
         for rotation_def in angles_list:
             rotation = tk.table()
-            rotation["angles"] = [float(rotation_def.get("angle", 0))]
-            rotation["axes"] = rotation_def["axis"]
-            rotation["visible"] = rotation_def.get("visible", True)
+            # Serialize all properties from the rotation object
+            for key, value in rotation_def.items():
+                rotation[key] = value
             rotations_array.append(rotation)
 
         doc["angles_list"] = rotations_array
@@ -605,15 +608,15 @@ class Logic:
             updated_data = copy.deepcopy(rotation_data)
 
             for rotation in updated_data["angles_list"]:
-                current_angle = rotation.get("angle", 0)
+                current_angle = rotation.get("angles", [0])[0]
 
                 # Convert based on old -> new units
                 if old_units == AngleUnits.DEGREES and new_units == AngleUnits.RADIANS:
-                    rotation["angle"] = np.radians(current_angle)
+                    rotation["angles"][0] = np.radians(current_angle)
                 elif (
                     old_units == AngleUnits.RADIANS and new_units == AngleUnits.DEGREES
                 ):
-                    rotation["angle"] = np.degrees(current_angle)
+                    rotation["angles"][0] = np.degrees(current_angle)
 
             self.server.state.mpr_rotation_data = updated_data
 
@@ -949,10 +952,11 @@ class Logic:
 
         angles_list.append(
             {
-                "axis": axis,
-                "angle": 0,
+                "axes": axis,
+                "angles": [0],
                 "visible": True,
-                "label": f"{axis} ({new_index + 1})",
+                "name": "",
+                "name_editable": True,
             }
         )
 
@@ -969,11 +973,6 @@ class Logic:
 
         if 0 <= index < len(angles_list):
             angles_list.pop(index)
-
-            # Regenerate labels for remaining rotations
-            for i, rotation in enumerate(angles_list):
-                rotation["label"] = f"{rotation['axis']} ({i + 1})"
-
             current_data["angles_list"] = angles_list
             self.server.state.mpr_rotation_data = current_data
 

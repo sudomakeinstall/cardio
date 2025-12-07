@@ -164,9 +164,9 @@ class UI:
 
         for rotation in angles_list:
             if rotation.get("visible", True):
-                angle = rotation.get("angle", 0)
+                angle = rotation.get("angles", [0])[0]
                 rotation_matrix = euler_angle_to_rotation_matrix(
-                    EulerAxis(rotation["axis"]), angle, angle_units
+                    EulerAxis(rotation["axes"]), angle, angle_units
                 )
                 cumulative_rotation = cumulative_rotation @ rotation_matrix
 
@@ -585,55 +585,91 @@ class UI:
                     # Individual rotation sliders with DeepReactive
                     with client.DeepReactive("mpr_rotation_data"):
                         for i in range(self.scene.max_mpr_rotations):
-                            with vuetify.VRow(
+                            with vuetify.VContainer(
                                 v_if=f"!maximized_view && active_volume_label && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > {i}",
-                                no_gutters=True,
-                                classes="align-center mb-1",
+                                fluid=True,
+                                classes="pa-0 mb-2",
                             ):
-                                with vuetify.VCol(cols="8"):
-                                    vuetify.VSlider(
-                                        v_model=(
-                                            f"mpr_rotation_data.angles_list[{i}].angle",
-                                        ),
-                                        min=(
-                                            "angle_units === 'radians' ? -Math.PI : -180",
-                                        ),
-                                        max=(
-                                            "angle_units === 'radians' ? Math.PI : 180",
-                                        ),
-                                        step=("angle_units === 'radians' ? 0.01 : 1",),
-                                        hint=(
-                                            f"mpr_rotation_data.angles_list[{i}].label",
-                                            f"Rotation {i + 1}",
-                                        ),
-                                        persistent_hint=True,
-                                        dense=True,
-                                        hide_details=False,
-                                        thumb_label=True,
-                                    )
-                                with vuetify.VCol(cols="2"):
-                                    vuetify.VCheckbox(
-                                        v_model=(
-                                            f"mpr_rotation_data.angles_list[{i}].visible",
-                                        ),
-                                        true_icon="mdi-eye",
-                                        false_icon="mdi-eye-off",
-                                        hide_details=True,
-                                        dense=True,
-                                        title="Toggle this rotation",
-                                    )
-                                with vuetify.VCol(cols="2"):
-                                    vuetify.VBtn(
-                                        icon="mdi-delete",
-                                        click=ft.partial(
-                                            self.server.controller.remove_rotation_event,
-                                            i,
-                                        ),
-                                        small=True,
-                                        dense=True,
-                                        color="error",
-                                        title="Remove this rotation",
-                                    )
+                                with vuetify.VRow(no_gutters=True):
+                                    with vuetify.VCol(cols="12"):
+                                        vuetify.VTextField(
+                                            v_model=(
+                                                f"mpr_rotation_data.angles_list[{i}].name",
+                                            ),
+                                            placeholder="Name",
+                                            dense=True,
+                                            hide_details=True,
+                                            readonly=(
+                                                f"!mpr_rotation_data.angles_list[{i}].name_editable",
+                                            ),
+                                            __events=["keydown", "keyup", "keypress"],
+                                            keydown="$event.stopPropagation(); $event.stopImmediatePropagation();",
+                                            keyup="$event.stopPropagation(); $event.stopImmediatePropagation();",
+                                            keypress="$event.stopPropagation(); $event.stopImmediatePropagation();",
+                                        )
+                                with vuetify.VRow(no_gutters=True):
+                                    with vuetify.VCol(cols="12"):
+                                        vuetify.VSlider(
+                                            v_model=(
+                                                f"mpr_rotation_data.angles_list[{i}].angles[0]",
+                                            ),
+                                            min=(
+                                                "angle_units === 'radians' ? -Math.PI : -180",
+                                            ),
+                                            max=(
+                                                "angle_units === 'radians' ? Math.PI : 180",
+                                            ),
+                                            step=(
+                                                "angle_units === 'radians' ? 0.01 : 1",
+                                            ),
+                                            dense=True,
+                                            hide_details=True,
+                                            thumb_label=True,
+                                        )
+                                with vuetify.VRow(
+                                    no_gutters=True, classes="align-center"
+                                ):
+                                    with vuetify.VCol(cols="8"):
+                                        with vuetify.VBtnToggle(
+                                            v_model=(
+                                                f"mpr_rotation_data.angles_list[{i}].axes",
+                                            ),
+                                            mandatory=True,
+                                            dense=True,
+                                            color="primary",
+                                        ):
+                                            vuetify.VBtn(
+                                                value="X", small=True, text="X"
+                                            )
+                                            vuetify.VBtn(
+                                                value="Y", small=True, text="Y"
+                                            )
+                                            vuetify.VBtn(
+                                                value="Z", small=True, text="Z"
+                                            )
+                                    with vuetify.VCol(cols="2"):
+                                        vuetify.VCheckbox(
+                                            v_model=(
+                                                f"mpr_rotation_data.angles_list[{i}].visible",
+                                            ),
+                                            true_icon="mdi-eye",
+                                            false_icon="mdi-eye-off",
+                                            hide_details=True,
+                                            dense=True,
+                                            title="Toggle this rotation",
+                                        )
+                                    with vuetify.VCol(cols="2"):
+                                        vuetify.VBtn(
+                                            icon="mdi-delete",
+                                            click=ft.partial(
+                                                self.server.controller.remove_rotation_event,
+                                                i,
+                                            ),
+                                            small=True,
+                                            dense=True,
+                                            color="error",
+                                            title="Remove this rotation",
+                                        )
 
                     # Angle units selector
                     with vuetify.VRow(
