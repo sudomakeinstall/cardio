@@ -468,7 +468,7 @@ class UI:
                 # Volume selection dropdown
                 if self.scene.volumes:
                     vuetify.VSelect(
-                        v_if="!maximized_view || maximized_view === 'volume'",
+                        v_if="(!maximized_view || maximized_view === 'volume') && volume_items.length >= 2",
                         v_model=("active_volume_label", ""),
                         items=("volume_items", []),
                         item_title="text",
@@ -476,57 +476,6 @@ class UI:
                         title="Select which volume to use for MPR",
                         dense=True,
                         hide_details=True,
-                    )
-
-                    # Window/Level controls for MPR
-                    vuetify.VListSubheader(
-                        "Window/Level", v_if="!maximized_view && active_volume_label"
-                    )
-
-                    vuetify.VSelect(
-                        v_if="!maximized_view && active_volume_label",
-                        v_model=("mpr_window_level_preset", 7),
-                        items=("mpr_presets", []),
-                        item_title="text",
-                        item_value="value",
-                        label="Preset",
-                        dense=True,
-                        hide_details=True,
-                    )
-
-                    vuetify.VSlider(
-                        v_if="!maximized_view && active_volume_label",
-                        v_model="mpr_window",
-                        min=1.0,
-                        max=2000.0,
-                        step=1.0,
-                        hint="Window",
-                        persistent_hint=True,
-                        dense=True,
-                        hide_details=False,
-                        thumb_label=True,
-                    )
-
-                    vuetify.VSlider(
-                        v_if="!maximized_view && active_volume_label",
-                        v_model="mpr_level",
-                        min=-1000.0,
-                        max=1000.0,
-                        step=1.0,
-                        hint="Level",
-                        persistent_hint=True,
-                        dense=True,
-                        hide_details=False,
-                        thumb_label=True,
-                    )
-
-                    vuetify.VCheckbox(
-                        v_if="!maximized_view && active_volume_label",
-                        v_model=("mpr_crosshairs_enabled", True),
-                        label="Show Crosshairs",
-                        dense=True,
-                        hide_details=True,
-                        classes="mt-2",
                     )
 
                     # MPR Rotation controls
