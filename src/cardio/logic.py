@@ -531,14 +531,6 @@ class Logic:
         metadata["volume_label"] = active_volume_label
         doc["metadata"] = metadata
 
-        # Origin position section
-        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
-        origin_table = tk.table()
-        origin_table["x"] = origin[0]
-        origin_table["y"] = origin[1]
-        origin_table["z"] = origin[2]
-        doc["origin"] = origin_table
-
         # Rotations section (array of tables)
         rotation_data = getattr(
             self.server.state, "mpr_rotation_data", {"angles_list": []}

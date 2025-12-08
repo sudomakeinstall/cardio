@@ -128,6 +128,10 @@ class Scene(ps.BaseSettings):
         default_factory=list,
         description="Dynamic rotation sequence for MPR views - list of rotation steps",
     )
+    mpr_rotation_file: pl.Path | None = pc.Field(
+        default=None,
+        description="Path to TOML file containing rotation configuration to load",
+    )
     max_mpr_rotations: int = pc.Field(
         default=20,
         description="Maximum number of MPR rotations supported",
@@ -175,6 +179,21 @@ class Scene(ps.BaseSettings):
         if isinstance(v, str):
             return SegmentationListAdapter.validate_json(v)
         return v
+
+    @pc.model_validator(mode="after")
+    def load_rotation_file(self):
+        """Load rotation sequence from TOML file if specified."""
+        if self.mpr_rotation_file is not None and self.mpr_rotation_file.exists():
+            import tomlkit as tk
+
+            with open(self.mpr_rotation_file, "r") as f:
+                doc = tk.load(f)
+
+            # Load angles_list from the TOML file
+            if "angles_list" in doc:
+                self.mpr_rotation_sequence = list(doc["angles_list"])
+
+        return self
 
     # VTK objects as private attributes
     _renderer: vtk.vtkRenderer = pc.PrivateAttr(default_factory=vtk.vtkRenderer)
