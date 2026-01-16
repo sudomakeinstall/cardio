@@ -650,6 +650,25 @@ class UI:
                                 outlined=True,
                             )
 
+                    # Axis convention selector
+                    with vuetify.VRow(
+                        v_if="!maximized_view && active_volume_label",
+                        no_gutters=True,
+                        classes="align-center mb-2",
+                    ):
+                        with vuetify.VCol(cols="4"):
+                            vuetify.VLabel("Convention:")
+                        with vuetify.VCol(cols="8"):
+                            vuetify.VSelect(
+                                v_model=("axis_convention", "itk"),
+                                items=("axis_convention_items", []),
+                                item_title="text",
+                                item_value="value",
+                                dense=True,
+                                hide_details=True,
+                                outlined=True,
+                            )
+
                     # Save rotations button
                     vuetify.VBtn(
                         "Save Rotations",

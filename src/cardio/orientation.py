@@ -11,6 +11,11 @@ class EulerAxis(Enum):
     Z = "Z"
 
 
+class AxisConvention(Enum):
+    ITK = "itk"  # X=Left, Y=Posterior, Z=Superior
+    ROMA = "roma"  # X=Superior, Y=Posterior, Z=Left
+
+
 class AngleUnits(Enum):
     DEGREES = "degrees"
     RADIANS = "radians"

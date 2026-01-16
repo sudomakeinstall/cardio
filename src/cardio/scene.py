@@ -8,7 +8,7 @@ import pydantic_settings as ps
 import vtk
 
 from .mesh import Mesh
-from .orientation import AngleUnits
+from .orientation import AngleUnits, AxisConvention
 from .segmentation import Segmentation
 from .types import RGBColor
 from .volume import Volume
@@ -141,7 +141,11 @@ class Scene(ps.BaseSettings):
         description="Units for angle measurements in rotation serialization",
     )
     coordinate_system: str = pc.Field(
-        default="LAS", description="Coordinate system orientation (e.g., LAS, RAS, LPS)"
+        default="LPS", description="Coordinate system orientation (e.g., LPS, RAS, LAS)"
+    )
+    axis_convention: AxisConvention = pc.Field(
+        default=AxisConvention.ITK,
+        description="Axis convention for saved rotations (ITK: X=L,Y=P,Z=S; Roma: X=S,Y=P,Z=L)",
     )
     mpr_crosshairs_enabled: bool = pc.Field(
         default=True, description="Show crosshair lines indicating slice intersections"

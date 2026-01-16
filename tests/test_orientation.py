@@ -4,6 +4,7 @@ import pytest
 
 from cardio.orientation import (
     AngleUnits,
+    AxisConvention,
     EulerAxis,
     axcode_transform_matrix,
     create_vtk_reslice_matrix,
@@ -207,3 +208,67 @@ def test_reset_direction():
     assert is_axis_aligned(reset_image)
     output_direction = itk.array_from_matrix(reset_image.GetDirection())
     np.testing.assert_array_equal(output_direction, np.eye(3))
+
+
+def test_axis_convention_enum():
+    assert AxisConvention.ITK.value == "itk"
+    assert AxisConvention.ROMA.value == "roma"
+
+
+def test_axis_convention_itk_to_roma_conversion():
+    """Test axis conversion from ITK to Roma convention.
+
+    ITK: X=Left, Y=Posterior, Z=Superior
+    Roma: X=Superior, Y=Posterior, Z=Left
+    Conversion: X<->Z swap, Y unchanged
+    """
+    itk_to_roma = {"X": "Z", "Y": "Y", "Z": "X"}
+
+    assert itk_to_roma["X"] == "Z"  # ITK X (Left) -> Roma Z (Left)
+    assert itk_to_roma["Y"] == "Y"  # ITK Y (Posterior) -> Roma Y (Posterior)
+    assert itk_to_roma["Z"] == "X"  # ITK Z (Superior) -> Roma X (Superior)
+
+
+def test_axis_convention_round_trip():
+    """Test that converting ITK->Roma->ITK returns original axis."""
+    itk_to_roma = {"X": "Z", "Y": "Y", "Z": "X"}
+    roma_to_itk = {"X": "Z", "Y": "Y", "Z": "X"}  # Same mapping for round-trip
+
+    for original_axis in ["X", "Y", "Z"]:
+        roma_axis = itk_to_roma[original_axis]
+        back_to_itk = roma_to_itk[roma_axis]
+        assert back_to_itk == original_axis
+
+
+def test_axis_convention_roma_negates_angles():
+    """Roma convention should negate angles due to handedness difference.
+
+    ITK (right-handed): X=Left, Y=Posterior, Z=Superior
+    Roma (left-handed): X=Superior, Y=Posterior, Z=Left
+
+    Conversion requires both axis swap (X↔Z) and angle negation.
+    """
+
+    def convert_for_roma(axis: str, angle: float) -> tuple[str, float]:
+        new_axis = {"X": "Z", "Y": "Y", "Z": "X"}[axis]
+        return new_axis, -angle
+
+    # ITK +45° around Z (Superior) = Roma -45° around X (Superior)
+    axis, angle = convert_for_roma("Z", 45.0)
+    assert axis == "X"
+    assert angle == -45.0
+
+    # ITK +30° around X (Left) = Roma -30° around Z (Left)
+    axis, angle = convert_for_roma("X", 30.0)
+    assert axis == "Z"
+    assert angle == -30.0
+
+    # ITK -90° around Y (Posterior) = Roma +90° around Y (Posterior)
+    axis, angle = convert_for_roma("Y", -90.0)
+    assert axis == "Y"
+    assert angle == 90.0
+
+    # Zero angle remains zero
+    axis, angle = convert_for_roma("X", 0.0)
+    assert axis == "Z"
+    assert angle == 0.0

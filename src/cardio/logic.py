@@ -47,6 +47,12 @@ class Logic:
             {"text": "Radians", "value": "radians"},
         ]
 
+        # Initialize axis convention items for dropdown
+        self.server.state.axis_convention_items = [
+            {"text": "ITK (X=L, Y=P, Z=S)", "value": "itk"},
+            {"text": "Roma (X=S, Y=P, Z=L)", "value": "roma"},
+        ]
+
         # Initialize MPR origin (will be updated when active volume changes)
         self.server.state.mpr_origin = [0.0, 0.0, 0.0]
         self.server.state.mpr_crosshairs_enabled = self.scene.mpr_crosshairs_enabled
@@ -65,6 +71,7 @@ class Logic:
         self.server.state.change("mpr_window_level_preset")(self.update_mpr_preset)
         self.server.state.change("mpr_rotation_data")(self.update_mpr_rotation)
         self.server.state.change("angle_units")(self.sync_angle_units)
+        self.server.state.change("axis_convention")(self.sync_axis_convention)
 
         # Initialize visibility state variables
         for m in self.scene.meshes:
@@ -195,6 +202,7 @@ class Logic:
         }
 
         self.server.state.angle_units = self.scene.angle_units.value
+        self.server.state.axis_convention = self.scene.axis_convention.value
 
         # Initialize MPR presets data
         try:
@@ -500,6 +508,23 @@ class Logic:
                         1 / self.server.state.bpm * 60 / self.scene.nframes
                     )
 
+    def _convert_for_convention(self, axis: str, angle: float) -> tuple[str, float]:
+        """Convert axis and angle based on selected convention.
+
+        ITK (right-handed): X=Left, Y=Posterior, Z=Superior
+        Roma (left-handed): X=Superior, Y=Posterior, Z=Left
+
+        Conversion requires:
+        1. X↔Z axis swap (different axis labeling)
+        2. Angle negation (handedness difference)
+        """
+        from .orientation import AxisConvention
+
+        if self.scene.axis_convention == AxisConvention.ROMA:
+            new_axis = {"X": "Z", "Y": "Y", "Z": "X"}[axis]
+            return new_axis, -angle
+        return axis, angle
+
     @asynchronous.task
     async def save_rotation_angles(self):
         """Save current rotation angles to a TOML file."""
@@ -526,6 +551,7 @@ class Logic:
         # Metadata section
         metadata = tk.table()
         metadata["coordinate_system"] = self.scene.coordinate_system
+        metadata["axis_convention"] = self.scene.axis_convention.value
         metadata["units"] = self.scene.angle_units.value
         metadata["timestamp"] = iso_timestamp
         metadata["volume_label"] = active_volume_label
@@ -540,8 +566,14 @@ class Logic:
 
         for rotation_def in angles_list:
             rotation = tk.table()
-            # Serialize all properties from the rotation object
+            axis = rotation_def.get("axes", "X")
+            angles = rotation_def.get("angles", [0])
+            converted_axis, sign_multiplier = self._convert_for_convention(axis, 1.0)
             for key, value in rotation_def.items():
+                if key == "axes":
+                    value = converted_axis
+                elif key == "angles":
+                    value = [a * sign_multiplier for a in angles]
                 rotation[key] = value
             rotations_array.append(rotation)
 
@@ -617,6 +649,15 @@ class Logic:
             self.server.state.mpr_rotation_data = updated_data
 
         self.scene.angle_units = new_units
+
+    def sync_axis_convention(self, axis_convention, **kwargs):
+        """Sync axis convention selection - updates the scene configuration."""
+        from .orientation import AxisConvention
+
+        if axis_convention == "itk":
+            self.scene.axis_convention = AxisConvention.ITK
+        elif axis_convention == "roma":
+            self.scene.axis_convention = AxisConvention.ROMA
 
     def _initialize_clipping_state(self):
         """Initialize clipping state variables for all objects."""
