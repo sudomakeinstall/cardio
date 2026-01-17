@@ -660,8 +660,8 @@ class UI:
                             vuetify.VLabel("Convention:")
                         with vuetify.VCol(cols="8"):
                             vuetify.VSelect(
-                                v_model=("axis_convention", "itk"),
-                                items=("axis_convention_items", []),
+                                v_model=("index_order", "itk"),
+                                items=("index_order_items", []),
                                 item_title="text",
                                 item_value="value",
                                 dense=True,

@@ -1,22 +1,22 @@
-from enum import Enum
+import enum
 
 import itk
 import numpy as np
 
 
 # DICOM LPS canonical orientation vector mappings
-class EulerAxis(Enum):
+class EulerAxis(enum.StrEnum):
     X = "X"
     Y = "Y"
     Z = "Z"
 
 
-class AxisConvention(Enum):
+class IndexOrder(enum.StrEnum):
     ITK = "itk"  # X=Left, Y=Posterior, Z=Superior
     ROMA = "roma"  # X=Superior, Y=Posterior, Z=Left
 
 
-class AngleUnits(Enum):
+class AngleUnits(enum.StrEnum):
     DEGREES = "degrees"
     RADIANS = "radians"
 

@@ -9,7 +9,13 @@ from .screenshot import Screenshot
 
 class Logic:
     def _get_visible_rotation_data(self):
-        """Get rotation sequence and angles for visible rotations only."""
+        """Get rotation sequence and angles for visible rotations only.
+
+        Returns data in ITK convention, as required by VTK.
+        Converts from current convention if necessary.
+        """
+        from .orientation import IndexOrder
+
         rotation_data = getattr(
             self.server.state, "mpr_rotation_data", {"angles_list": []}
         )
@@ -25,6 +31,17 @@ class Logic:
                 rotation_sequence.append({"axis": rotation["axes"]})
                 rotation_angles[visible_index] = rotation["angles"][0]
                 visible_index += 1
+
+        # CRITICAL: VTK always needs rotations in ITK convention
+        # Convert from current convention to ITK if necessary
+        current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
+        if current_convention == IndexOrder.ROMA:
+            # Convert ROMA to ITK: X→Z, Y→Y, Z→X, angle→-angle
+            rotation_sequence = [
+                {"axis": {"X": "Z", "Y": "Y", "Z": "X"}[rot["axis"]]}
+                for rot in rotation_sequence
+            ]
+            rotation_angles = {idx: -angle for idx, angle in rotation_angles.items()}
 
         return rotation_sequence, rotation_angles
 
@@ -48,7 +65,7 @@ class Logic:
         ]
 
         # Initialize axis convention items for dropdown
-        self.server.state.axis_convention_items = [
+        self.server.state.index_order_items = [
             {"text": "ITK (X=L, Y=P, Z=S)", "value": "itk"},
             {"text": "Roma (X=S, Y=P, Z=L)", "value": "roma"},
         ]
@@ -71,7 +88,7 @@ class Logic:
         self.server.state.change("mpr_window_level_preset")(self.update_mpr_preset)
         self.server.state.change("mpr_rotation_data")(self.update_mpr_rotation)
         self.server.state.change("angle_units")(self.sync_angle_units)
-        self.server.state.change("axis_convention")(self.sync_axis_convention)
+        self.server.state.change("index_order")(self.sync_index_order)
 
         # Initialize visibility state variables
         for m in self.scene.meshes:
@@ -189,8 +206,12 @@ class Logic:
             self.scene.mpr_rotation_sequence.to_dict_for_ui()
         )
 
-        self.server.state.angle_units = self.scene.angle_units.value
-        self.server.state.axis_convention = self.scene.axis_convention.value
+        self.server.state.angle_units = (
+            self.scene.mpr_rotation_sequence.metadata.angle_units.value
+        )
+        self.server.state.index_order = (
+            self.scene.mpr_rotation_sequence.metadata.index_order.value
+        )
 
         # Initialize MPR presets data
         try:
@@ -326,7 +347,7 @@ class Logic:
             origin,
             rotation_sequence,
             rotation_angles,
-            self.scene.angle_units,
+            self.scene.mpr_rotation_sequence.metadata.angle_units,
         )
 
         # Apply window/level
@@ -523,13 +544,15 @@ class Logic:
         rotation_seq.metadata.timestamp = timestamp.isoformat()
         rotation_seq.metadata.volume_label = active_volume_label
         rotation_seq.metadata.coordinate_system = self.scene.coordinate_system
+        rotation_seq.metadata.index_order = (
+            self.scene.mpr_rotation_sequence.metadata.index_order
+        )
+        rotation_seq.metadata.angle_units = (
+            self.scene.mpr_rotation_sequence.metadata.angle_units
+        )
 
         output_path = save_dir / f"{timestamp_str}.toml"
-        rotation_seq.to_file(
-            output_path,
-            target_convention=self.scene.axis_convention,
-            target_units=self.scene.angle_units,
-        )
+        rotation_seq.to_file(output_path)
 
     def reset_all(self):
         self.server.state.frame = 0
@@ -563,9 +586,9 @@ class Logic:
         from .orientation import AngleUnits
 
         # Get current units before changing
-        old_units = self.scene.angle_units
+        old_units = self.scene.mpr_rotation_sequence.metadata.angle_units
 
-        # Update the scene's angle_units field based on UI selection
+        # Update based on UI selection
         new_units = None
         if angle_units == "degrees":
             new_units = AngleUnits.DEGREES
@@ -595,16 +618,48 @@ class Logic:
 
             self.server.state.mpr_rotation_data = updated_data
 
-        self.scene.angle_units = new_units
+        self.scene.mpr_rotation_sequence.metadata.angle_units = new_units
 
-    def sync_axis_convention(self, axis_convention, **kwargs):
-        """Sync axis convention selection - updates the scene configuration."""
-        from .orientation import AxisConvention
+    def sync_index_order(self, index_order, **kwargs):
+        """Sync index order selection - converts existing rotations and updates scene."""
+        import copy
 
-        if axis_convention == "itk":
-            self.scene.axis_convention = AxisConvention.ITK
-        elif axis_convention == "roma":
-            self.scene.axis_convention = AxisConvention.ROMA
+        from .orientation import IndexOrder
+
+        old_convention = self.scene.mpr_rotation_sequence.metadata.index_order
+
+        # Convert string input to enum
+        if isinstance(index_order, str):
+            match index_order.lower():
+                case "itk":
+                    new_convention = IndexOrder.ITK
+                case "roma":
+                    new_convention = IndexOrder.ROMA
+                case _:
+                    raise ValueError(f"Unrecognized index order: {index_order}")
+        else:
+            new_convention = index_order
+
+        if old_convention == new_convention:
+            return
+
+        rotation_data = getattr(
+            self.server.state, "mpr_rotation_data", {"angles_list": []}
+        )
+        if rotation_data.get("angles_list"):
+            updated_data = copy.deepcopy(rotation_data)
+
+            for rotation in updated_data["angles_list"]:
+                current_axis = rotation.get("axes")
+                current_angle = rotation.get("angles", [0])[0]
+
+                # Conversion is the same for both ITK<->ROMA directions
+                rotation["axes"] = {"X": "Z", "Y": "Y", "Z": "X"}[current_axis]
+                rotation["angles"][0] = -current_angle
+
+            self.server.state.mpr_rotation_data = updated_data
+
+        self.scene.mpr_rotation_sequence.metadata.index_order = new_convention
 
     def _initialize_clipping_state(self):
         """Initialize clipping state variables for all objects."""
@@ -796,7 +851,7 @@ class Logic:
             origin,
             rotation_sequence,
             rotation_angles,
-            self.scene.angle_units,
+            self.scene.mpr_rotation_sequence.metadata.angle_units,
         )
 
         # Update all views
@@ -895,7 +950,7 @@ class Logic:
             origin,
             rotation_sequence,
             rotation_angles,
-            self.scene.angle_units,
+            self.scene.mpr_rotation_sequence.metadata.angle_units,
         )
 
         # Update all views

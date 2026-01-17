@@ -9,11 +9,16 @@ import pydantic as pc
 import tomlkit as tk
 
 # Internal
-from .orientation import AngleUnits, AxisConvention
+from .orientation import AngleUnits, IndexOrder
 
 
 class RotationStep(pc.BaseModel):
-    """Single rotation step (stored in ITK convention, radians)."""
+    """Single rotation step.
+
+    Both angles and axes are stored in the current convention/units.
+    - Angles: stored in units specified by parent metadata.angle_units
+    - Axes: stored in convention specified by parent metadata.index_order
+    """
 
     axes: ty.Literal["X", "Y", "Z"]
     angle: float = 0.0
@@ -37,54 +42,26 @@ class RotationStep(pc.BaseModel):
                 data["axes"] = data["axis"]
         return data
 
-    def to_convention(
-        self, convention: AxisConvention, units: AngleUnits
-    ) -> tuple[str, float]:
-        """Convert to target convention/units for serialization."""
-        axis = self.axes
-        angle = self.angle
-
-        if convention == AxisConvention.ROMA:
-            axis = {"X": "Z", "Y": "Y", "Z": "X"}[axis]
-            angle = -angle
-
-        if units == AngleUnits.DEGREES:
-            angle = np.degrees(angle)
-
-        return axis, angle
-
-    @classmethod
-    def from_convention(
-        cls,
-        axes: str,
-        angle: float,
-        convention: AxisConvention,
-        units: AngleUnits,
-        **kwargs,
-    ) -> "RotationStep":
-        """Create from target convention/units (for deserialization)."""
-        if units == AngleUnits.DEGREES:
-            angle = np.radians(angle)
-
-        if convention == AxisConvention.ROMA:
-            axes = {"X": "Z", "Y": "Y", "Z": "X"}[axes]
-            angle = -angle
-
-        return cls(axes=axes, angle=angle, **kwargs)
-
 
 class RotationMetadata(pc.BaseModel):
     """Metadata for TOML files."""
 
     coordinate_system: ty.Literal["LPS"] = "LPS"
-    axis_convention: AxisConvention = AxisConvention.ITK
-    units: AngleUnits = AngleUnits.RADIANS
+    index_order: IndexOrder = IndexOrder.ITK
+    angle_units: AngleUnits = AngleUnits.RADIANS
     timestamp: str = pc.Field(default_factory=lambda: dt.datetime.now().isoformat())
     volume_label: str = ""
 
 
 class RotationSequence(pc.BaseModel):
-    """Complete rotation sequence (stored in ITK convention, radians)."""
+    """Complete rotation sequence.
+
+    Both angles and axes are always stored in the current convention/units:
+    - Angles: stored in units specified by metadata.angle_units
+    - Axes: stored in convention specified by metadata.index_order
+
+    When convention/units change in the UI, all existing rotations are converted.
+    """
 
     model_config = pc.ConfigDict(frozen=False)
 
@@ -112,9 +89,10 @@ class RotationSequence(pc.BaseModel):
         return v
 
     def to_dict_for_ui(self) -> dict:
-        """Convert to UI format (always ITK/radians internally).
+        """Convert to UI format.
 
-        Note: UI expects 'angles' as a list for backward compatibility.
+        Angles are passed through in their current units (metadata.angle_units).
+        UI expects 'angles' as a list for backward compatibility.
         """
         return {
             "angles_list": [
@@ -133,92 +111,27 @@ class RotationSequence(pc.BaseModel):
 
     @classmethod
     def from_ui_dict(cls, data: dict, volume_label: str = "") -> "RotationSequence":
-        """Create from UI format (assumes ITK/radians)."""
+        """Create from UI format.
+
+        Angles from UI are stored as-is (in current UI units).
+        Caller should set metadata.angle_units to match the UI's current units.
+        """
         angles_list = [RotationStep(**step) for step in data.get("angles_list", [])]
         metadata = RotationMetadata(volume_label=volume_label)
         mpr_origin = data.get("mpr_origin", [0.0, 0.0, 0.0])
         return cls(metadata=metadata, angles_list=angles_list, mpr_origin=mpr_origin)
 
-    def to_toml(
-        self, target_convention: AxisConvention, target_units: AngleUnits
-    ) -> str:
-        """Serialize to TOML with conversions."""
-        doc = tk.document()
-
-        metadata_table = tk.table()
-        metadata_table["coordinate_system"] = self.metadata.coordinate_system
-        metadata_table["axis_convention"] = target_convention.value
-        metadata_table["units"] = target_units.value
-        metadata_table["timestamp"] = self.metadata.timestamp
-        metadata_table["volume_label"] = self.metadata.volume_label
-        doc["metadata"] = metadata_table
-
-        origin_table = tk.table()
-        origin_table["x"] = float(self.mpr_origin[0])
-        origin_table["y"] = float(self.mpr_origin[1])
-        origin_table["z"] = float(self.mpr_origin[2])
-        doc["mpr_origin"] = origin_table
-
-        rotations_array = tk.aot()
-        for step in self.angles_list:
-            rotation = tk.table()
-            converted_axis, converted_angle = step.to_convention(
-                target_convention, target_units
-            )
-            rotation["axes"] = converted_axis
-            rotation["angle"] = converted_angle
-            rotation["visible"] = step.visible
-            rotation["name"] = step.name
-            rotation["name_editable"] = step.name_editable
-            rotation["deletable"] = step.deletable
-            rotations_array.append(rotation)
-
-        doc["angles_list"] = rotations_array
-
-        return tk.dumps(doc)
+    def to_toml(self) -> str:
+        """Serialize to TOML using stored serialization preferences."""
+        data = self.model_dump(mode="json")
+        return tk.dumps(data)
 
     @classmethod
     def from_toml(cls, toml_content: str) -> "RotationSequence":
-        """Deserialize from TOML with conversions."""
+        """Deserialize from TOML (no conversions - loads as-is)."""
         doc = tk.loads(toml_content)
-
-        metadata_dict = doc.get("metadata", {})
-        convention = AxisConvention(metadata_dict.get("axis_convention", "itk"))
-        units = AngleUnits(metadata_dict.get("units", "radians"))
-
-        metadata = RotationMetadata(
-            coordinate_system=metadata_dict.get("coordinate_system", "LPS"),
-            axis_convention=convention,
-            units=units,
-            timestamp=metadata_dict.get("timestamp", dt.datetime.now().isoformat()),
-            volume_label=metadata_dict.get("volume_label", ""),
-        )
-
-        angles_list_data = doc.get("angles_list", [])
-        angles_list = []
-        for item in angles_list_data:
-            axes = item.get("axes", "X")
-            angle = item.get("angle", 0.0)
-            step = RotationStep.from_convention(
-                axes=axes,
-                angle=angle,
-                convention=convention,
-                units=units,
-                visible=item.get("visible", True),
-                name=item.get("name", ""),
-                name_editable=item.get("name_editable", True),
-                deletable=item.get("deletable", True),
-            )
-            angles_list.append(step)
-
-        origin_dict = doc.get("mpr_origin", {})
-        mpr_origin = [
-            float(origin_dict.get("x", 0.0)),
-            float(origin_dict.get("y", 0.0)),
-            float(origin_dict.get("z", 0.0)),
-        ]
-
-        return cls(metadata=metadata, angles_list=angles_list, mpr_origin=mpr_origin)
+        data = dict(doc)
+        return cls(**data)
 
     @classmethod
     def from_file(cls, path: pl.Path) -> "RotationSequence":
@@ -226,13 +139,8 @@ class RotationSequence(pc.BaseModel):
         with open(path, "r") as f:
             return cls.from_toml(f.read())
 
-    def to_file(
-        self,
-        path: pl.Path,
-        target_convention: AxisConvention,
-        target_units: AngleUnits,
-    ):
-        """Save to TOML file."""
+    def to_file(self, path: pl.Path):
+        """Save to TOML file using stored serialization preferences."""
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
-            f.write(self.to_toml(target_convention, target_units))
+            f.write(self.to_toml())
