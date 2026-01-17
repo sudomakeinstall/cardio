@@ -1,0 +1,17 @@
+project_name = "Cardio"
+current_frame = 0
+rotation_factor = 3
+serialization_directory = "./data"
+mpr_rotation_file = "./examples/rotation-example.toml"
+
+[background]
+light = [1.0, 1.0, 1.0]
+dark = [0.0, 0.0, 0.0]
+
+[[volumes]]
+label="CCTA"
+directory="/home/davis/datasets/CMP_Data/0/CMP028/img-nii/"
+file_paths=["img_MD.nii.gz"]
+visible=true
+transfer_function_preset="vascular_closed"
+clipping_enabled=true
