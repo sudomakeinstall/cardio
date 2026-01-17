@@ -184,22 +184,10 @@ class Logic:
         self.server.state.mpr_level = self.scene.mpr_level
         self.server.state.mpr_window_level_preset = self.scene.mpr_window_level_preset
 
-        # Initialize rotation data with nested list structure
-        self.server.state.mpr_rotation_data = {
-            "angles_list": [
-                {
-                    "axes": rotation.get("axes", rotation.get("axis", "X")),
-                    "angles": rotation.get("angles", [rotation.get("angle", 0)])
-                    if isinstance(rotation.get("angles"), list)
-                    else [rotation.get("angles", rotation.get("angle", 0))],
-                    "visible": rotation.get("visible", True),
-                    "name": rotation.get("name", ""),
-                    "name_editable": rotation.get("name_editable", True),
-                    "deletable": rotation.get("deletable", True),
-                }
-                for i, rotation in enumerate(self.scene.mpr_rotation_sequence)
-            ]
-        }
+        # Initialize rotation data from RotationSequence
+        self.server.state.mpr_rotation_data = (
+            self.scene.mpr_rotation_sequence.to_dict_for_ui()
+        )
 
         self.server.state.angle_units = self.scene.angle_units.value
         self.server.state.axis_convention = self.scene.axis_convention.value
@@ -508,81 +496,37 @@ class Logic:
                         1 / self.server.state.bpm * 60 / self.scene.nframes
                     )
 
-    def _convert_for_convention(self, axis: str, angle: float) -> tuple[str, float]:
-        """Convert axis and angle based on selected convention.
-
-        ITK (right-handed): X=Left, Y=Posterior, Z=Superior
-        Roma (left-handed): X=Superior, Y=Posterior, Z=Left
-
-        Conversion requires:
-        1. X↔Z axis swap (different axis labeling)
-        2. Angle negation (handedness difference)
-        """
-        from .orientation import AxisConvention
-
-        if self.scene.axis_convention == AxisConvention.ROMA:
-            new_axis = {"X": "Z", "Y": "Y", "Z": "X"}[axis]
-            return new_axis, -angle
-        return axis, angle
-
     @asynchronous.task
     async def save_rotation_angles(self):
-        """Save current rotation angles to a TOML file."""
-        import tomlkit as tk
+        """Save current rotation angles to TOML file."""
+        from .rotation import RotationSequence
 
-        # Get current timestamp
         timestamp = dt.datetime.now()
         timestamp_str = timestamp.strftime(self.scene.timestamp_format)
-        iso_timestamp = timestamp.isoformat()
-
-        # Get active volume label
         active_volume_label = getattr(self.server.state, "active_volume_label", "")
+
         if not active_volume_label:
-            print("Warning: No active volume selected for rotation saving")
+            print("Warning: No active volume selected")
             return
 
-        # Create directory structure
         save_dir = self.scene.rotations_directory / active_volume_label
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create TOML structure
-        doc = tk.document()
-
-        # Metadata section
-        metadata = tk.table()
-        metadata["coordinate_system"] = self.scene.coordinate_system
-        metadata["axis_convention"] = self.scene.axis_convention.value
-        metadata["units"] = self.scene.angle_units.value
-        metadata["timestamp"] = iso_timestamp
-        metadata["volume_label"] = active_volume_label
-        doc["metadata"] = metadata
-
-        # Rotations section (array of tables)
         rotation_data = getattr(
             self.server.state, "mpr_rotation_data", {"angles_list": []}
         )
-        angles_list = rotation_data.get("angles_list", [])
-        rotations_array = tk.aot()
+        rotation_seq = RotationSequence.from_ui_dict(rotation_data, active_volume_label)
 
-        for rotation_def in angles_list:
-            rotation = tk.table()
-            axis = rotation_def.get("axes", "X")
-            angles = rotation_def.get("angles", [0])
-            converted_axis, sign_multiplier = self._convert_for_convention(axis, 1.0)
-            for key, value in rotation_def.items():
-                if key == "axes":
-                    value = converted_axis
-                elif key == "angles":
-                    value = [a * sign_multiplier for a in angles]
-                rotation[key] = value
-            rotations_array.append(rotation)
+        rotation_seq.metadata.timestamp = timestamp.isoformat()
+        rotation_seq.metadata.volume_label = active_volume_label
+        rotation_seq.metadata.coordinate_system = self.scene.coordinate_system
 
-        doc["angles_list"] = rotations_array
-
-        # Save to file
         output_path = save_dir / f"{timestamp_str}.toml"
-        with open(output_path, "w") as f:
-            f.write(tk.dumps(doc))
+        rotation_seq.to_file(
+            output_path,
+            target_convention=self.scene.axis_convention,
+            target_units=self.scene.angle_units,
+        )
 
     def reset_all(self):
         self.server.state.frame = 0

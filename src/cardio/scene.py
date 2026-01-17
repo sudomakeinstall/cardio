@@ -9,6 +9,7 @@ import vtk
 
 from .mesh import Mesh
 from .orientation import AngleUnits, AxisConvention
+from .rotation import RotationSequence
 from .segmentation import Segmentation
 from .types import RGBColor
 from .volume import Volume
@@ -124,9 +125,9 @@ class Scene(ps.BaseSettings):
     mpr_window_level_preset: int = pc.Field(
         default=7, description="Window/level preset key for MPR views"
     )
-    mpr_rotation_sequence: list = pc.Field(
-        default_factory=list,
-        description="Dynamic rotation sequence for MPR views - list of rotation steps",
+    mpr_rotation_sequence: RotationSequence = pc.Field(
+        default_factory=RotationSequence,
+        description="Dynamic rotation sequence for MPR views",
     )
     mpr_rotation_file: pl.Path | None = pc.Field(
         default=None,
@@ -188,14 +189,16 @@ class Scene(ps.BaseSettings):
     def load_rotation_file(self):
         """Load rotation sequence from TOML file if specified."""
         if self.mpr_rotation_file is not None and self.mpr_rotation_file.exists():
-            import tomlkit as tk
-
-            with open(self.mpr_rotation_file, "r") as f:
-                doc = tk.load(f)
-
-            # Load angles_list from the TOML file
-            if "angles_list" in doc:
-                self.mpr_rotation_sequence = list(doc["angles_list"])
+            self.mpr_rotation_sequence = RotationSequence.from_file(
+                self.mpr_rotation_file
+            )
+            if (
+                not self.active_volume_label
+                and self.mpr_rotation_sequence.metadata.volume_label
+            ):
+                self.active_volume_label = (
+                    self.mpr_rotation_sequence.metadata.volume_label
+                )
 
         return self
 

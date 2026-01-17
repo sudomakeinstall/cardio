@@ -1,0 +1,46 @@
+[metadata]
+coordinate_system = "LPS"
+axis_convention = "itk"
+units = "radians"
+timestamp = "2026-01-16T16:05:35.961236"
+volume_label = "CCTA"
+
+[[angles_list]]
+axes = "Z"
+angle = 0.0
+visible = true
+name = "bln"
+name_editable = false
+deletable = false
+
+[[angles_list]]
+axes = "X"
+angle = 0.0
+visible = true
+name = "bln_2_sax"
+name_editable = false
+deletable = false
+
+[[angles_list]]
+axes = "Z"
+angle = 0.0
+visible = true
+name = "sax_2_2ch"
+name_editable = false
+deletable = false
+
+[[angles_list]]
+axes = "Z"
+angle = 0.0
+visible = false
+name = "sax_2_3ch"
+name_editable = false
+deletable = false
+
+[[angles_list]]
+axes = "Z"
+angle = 0.0
+visible = false
+name = "sax_2_4ch"
+name_editable = false
+deletable = false
