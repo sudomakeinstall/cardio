@@ -2,7 +2,6 @@ project_name = "Cardio"
 current_frame = 0
 rotation_factor = 3
 serialization_directory = "./data"
-mpr_rotation_file = "./examples/rotation-template.toml"
 
 [background]
 light = [1.0, 1.0, 1.0]

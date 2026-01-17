@@ -1,15 +1,15 @@
+mpr_origin = [33.44902373904834, -188.86967328159682, -129.89202591668126]
+
 [metadata]
 coordinate_system = "LPS"
 index_order = "itk"
 angle_units = "radians"
-timestamp = "2026-01-16T16:05:35.961236"
+timestamp = "2026-01-17T09:56:42.632418"
 volume_label = "CCTA"
-
-mpr_origin = [0.0, 0.0, 0.0]
 
 [[angles_list]]
 axes = "Z"
-angle = 0.0
+angle = 0.578407346410207
 visible = true
 name = "vla"
 name_editable = false
@@ -17,7 +17,7 @@ deletable = false
 
 [[angles_list]]
 axes = "X"
-angle = 0.0
+angle = -0.821592653589793
 visible = true
 name = "vla_2_sax"
 name_editable = false
@@ -25,7 +25,7 @@ deletable = false
 
 [[angles_list]]
 axes = "Z"
-angle = 0.0
+angle = 1.948407346410207
 visible = true
 name = "sax_2_2ch"
 name_editable = false
@@ -33,7 +33,7 @@ deletable = false
 
 [[angles_list]]
 axes = "Z"
-angle = 0.0
+angle = 1.018407346410207
 visible = false
 name = "sax_2_3ch"
 name_editable = false
@@ -41,7 +41,7 @@ deletable = false
 
 [[angles_list]]
 axes = "Z"
-angle = 0.0
+angle = -0.361592653589793
 visible = false
 name = "sax_2_4ch"
 name_editable = false
