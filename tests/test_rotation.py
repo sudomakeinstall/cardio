@@ -182,11 +182,11 @@ def test_rotation_sequence_to_toml_itk():
 
     toml_str = seq.to_toml(AxisConvention.ITK, AngleUnits.RADIANS)
 
-    assert "axes = \"X\"" in toml_str
+    assert 'axes = "X"' in toml_str
     assert "angle = 1.57" in toml_str
-    assert "axis_convention = \"itk\"" in toml_str
-    assert "units = \"radians\"" in toml_str
-    assert "volume_label = \"CCTA\"" in toml_str
+    assert 'axis_convention = "itk"' in toml_str
+    assert 'units = "radians"' in toml_str
+    assert 'volume_label = "CCTA"' in toml_str
 
 
 def test_rotation_sequence_to_toml_roma():
@@ -195,9 +195,9 @@ def test_rotation_sequence_to_toml_roma():
 
     toml_str = seq.to_toml(AxisConvention.ROMA, AngleUnits.RADIANS)
 
-    assert "axes = \"Z\"" in toml_str
+    assert 'axes = "Z"' in toml_str
     assert "angle = -1.57" in toml_str
-    assert "axis_convention = \"roma\"" in toml_str
+    assert 'axis_convention = "roma"' in toml_str
 
 
 def test_rotation_sequence_to_toml_degrees():
@@ -206,7 +206,7 @@ def test_rotation_sequence_to_toml_degrees():
 
     toml_str = seq.to_toml(AxisConvention.ITK, AngleUnits.DEGREES)
 
-    assert "units = \"degrees\"" in toml_str
+    assert 'units = "degrees"' in toml_str
     assert "90.0" in toml_str
 
 

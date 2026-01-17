@@ -984,6 +984,9 @@ class Logic:
             self.sync_active_volume(self._pending_active_volume)
             delattr(self, "_pending_active_volume")
 
+        # Apply loaded rotation data to MPR views
+        self.update_mpr_rotation()
+
     @asynchronous.task
     async def close_application(self):
         """Close the application by stopping the server."""
