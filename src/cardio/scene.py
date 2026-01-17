@@ -200,6 +200,9 @@ class Scene(ps.BaseSettings):
                     self.mpr_rotation_sequence.metadata.volume_label
                 )
 
+            if self.mpr_rotation_sequence.mpr_origin:
+                self.mpr_origin = list(self.mpr_rotation_sequence.mpr_origin)
+
         return self
 
     # VTK objects as private attributes

@@ -90,6 +90,18 @@ class RotationSequence(pc.BaseModel):
 
     metadata: RotationMetadata = pc.Field(default_factory=RotationMetadata)
     angles_list: list[RotationStep] = pc.Field(default_factory=list)
+    mpr_origin: list[float] = pc.Field(
+        default_factory=lambda: [0.0, 0.0, 0.0],
+        description="MPR origin position [x, y, z] in LPS coordinates",
+    )
+
+    @pc.field_validator("mpr_origin")
+    @classmethod
+    def validate_mpr_origin(cls, v):
+        """Ensure mpr_origin is a 3-element list of floats."""
+        if not isinstance(v, list) or len(v) != 3:
+            raise ValueError("mpr_origin must be a 3-element list [x, y, z]")
+        return [float(x) for x in v]
 
     @pc.field_validator("angles_list", mode="before")
     @classmethod
@@ -115,7 +127,8 @@ class RotationSequence(pc.BaseModel):
                     "deletable": step.deletable,
                 }
                 for step in self.angles_list
-            ]
+            ],
+            "mpr_origin": self.mpr_origin,
         }
 
     @classmethod
@@ -123,7 +136,8 @@ class RotationSequence(pc.BaseModel):
         """Create from UI format (assumes ITK/radians)."""
         angles_list = [RotationStep(**step) for step in data.get("angles_list", [])]
         metadata = RotationMetadata(volume_label=volume_label)
-        return cls(metadata=metadata, angles_list=angles_list)
+        mpr_origin = data.get("mpr_origin", [0.0, 0.0, 0.0])
+        return cls(metadata=metadata, angles_list=angles_list, mpr_origin=mpr_origin)
 
     def to_toml(
         self, target_convention: AxisConvention, target_units: AngleUnits
@@ -138,6 +152,12 @@ class RotationSequence(pc.BaseModel):
         metadata_table["timestamp"] = self.metadata.timestamp
         metadata_table["volume_label"] = self.metadata.volume_label
         doc["metadata"] = metadata_table
+
+        origin_table = tk.table()
+        origin_table["x"] = float(self.mpr_origin[0])
+        origin_table["y"] = float(self.mpr_origin[1])
+        origin_table["z"] = float(self.mpr_origin[2])
+        doc["mpr_origin"] = origin_table
 
         rotations_array = tk.aot()
         for step in self.angles_list:
@@ -191,7 +211,14 @@ class RotationSequence(pc.BaseModel):
             )
             angles_list.append(step)
 
-        return cls(metadata=metadata, angles_list=angles_list)
+        origin_dict = doc.get("mpr_origin", {})
+        mpr_origin = [
+            float(origin_dict.get("x", 0.0)),
+            float(origin_dict.get("y", 0.0)),
+            float(origin_dict.get("z", 0.0)),
+        ]
+
+        return cls(metadata=metadata, angles_list=angles_list, mpr_origin=mpr_origin)
 
     @classmethod
     def from_file(cls, path: pl.Path) -> "RotationSequence":

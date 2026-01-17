@@ -517,6 +517,9 @@ class Logic:
         )
         rotation_seq = RotationSequence.from_ui_dict(rotation_data, active_volume_label)
 
+        mpr_origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+        rotation_seq.mpr_origin = list(mpr_origin)
+
         rotation_seq.metadata.timestamp = timestamp.isoformat()
         rotation_seq.metadata.volume_label = active_volume_label
         rotation_seq.metadata.coordinate_system = self.scene.coordinate_system
