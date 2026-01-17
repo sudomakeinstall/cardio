@@ -2,7 +2,7 @@ import numpy as np
 import pydantic as pc
 import pytest
 
-from cardio.orientation import AngleUnits, AxisConvention
+from cardio.orientation import AngleUnits, IndexOrder
 from cardio.rotation import RotationMetadata, RotationSequence, RotationStep
 
 
@@ -31,94 +31,15 @@ def test_rotation_step_legacy_axis_field():
     assert step.angle == 1.0
 
 
-def test_rotation_step_to_convention_itk():
-    step = RotationStep(axes="X", angle=1.57)
-    axis, angle = step.to_convention(AxisConvention.ITK, AngleUnits.RADIANS)
-    assert axis == "X"
-    assert angle == 1.57
-
-
-def test_rotation_step_to_convention_roma():
-    step = RotationStep(axes="X", angle=1.57)
-    axis, angle = step.to_convention(AxisConvention.ROMA, AngleUnits.RADIANS)
-    assert axis == "Z"
-    assert angle == -1.57
-
-
-def test_rotation_step_to_convention_degrees():
-    step = RotationStep(axes="Y", angle=np.pi)
-    axis, angle = step.to_convention(AxisConvention.ITK, AngleUnits.DEGREES)
-    assert axis == "Y"
-    assert np.isclose(angle, 180.0)
-
-
-def test_rotation_step_to_convention_roma_degrees():
-    step = RotationStep(axes="X", angle=np.pi / 2)
-    axis, angle = step.to_convention(AxisConvention.ROMA, AngleUnits.DEGREES)
-    assert axis == "Z"
-    assert np.isclose(angle, -90.0)
-
-
-def test_rotation_step_from_convention_itk():
-    step = RotationStep.from_convention(
-        axes="X", angle=1.57, convention=AxisConvention.ITK, units=AngleUnits.RADIANS
-    )
-    assert step.axes == "X"
-    assert step.angle == 1.57
-
-
-def test_rotation_step_from_convention_roma():
-    step = RotationStep.from_convention(
-        axes="Z", angle=-1.57, convention=AxisConvention.ROMA, units=AngleUnits.RADIANS
-    )
-    assert step.axes == "X"
-    assert step.angle == 1.57
-
-
-def test_rotation_step_from_convention_degrees():
-    step = RotationStep.from_convention(
-        axes="Y", angle=90.0, convention=AxisConvention.ITK, units=AngleUnits.DEGREES
-    )
-    assert step.axes == "Y"
-    assert np.isclose(step.angle, np.pi / 2)
-
-
-def test_rotation_step_round_trip_itk_to_roma():
-    original = RotationStep(axes="X", angle=1.57, name="test")
-    axis, angle = original.to_convention(AxisConvention.ROMA, AngleUnits.RADIANS)
-    restored = RotationStep.from_convention(
-        axes=axis,
-        angle=angle,
-        convention=AxisConvention.ROMA,
-        units=AngleUnits.RADIANS,
-        name="test",
-    )
-    assert restored.axes == original.axes
-    assert np.isclose(restored.angle, original.angle)
-    assert restored.name == original.name
-
-
-def test_rotation_step_round_trip_all_axes():
-    for axis in ["X", "Y", "Z"]:
-        original = RotationStep(axes=axis, angle=1.0)
-        conv_axis, conv_angle = original.to_convention(
-            AxisConvention.ROMA, AngleUnits.RADIANS
-        )
-        restored = RotationStep.from_convention(
-            axes=conv_axis,
-            angle=conv_angle,
-            convention=AxisConvention.ROMA,
-            units=AngleUnits.RADIANS,
-        )
-        assert restored.axes == original.axes
-        assert np.isclose(restored.angle, original.angle)
+# NOTE: Conversion methods removed - data is always stored in current convention/units
+# Conversions happen at UI layer when user changes settings via sync_index_order() and sync_angle_units()
 
 
 def test_rotation_metadata_creation():
     meta = RotationMetadata(volume_label="CCTA")
     assert meta.coordinate_system == "LPS"
-    assert meta.axis_convention == AxisConvention.ITK
-    assert meta.units == AngleUnits.RADIANS
+    assert meta.index_order == IndexOrder.ITK
+    assert meta.angle_units == AngleUnits.RADIANS
     assert meta.volume_label == "CCTA"
 
 
@@ -179,34 +100,40 @@ def test_rotation_sequence_to_toml_itk():
     steps = [RotationStep(axes="X", angle=1.57, name="Rotate X")]
     seq = RotationSequence(angles_list=steps)
     seq.metadata.volume_label = "CCTA"
+    seq.metadata.index_order = IndexOrder.ITK
+    seq.metadata.angle_units = AngleUnits.RADIANS
 
-    toml_str = seq.to_toml(AxisConvention.ITK, AngleUnits.RADIANS)
+    toml_str = seq.to_toml()
 
     assert 'axes = "X"' in toml_str
     assert "angle = 1.57" in toml_str
-    assert 'axis_convention = "itk"' in toml_str
-    assert 'units = "radians"' in toml_str
+    assert 'index_order = "itk"' in toml_str
+    assert 'angle_units = "radians"' in toml_str
     assert 'volume_label = "CCTA"' in toml_str
 
 
 def test_rotation_sequence_to_toml_roma():
-    steps = [RotationStep(axes="X", angle=1.57, name="Rotate X")]
+    steps = [RotationStep(axes="Z", angle=-1.57, name="Rotate Z")]
     seq = RotationSequence(angles_list=steps)
+    seq.metadata.index_order = IndexOrder.ROMA
+    seq.metadata.angle_units = AngleUnits.RADIANS
 
-    toml_str = seq.to_toml(AxisConvention.ROMA, AngleUnits.RADIANS)
+    toml_str = seq.to_toml()
 
     assert 'axes = "Z"' in toml_str
     assert "angle = -1.57" in toml_str
-    assert 'axis_convention = "roma"' in toml_str
+    assert 'index_order = "roma"' in toml_str
 
 
 def test_rotation_sequence_to_toml_degrees():
-    steps = [RotationStep(axes="Y", angle=np.pi / 2)]
+    steps = [RotationStep(axes="Y", angle=90.0)]
     seq = RotationSequence(angles_list=steps)
+    seq.metadata.index_order = IndexOrder.ITK
+    seq.metadata.angle_units = AngleUnits.DEGREES
 
-    toml_str = seq.to_toml(AxisConvention.ITK, AngleUnits.DEGREES)
+    toml_str = seq.to_toml()
 
-    assert 'units = "degrees"' in toml_str
+    assert 'angle_units = "degrees"' in toml_str
     assert "90.0" in toml_str
 
 
@@ -214,8 +141,8 @@ def test_rotation_sequence_from_toml_itk():
     toml_content = """
 [metadata]
 coordinate_system = "LPS"
-axis_convention = "itk"
-units = "radians"
+index_order = "itk"
+angle_units = "radians"
 timestamp = "2026-01-16T12:00:00"
 volume_label = "CCTA"
 
@@ -251,8 +178,8 @@ def test_rotation_sequence_from_toml_roma():
     toml_content = """
 [metadata]
 coordinate_system = "LPS"
-axis_convention = "roma"
-units = "radians"
+index_order = "roma"
+angle_units = "radians"
 timestamp = "2026-01-16T12:00:00"
 volume_label = "Test"
 
@@ -267,16 +194,16 @@ deletable = true
     seq = RotationSequence.from_toml(toml_content)
 
     assert len(seq.angles_list) == 1
-    assert seq.angles_list[0].axes == "X"
-    assert np.isclose(seq.angles_list[0].angle, 1.57)
+    assert seq.angles_list[0].axes == "Z"
+    assert np.isclose(seq.angles_list[0].angle, -1.57)
 
 
 def test_rotation_sequence_from_toml_degrees():
     toml_content = """
 [metadata]
 coordinate_system = "LPS"
-axis_convention = "itk"
-units = "degrees"
+index_order = "itk"
+angle_units = "degrees"
 timestamp = "2026-01-16T12:00:00"
 volume_label = "Test"
 
@@ -292,7 +219,7 @@ deletable = true
 
     assert len(seq.angles_list) == 1
     assert seq.angles_list[0].axes == "Y"
-    assert np.isclose(seq.angles_list[0].angle, np.pi / 2)
+    assert np.isclose(seq.angles_list[0].angle, 90.0)
 
 
 def test_rotation_sequence_round_trip_itk():
@@ -303,8 +230,10 @@ def test_rotation_sequence_round_trip_itk():
     ]
     original = RotationSequence(angles_list=original_steps)
     original.metadata.volume_label = "CCTA"
+    original.metadata.index_order = IndexOrder.ITK
+    original.metadata.angle_units = AngleUnits.RADIANS
 
-    toml_str = original.to_toml(AxisConvention.ITK, AngleUnits.RADIANS)
+    toml_str = original.to_toml()
     restored = RotationSequence.from_toml(toml_str)
 
     assert len(restored.angles_list) == len(original.angles_list)
@@ -322,8 +251,10 @@ def test_rotation_sequence_round_trip_roma():
     ]
     original = RotationSequence(angles_list=original_steps)
     original.metadata.volume_label = "Test"
+    original.metadata.index_order = IndexOrder.ROMA
+    original.metadata.angle_units = AngleUnits.RADIANS
 
-    toml_str = original.to_toml(AxisConvention.ROMA, AngleUnits.RADIANS)
+    toml_str = original.to_toml()
     restored = RotationSequence.from_toml(toml_str)
 
     assert len(restored.angles_list) == len(original.angles_list)
@@ -334,12 +265,14 @@ def test_rotation_sequence_round_trip_roma():
 
 def test_rotation_sequence_round_trip_degrees():
     original_steps = [
-        RotationStep(axes="Y", angle=np.pi / 2),
-        RotationStep(axes="X", angle=np.pi),
+        RotationStep(axes="Y", angle=90.0),
+        RotationStep(axes="X", angle=180.0),
     ]
     original = RotationSequence(angles_list=original_steps)
+    original.metadata.index_order = IndexOrder.ITK
+    original.metadata.angle_units = AngleUnits.DEGREES
 
-    toml_str = original.to_toml(AxisConvention.ITK, AngleUnits.DEGREES)
+    toml_str = original.to_toml()
     restored = RotationSequence.from_toml(toml_str)
 
     assert len(restored.angles_list) == len(original.angles_list)
@@ -350,12 +283,14 @@ def test_rotation_sequence_round_trip_degrees():
 
 def test_rotation_sequence_round_trip_roma_degrees():
     original_steps = [
-        RotationStep(axes="X", angle=np.pi / 4),
-        RotationStep(axes="Z", angle=-np.pi / 6),
+        RotationStep(axes="X", angle=45.0),
+        RotationStep(axes="Z", angle=-30.0),
     ]
     original = RotationSequence(angles_list=original_steps)
+    original.metadata.index_order = IndexOrder.ROMA
+    original.metadata.angle_units = AngleUnits.DEGREES
 
-    toml_str = original.to_toml(AxisConvention.ROMA, AngleUnits.DEGREES)
+    toml_str = original.to_toml()
     restored = RotationSequence.from_toml(toml_str)
 
     assert len(restored.angles_list) == len(original.angles_list)

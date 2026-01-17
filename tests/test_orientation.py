@@ -4,7 +4,7 @@ import pytest
 
 from cardio.orientation import (
     AngleUnits,
-    AxisConvention,
+    IndexOrder,
     EulerAxis,
     axcode_transform_matrix,
     create_vtk_reslice_matrix,
@@ -211,8 +211,8 @@ def test_reset_direction():
 
 
 def test_axis_convention_enum():
-    assert AxisConvention.ITK.value == "itk"
-    assert AxisConvention.ROMA.value == "roma"
+    assert IndexOrder.ITK.value == "itk"
+    assert IndexOrder.ROMA.value == "roma"
 
 
 def test_axis_convention_itk_to_roma_conversion():
