@@ -338,9 +338,17 @@ class Logic:
 
     def _apply_current_mpr_settings(self, active_volume, frame):
         """Apply current slice positions and window/level to MPR actors."""
+        from .orientation import IndexOrder
+
         # Apply slice positions
         origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
         rotation_sequence, rotation_angles = self._get_visible_rotation_data()
+
+        # VTK needs origin in ITK convention - convert if necessary
+        current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
+        if current_convention == IndexOrder.ROMA:
+            # Convert Roma to ITK: swap X and Z
+            origin = [origin[2], origin[1], origin[0]]
 
         active_volume.update_slice_positions(
             frame,
@@ -659,6 +667,11 @@ class Logic:
 
             self.server.state.mpr_rotation_data = updated_data
 
+        # Transform mpr_origin: swap X and Z (indices 0 and 2)
+        mpr_origin = getattr(self.server.state, "mpr_origin", None)
+        if mpr_origin is not None and len(mpr_origin) == 3:
+            self.server.state.mpr_origin = [mpr_origin[2], mpr_origin[1], mpr_origin[0]]
+
         self.scene.mpr_rotation_sequence.metadata.index_order = new_convention
 
     def _initialize_clipping_state(self):
@@ -744,6 +757,8 @@ class Logic:
 
         # Initialize origin to volume center (in LPS coordinates)
         try:
+            from .orientation import IndexOrder
+
             current_frame = getattr(self.server.state, "frame", 0)
             volume_actor = active_volume.actors[current_frame]
             image_data = volume_actor.GetMapper().GetInput()
@@ -752,7 +767,16 @@ class Logic:
             # Set origin to volume center if it's at default [0,0,0]
             current_origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
             if current_origin == [0.0, 0.0, 0.0]:
-                self.server.state.mpr_origin = list(center)
+                # VTK returns center in ITK convention (X=L, Y=P, Z=S)
+                # Transform to current convention if needed
+                center_list = list(center)
+                if (
+                    self.scene.mpr_rotation_sequence.metadata.index_order
+                    == IndexOrder.ROMA
+                ):
+                    # Convert ITK -> Roma: swap X and Z
+                    center_list = [center_list[2], center_list[1], center_list[0]]
+                self.server.state.mpr_origin = center_list
         except (RuntimeError, IndexError) as e:
             print(f"Error: Cannot get center for volume '{active_volume_label}': {e}")
             return
@@ -821,6 +845,7 @@ class Logic:
 
     def update_slice_positions(self, **kwargs):
         """Update MPR slice positions when sliders change."""
+        from .orientation import IndexOrder
 
         if not getattr(self.server.state, "mpr_enabled", False):
             return
@@ -844,6 +869,12 @@ class Logic:
         current_frame = getattr(self.server.state, "frame", 0)
 
         rotation_sequence, rotation_angles = self._get_visible_rotation_data()
+
+        # VTK needs origin in ITK convention - convert if necessary
+        current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
+        if current_convention == IndexOrder.ROMA:
+            # Convert Roma to ITK: swap X and Z
+            origin = [origin[2], origin[1], origin[0]]
 
         # Update slice positions with rotation
         active_volume.update_slice_positions(
@@ -921,6 +952,8 @@ class Logic:
 
     def update_mpr_rotation(self, **kwargs):
         """Update MPR views when rotation changes."""
+        from .orientation import IndexOrder
+
         if not getattr(self.server.state, "mpr_enabled", False):
             return
 
@@ -943,6 +976,12 @@ class Logic:
         current_frame = getattr(self.server.state, "frame", 0)
 
         rotation_sequence, rotation_angles = self._get_visible_rotation_data()
+
+        # VTK needs origin in ITK convention - convert if necessary
+        current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
+        if current_convention == IndexOrder.ROMA:
+            # Convert Roma to ITK: swap X and Z
+            origin = [origin[2], origin[1], origin[0]]
 
         # Update slice positions with rotation
         active_volume.update_slice_positions(

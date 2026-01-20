@@ -56,11 +56,12 @@ class RotationMetadata(pc.BaseModel):
 class RotationSequence(pc.BaseModel):
     """Complete rotation sequence.
 
-    Both angles and axes are always stored in the current convention/units:
+    All data (angles, axes, and origin) are stored in the current convention/units:
     - Angles: stored in units specified by metadata.angle_units
     - Axes: stored in convention specified by metadata.index_order
+    - Origin: stored in axis order specified by metadata.index_order
 
-    When convention/units change in the UI, all existing rotations are converted.
+    When convention/units change in the UI, all existing data is converted.
     """
 
     model_config = pc.ConfigDict(frozen=False)
@@ -69,7 +70,7 @@ class RotationSequence(pc.BaseModel):
     angles_list: list[RotationStep] = pc.Field(default_factory=list)
     mpr_origin: list[float] = pc.Field(
         default_factory=lambda: [0.0, 0.0, 0.0],
-        description="MPR origin position [x, y, z] in LPS coordinates",
+        description="MPR origin position [x, y, z] in current index_order convention",
     )
 
     @pc.field_validator("mpr_origin")

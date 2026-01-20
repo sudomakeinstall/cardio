@@ -311,3 +311,60 @@ def test_rotation_sequence_legacy_list_format():
     assert seq.angles_list[0].angle == 1.57
     assert seq.angles_list[1].axes == "Y"
     assert seq.angles_list[1].angle == 0.5
+
+
+def test_rotation_sequence_mpr_origin_default():
+    seq = RotationSequence()
+    assert seq.mpr_origin == [0.0, 0.0, 0.0]
+
+
+def test_rotation_sequence_mpr_origin_custom():
+    seq = RotationSequence(mpr_origin=[10.0, 20.0, 30.0])
+    assert seq.mpr_origin == [10.0, 20.0, 30.0]
+
+
+def test_rotation_sequence_mpr_origin_validation():
+    with pytest.raises(pc.ValidationError):
+        RotationSequence(mpr_origin=[10.0, 20.0])  # Too few elements
+
+    with pytest.raises(pc.ValidationError):
+        RotationSequence(mpr_origin=[10.0, 20.0, 30.0, 40.0])  # Too many elements
+
+
+def test_rotation_sequence_mpr_origin_in_toml():
+    seq = RotationSequence(mpr_origin=[33.4, -188.9, -129.9])
+    seq.metadata.volume_label = "Test"
+    seq.metadata.index_order = IndexOrder.ITK
+
+    toml_str = seq.to_toml()
+
+    assert "mpr_origin" in toml_str
+    assert "[33.4, -188.9, -129.9]" in toml_str
+
+
+def test_rotation_sequence_mpr_origin_round_trip_itk():
+    original = RotationSequence(mpr_origin=[10.0, 20.0, 30.0])
+    original.metadata.volume_label = "Test"
+    original.metadata.index_order = IndexOrder.ITK
+
+    toml_str = original.to_toml()
+    restored = RotationSequence.from_toml(toml_str)
+
+    assert len(restored.mpr_origin) == 3
+    assert np.isclose(restored.mpr_origin[0], 10.0)
+    assert np.isclose(restored.mpr_origin[1], 20.0)
+    assert np.isclose(restored.mpr_origin[2], 30.0)
+
+
+def test_rotation_sequence_mpr_origin_round_trip_roma():
+    original = RotationSequence(mpr_origin=[30.0, 20.0, 10.0])
+    original.metadata.volume_label = "Test"
+    original.metadata.index_order = IndexOrder.ROMA
+
+    toml_str = original.to_toml()
+    restored = RotationSequence.from_toml(toml_str)
+
+    assert len(restored.mpr_origin) == 3
+    assert np.isclose(restored.mpr_origin[0], 30.0)
+    assert np.isclose(restored.mpr_origin[1], 20.0)
+    assert np.isclose(restored.mpr_origin[2], 10.0)
