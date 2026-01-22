@@ -8,7 +8,12 @@ from trame.widgets import html
 from trame.widgets import vtk as vtk_widgets
 from trame.widgets import vuetify3 as vuetify
 
-from .orientation import AngleUnits, EulerAxis, euler_angle_to_rotation_matrix
+from .orientation import (
+    AngleUnits,
+    EulerAxis,
+    IndexOrder,
+    euler_angle_to_rotation_matrix,
+)
 from .scene import Scene
 from .volume_property_presets import list_volume_property_presets
 from .window_level import presets
@@ -150,6 +155,10 @@ class UI:
 
         if view_name not in base_normals:
             return np.array([0.0, 0.0, 1.0])
+
+        current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
+        if current_convention == IndexOrder.ROMA:
+            base_normals = {k: v[::-1] for k, v in base_normals.items()}
 
         # Build cumulative rotation from visible rotations
         rotation_data = getattr(
