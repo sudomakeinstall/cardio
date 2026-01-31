@@ -201,20 +201,18 @@ class Logic:
         self.server.state.mpr_level = self.scene.mpr_level
         self.server.state.mpr_window_level_preset = self.scene.mpr_window_level_preset
 
-        # Initialize rotation data from RotationSequence
+        # Initialize rotation data from RotationSequence (includes metadata)
         self.server.state.mpr_rotation_data = (
-            self.scene.mpr_rotation_sequence.to_dict_for_ui()
+            self.scene.mpr_rotation_sequence.model_dump(mode="json")
         )
 
-        self.server.state.angle_units = (
-            self.scene.mpr_rotation_sequence.metadata.angle_units.value
-        )
-        self.server.state.index_order = (
-            self.scene.mpr_rotation_sequence.metadata.index_order.value
-        )
-        self.server.state.mpr_rotation_metadata_deletable = (
-            self.scene.mpr_rotation_sequence.metadata.deletable
-        )
+        # Keep mirror variables for UI binding convenience
+        self.server.state.angle_units = self.server.state.mpr_rotation_data["metadata"][
+            "angle_units"
+        ]
+        self.server.state.index_order = self.server.state.mpr_rotation_data["metadata"][
+            "index_order"
+        ]
 
         # Initialize MPR presets data
         try:
@@ -544,26 +542,14 @@ class Logic:
         save_dir = self.scene.rotations_directory / active_volume_label
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        rotation_data = getattr(
-            self.server.state, "mpr_rotation_data", {"angles_list": []}
-        )
-        rotation_seq = RotationSequence.from_ui_dict(rotation_data, active_volume_label)
+        rotation_data = getattr(self.server.state, "mpr_rotation_data", {})
 
-        mpr_origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
-        rotation_seq.mpr_origin = list(mpr_origin)
+        # Create RotationSequence directly from full data structure
+        rotation_seq = RotationSequence(**rotation_data)
 
+        # Update only timestamp and volume_label (rest already in metadata)
         rotation_seq.metadata.timestamp = timestamp.isoformat()
         rotation_seq.metadata.volume_label = active_volume_label
-        rotation_seq.metadata.coordinate_system = self.scene.coordinate_system
-        rotation_seq.metadata.index_order = (
-            self.scene.mpr_rotation_sequence.metadata.index_order
-        )
-        rotation_seq.metadata.angle_units = (
-            self.scene.mpr_rotation_sequence.metadata.angle_units
-        )
-        rotation_seq.metadata.deletable = (
-            self.scene.mpr_rotation_sequence.metadata.deletable
-        )
 
         output_path = save_dir / f"{timestamp_str}.toml"
         rotation_seq.to_file(output_path)
@@ -612,14 +598,14 @@ class Logic:
         if new_units is None or old_units == new_units:
             return
 
-        # Convert all existing rotation angles
-        rotation_data = getattr(
-            self.server.state, "mpr_rotation_data", {"angles_list": []}
+        # Get current rotation data (now includes metadata)
+        rotation_data = copy.deepcopy(
+            getattr(self.server.state, "mpr_rotation_data", {})
         )
-        if rotation_data.get("angles_list"):
-            updated_data = copy.deepcopy(rotation_data)
 
-            for rotation in updated_data["angles_list"]:
+        # Convert all existing rotation angles
+        if rotation_data.get("angles_list"):
+            for rotation in rotation_data["angles_list"]:
                 current_angle = rotation.get("angle", 0)
 
                 # Convert based on old -> new units
@@ -630,8 +616,13 @@ class Logic:
                 ):
                     rotation["angle"] = np.degrees(current_angle)
 
-            self.server.state.mpr_rotation_data = updated_data
+        # Update nested metadata
+        rotation_data["metadata"]["angle_units"] = angle_units
 
+        # Update state (triggers re-render)
+        self.server.state.mpr_rotation_data = rotation_data
+
+        # Update scene
         self.scene.mpr_rotation_sequence.metadata.angle_units = new_units
 
     def sync_index_order(self, index_order, **kwargs):
@@ -657,13 +648,14 @@ class Logic:
         if old_convention == new_convention:
             return
 
-        rotation_data = getattr(
-            self.server.state, "mpr_rotation_data", {"angles_list": []}
+        # Get current rotation data (now includes metadata)
+        rotation_data = copy.deepcopy(
+            getattr(self.server.state, "mpr_rotation_data", {})
         )
-        if rotation_data.get("angles_list"):
-            updated_data = copy.deepcopy(rotation_data)
 
-            for rotation in updated_data["angles_list"]:
+        # Convert rotation axes and angles
+        if rotation_data.get("angles_list"):
+            for rotation in rotation_data["angles_list"]:
                 current_axis = rotation.get("axis")
                 current_angle = rotation.get("angle", 0)
 
@@ -671,13 +663,18 @@ class Logic:
                 rotation["axis"] = {"X": "Z", "Y": "Y", "Z": "X"}[current_axis]
                 rotation["angle"] = -current_angle
 
-            self.server.state.mpr_rotation_data = updated_data
+        # Update nested metadata
+        rotation_data["metadata"]["index_order"] = index_order
+
+        # Update state (triggers re-render)
+        self.server.state.mpr_rotation_data = rotation_data
 
         # Transform mpr_origin: swap X and Z (indices 0 and 2)
         mpr_origin = getattr(self.server.state, "mpr_origin", None)
         if mpr_origin is not None and len(mpr_origin) == 3:
             self.server.state.mpr_origin = [mpr_origin[2], mpr_origin[1], mpr_origin[0]]
 
+        # Update scene
         self.scene.mpr_rotation_sequence.metadata.index_order = new_convention
 
     def _initialize_clipping_state(self):
@@ -1077,8 +1074,15 @@ class Logic:
 
     def reset_mpr_rotations(self):
         """Reset all MPR rotations."""
-        self.server.state.mpr_rotation_data = {"angles_list": []}
-        self.server.state.mpr_rotation_metadata_deletable = True
+        from .rotation import RotationSequence
+
+        # Create fresh RotationSequence and serialize
+        new_rotation_seq = RotationSequence()
+        self.server.state.mpr_rotation_data = new_rotation_seq.model_dump(mode="json")
+
+        # Update mirror variables
+        self.server.state.angle_units = "radians"
+        self.server.state.index_order = "itk"
 
     def finalize_mpr_initialization(self, **kwargs):
         """Set the active volume label after UI is ready to avoid race condition."""

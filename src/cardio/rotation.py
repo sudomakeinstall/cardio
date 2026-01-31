@@ -67,38 +67,6 @@ class RotationSequence(pc.BaseModel):
             raise ValueError("mpr_origin must be a 3-element list [x, y, z]")
         return [float(x) for x in v]
 
-    def to_dict_for_ui(self) -> dict:
-        """Convert to UI format.
-
-        Angle is passed through in its current units (metadata.angle_units).
-        """
-        return {
-            "angles_list": [
-                {
-                    "axis": step.axis,
-                    "angle": step.angle,
-                    "visible": step.visible,
-                    "name": step.name,
-                    "name_editable": step.name_editable,
-                    "deletable": step.deletable,
-                }
-                for step in self.angles_list
-            ],
-            "mpr_origin": self.mpr_origin,
-        }
-
-    @classmethod
-    def from_ui_dict(cls, data: dict, volume_label: str = "") -> "RotationSequence":
-        """Create from UI format.
-
-        Angle from UI is stored as-is (in current UI units).
-        Caller should set metadata.angle_units to match the UI's current units.
-        """
-        angles_list = [RotationStep(**step) for step in data.get("angles_list", [])]
-        metadata = RotationMetadata(volume_label=volume_label)
-        mpr_origin = data.get("mpr_origin", [0.0, 0.0, 0.0])
-        return cls(metadata=metadata, angles_list=angles_list, mpr_origin=mpr_origin)
-
     def to_toml(self) -> str:
         """Serialize to TOML using stored serialization preferences."""
         from . import __version__

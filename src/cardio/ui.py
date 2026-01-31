@@ -690,7 +690,7 @@ class UI:
                         block=True,
                         classes="mb-2",
                         prepend_icon="mdi-refresh",
-                        disabled=("!mpr_rotation_metadata_deletable",),
+                        disabled=("!mpr_rotation_data.metadata.deletable",),
                     )
 
                     vuetify.VDivider(classes="my-2")

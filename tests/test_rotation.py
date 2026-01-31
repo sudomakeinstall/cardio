@@ -50,14 +50,18 @@ def test_rotation_sequence_with_steps():
     assert seq.angles_list[1].axis == "Y"
 
 
-def test_rotation_sequence_to_dict_for_ui():
+def test_rotation_sequence_model_dump():
+    """Test that model_dump includes metadata, angles_list, and mpr_origin."""
     steps = [
         RotationStep(axis="X", angle=0.5, name="First"),
         RotationStep(axis="Y", angle=1.0, name="Second", visible=False),
     ]
     seq = RotationSequence(angles_list=steps)
-    ui_dict = seq.to_dict_for_ui()
+    seq.metadata.volume_label = "Test"
 
+    ui_dict = seq.model_dump(mode="json")
+
+    # Check angles_list
     assert "angles_list" in ui_dict
     assert len(ui_dict["angles_list"]) == 2
     assert ui_dict["angles_list"][0]["axis"] == "X"
@@ -65,20 +69,56 @@ def test_rotation_sequence_to_dict_for_ui():
     assert ui_dict["angles_list"][0]["name"] == "First"
     assert ui_dict["angles_list"][1]["visible"] is False
 
+    # Check metadata is included
+    assert "metadata" in ui_dict
+    assert ui_dict["metadata"]["coordinate_system"] == "LPS"
+    assert ui_dict["metadata"]["index_order"] == "itk"
+    assert ui_dict["metadata"]["angle_units"] == "radians"
+    assert ui_dict["metadata"]["volume_label"] == "Test"
 
-def test_rotation_sequence_from_ui_dict():
-    ui_data = {
+    # Check mpr_origin
+    assert "mpr_origin" in ui_dict
+    assert ui_dict["mpr_origin"] == [0.0, 0.0, 0.0]
+
+
+def test_rotation_sequence_from_dict():
+    """Test creating RotationSequence from full dict structure."""
+    data = {
+        "metadata": {
+            "coordinate_system": "LPS",
+            "index_order": "itk",
+            "angle_units": "radians",
+            "timestamp": "2026-01-16T12:00:00",
+            "volume_label": "CCTA",
+            "deletable": True,
+        },
         "angles_list": [
-            {"axis": "X", "angle": 0.5, "name": "Test"},
-            {"axis": "Y", "angle": 1.0},
-        ]
+            {
+                "axis": "X",
+                "angle": 0.5,
+                "name": "Test",
+                "visible": True,
+                "name_editable": True,
+                "deletable": True,
+            },
+            {
+                "axis": "Y",
+                "angle": 1.0,
+                "visible": True,
+                "name": "",
+                "name_editable": True,
+                "deletable": True,
+            },
+        ],
+        "mpr_origin": [10.0, 20.0, 30.0],
     }
-    seq = RotationSequence.from_ui_dict(ui_data, volume_label="CCTA")
+    seq = RotationSequence(**data)
 
     assert len(seq.angles_list) == 2
     assert seq.angles_list[0].axis == "X"
     assert seq.angles_list[0].angle == 0.5
     assert seq.metadata.volume_label == "CCTA"
+    assert seq.mpr_origin == [10.0, 20.0, 30.0]
 
 
 def test_rotation_sequence_to_toml_itk():
