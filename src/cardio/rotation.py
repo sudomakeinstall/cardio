@@ -82,14 +82,6 @@ class RotationSequence(pc.BaseModel):
             raise ValueError("mpr_origin must be a 3-element list [x, y, z]")
         return [float(x) for x in v]
 
-    @pc.field_validator("angles_list", mode="before")
-    @classmethod
-    def convert_legacy_list(cls, v):
-        """Convert legacy list of dicts to list of RotationStep."""
-        if isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict):
-            return [RotationStep(**item) for item in v]
-        return v
-
     def to_dict_for_ui(self) -> dict:
         """Convert to UI format.
 
