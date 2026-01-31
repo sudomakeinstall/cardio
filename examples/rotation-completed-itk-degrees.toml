@@ -10,7 +10,7 @@ timestamp = "2026-01-17T09:57:10.972052"
 volume_label = "CCTA"
 
 [[angles_list]]
-axes = "Z"
+axis = "Z"
 angle = 33.14029978866625
 visible = true
 name = "vla"
@@ -18,7 +18,7 @@ name_editable = false
 deletable = false
 
 [[angles_list]]
-axes = "X"
+axis = "X"
 angle = -47.07379152964901
 visible = true
 name = "vla_2_sax"
@@ -26,7 +26,7 @@ name_editable = false
 deletable = false
 
 [[angles_list]]
-axes = "Z"
+axis = "Z"
 angle = 111.63551772158903
 visible = true
 name = "sax_2_2ch"
@@ -34,7 +34,7 @@ name_editable = false
 deletable = false
 
 [[angles_list]]
-axes = "Z"
+axis = "Z"
 angle = 58.35044277442247
 visible = false
 name = "sax_2_3ch"
@@ -42,7 +42,7 @@ name_editable = false
 deletable = false
 
 [[angles_list]]
-axes = "Z"
+axis = "Z"
 angle = -20.717732953631135
 visible = false
 name = "sax_2_4ch"

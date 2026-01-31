@@ -28,8 +28,8 @@ class Logic:
         visible_index = 0
         for rotation in angles_list:
             if rotation.get("visible", True):
-                rotation_sequence.append({"axis": rotation["axes"]})
-                rotation_angles[visible_index] = rotation["angles"][0]
+                rotation_sequence.append({"axis": rotation["axis"]})
+                rotation_angles[visible_index] = rotation["angle"]
                 visible_index += 1
 
         # CRITICAL: VTK always needs rotations in ITK convention
@@ -620,15 +620,15 @@ class Logic:
             updated_data = copy.deepcopy(rotation_data)
 
             for rotation in updated_data["angles_list"]:
-                current_angle = rotation.get("angles", [0])[0]
+                current_angle = rotation.get("angle", 0)
 
                 # Convert based on old -> new units
                 if old_units == AngleUnits.DEGREES and new_units == AngleUnits.RADIANS:
-                    rotation["angles"][0] = np.radians(current_angle)
+                    rotation["angle"] = np.radians(current_angle)
                 elif (
                     old_units == AngleUnits.RADIANS and new_units == AngleUnits.DEGREES
                 ):
-                    rotation["angles"][0] = np.degrees(current_angle)
+                    rotation["angle"] = np.degrees(current_angle)
 
             self.server.state.mpr_rotation_data = updated_data
 
@@ -664,12 +664,12 @@ class Logic:
             updated_data = copy.deepcopy(rotation_data)
 
             for rotation in updated_data["angles_list"]:
-                current_axis = rotation.get("axes")
-                current_angle = rotation.get("angles", [0])[0]
+                current_axis = rotation.get("axis")
+                current_angle = rotation.get("angle", 0)
 
                 # Conversion is the same for both ITK<->ROMA directions
-                rotation["axes"] = {"X": "Z", "Y": "Y", "Z": "X"}[current_axis]
-                rotation["angles"][0] = -current_angle
+                rotation["axis"] = {"X": "Z", "Y": "Y", "Z": "X"}[current_axis]
+                rotation["angle"] = -current_angle
 
             self.server.state.mpr_rotation_data = updated_data
 
@@ -1036,8 +1036,8 @@ class Logic:
 
         angles_list.append(
             {
-                "axes": axis,
-                "angles": [0],
+                "axis": axis,
+                "angle": 0,
                 "visible": True,
                 "name": "",
                 "name_editable": True,
@@ -1071,7 +1071,7 @@ class Logic:
         angles_list = current_data["angles_list"]
 
         if 0 <= index < len(angles_list):
-            angles_list[index]["angles"][0] = 0
+            angles_list[index]["angle"] = 0
             current_data["angles_list"] = angles_list
             self.server.state.mpr_rotation_data = current_data
 

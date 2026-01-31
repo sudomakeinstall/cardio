@@ -10,7 +10,7 @@ volume_label = "CCTA"
 mpr_origin = [0.0, 0.0, 0.0]
 
 [[angles_list]]
-axes = "Z"
+axis = "Z"
 angle = 0.0
 visible = true
 name = "vla"
@@ -18,7 +18,7 @@ name_editable = false
 deletable = false
 
 [[angles_list]]
-axes = "X"
+axis = "X"
 angle = 0.0
 visible = true
 name = "vla_2_sax"
@@ -26,7 +26,7 @@ name_editable = false
 deletable = false
 
 [[angles_list]]
-axes = "Z"
+axis = "Z"
 angle = 0.0
 visible = true
 name = "sax_2_2ch"
@@ -34,7 +34,7 @@ name_editable = false
 deletable = false
 
 [[angles_list]]
-axes = "Z"
+axis = "Z"
 angle = 0.0
 visible = false
 name = "sax_2_3ch"
@@ -42,7 +42,7 @@ name_editable = false
 deletable = false
 
 [[angles_list]]
-axes = "Z"
+axis = "Z"
 angle = 0.0
 visible = false
 name = "sax_2_4ch"

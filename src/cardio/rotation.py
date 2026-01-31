@@ -15,32 +15,17 @@ from .orientation import AngleUnits, IndexOrder
 class RotationStep(pc.BaseModel):
     """Single rotation step.
 
-    Both angles and axes are stored in the current convention/units.
-    - Angles: stored in units specified by parent metadata.angle_units
-    - Axes: stored in convention specified by parent metadata.index_order
+    Both angle and axis are stored in the current convention/units.
+    - Angle: stored in units specified by parent metadata.angle_units
+    - Axis: stored in convention specified by parent metadata.index_order
     """
 
-    axes: ty.Literal["X", "Y", "Z"]
+    axis: ty.Literal["X", "Y", "Z"]
     angle: float = 0.0
     visible: bool = True
     name: str = ""
     name_editable: bool = True
     deletable: bool = True
-
-    @pc.model_validator(mode="before")
-    @classmethod
-    def handle_legacy_format(cls, data):
-        """Handle legacy 'angles' list format and 'axis' field."""
-        if isinstance(data, dict):
-            if "angles" in data and "angle" not in data:
-                angles = data["angles"]
-                if isinstance(angles, list) and len(angles) > 0:
-                    data["angle"] = angles[0]
-                else:
-                    data["angle"] = angles
-            if "axis" in data and "axes" not in data:
-                data["axes"] = data["axis"]
-        return data
 
 
 class RotationMetadata(pc.BaseModel):
@@ -57,9 +42,9 @@ class RotationMetadata(pc.BaseModel):
 class RotationSequence(pc.BaseModel):
     """Complete rotation sequence.
 
-    All data (angles, axes, and origin) are stored in the current convention/units:
-    - Angles: stored in units specified by metadata.angle_units
-    - Axes: stored in convention specified by metadata.index_order
+    All data (angle, axis, and origin) are stored in the current convention/units:
+    - Angle: stored in units specified by metadata.angle_units
+    - Axis: stored in convention specified by metadata.index_order
     - Origin: stored in axis order specified by metadata.index_order
 
     When convention/units change in the UI, all existing data is converted.
@@ -85,14 +70,13 @@ class RotationSequence(pc.BaseModel):
     def to_dict_for_ui(self) -> dict:
         """Convert to UI format.
 
-        Angles are passed through in their current units (metadata.angle_units).
-        UI expects 'angles' as a list for backward compatibility.
+        Angle is passed through in its current units (metadata.angle_units).
         """
         return {
             "angles_list": [
                 {
-                    "axes": step.axes,
-                    "angles": [step.angle],
+                    "axis": step.axis,
+                    "angle": step.angle,
                     "visible": step.visible,
                     "name": step.name,
                     "name_editable": step.name_editable,
@@ -107,7 +91,7 @@ class RotationSequence(pc.BaseModel):
     def from_ui_dict(cls, data: dict, volume_label: str = "") -> "RotationSequence":
         """Create from UI format.
 
-        Angles from UI are stored as-is (in current UI units).
+        Angle from UI is stored as-is (in current UI units).
         Caller should set metadata.angle_units to match the UI's current units.
         """
         angles_list = [RotationStep(**step) for step in data.get("angles_list", [])]

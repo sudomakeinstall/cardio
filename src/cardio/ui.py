@@ -173,9 +173,9 @@ class UI:
 
         for rotation in angles_list:
             if rotation.get("visible", True):
-                angle = rotation.get("angles", [0])[0]
+                angle = rotation.get("angle", 0)
                 rotation_matrix = euler_angle_to_rotation_matrix(
-                    EulerAxis(rotation["axes"]), angle, angle_units
+                    EulerAxis(rotation["axis"]), angle, angle_units
                 )
                 cumulative_rotation = cumulative_rotation @ rotation_matrix
 
@@ -555,7 +555,7 @@ class UI:
                                     with vuetify.VCol(cols="12"):
                                         vuetify.VSlider(
                                             v_model=(
-                                                f"mpr_rotation_data.angles_list[{i}].angles[0]",
+                                                f"mpr_rotation_data.angles_list[{i}].angle",
                                             ),
                                             min=(
                                                 "angle_units === 'radians' ? -Math.PI : -180",
@@ -577,7 +577,7 @@ class UI:
                                     with vuetify.VCol(cols="4"):
                                         vuetify.VSelect(
                                             v_model=(
-                                                f"mpr_rotation_data.angles_list[{i}].axes",
+                                                f"mpr_rotation_data.angles_list[{i}].axis",
                                             ),
                                             items=(["X", "Y", "Z"],),
                                             dense=True,
