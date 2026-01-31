@@ -526,20 +526,6 @@ class UI:
                                 color="primary",
                             )
 
-                    # Reset rotations button
-                    vuetify.VBtn(
-                        "Remove All Rotations",
-                        v_if="!maximized_view && active_volume_label && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > 0",
-                        click=self.server.controller.reset_rotations,
-                        small=True,
-                        dense=True,
-                        outlined=True,
-                        color="warning",
-                        block=True,
-                        classes="mb-2",
-                        prepend_icon="mdi-refresh",
-                    )
-
                     # Individual rotation sliders with DeepReactive
                     with client.DeepReactive("mpr_rotation_data"):
                         for i in range(self.scene.max_mpr_rotations):
@@ -690,6 +676,21 @@ class UI:
                         block=True,
                         classes="mb-2",
                         prepend_icon="mdi-content-save",
+                    )
+
+                    # Delete rotations button
+                    vuetify.VBtn(
+                        "Delete All Rotations",
+                        v_if="!maximized_view && active_volume_label && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > 0",
+                        click=self.server.controller.reset_rotations,
+                        small=True,
+                        dense=True,
+                        outlined=True,
+                        color="error",
+                        block=True,
+                        classes="mb-2",
+                        prepend_icon="mdi-refresh",
+                        disabled=("!mpr_rotation_metadata_deletable",),
                     )
 
                     vuetify.VDivider(classes="my-2")

@@ -212,6 +212,9 @@ class Logic:
         self.server.state.index_order = (
             self.scene.mpr_rotation_sequence.metadata.index_order.value
         )
+        self.server.state.mpr_rotation_metadata_deletable = (
+            self.scene.mpr_rotation_sequence.metadata.deletable
+        )
 
         # Initialize MPR presets data
         try:
@@ -557,6 +560,9 @@ class Logic:
         )
         rotation_seq.metadata.angle_units = (
             self.scene.mpr_rotation_sequence.metadata.angle_units
+        )
+        rotation_seq.metadata.deletable = (
+            self.scene.mpr_rotation_sequence.metadata.deletable
         )
 
         output_path = save_dir / f"{timestamp_str}.toml"
@@ -1072,6 +1078,7 @@ class Logic:
     def reset_mpr_rotations(self):
         """Reset all MPR rotations."""
         self.server.state.mpr_rotation_data = {"angles_list": []}
+        self.server.state.mpr_rotation_metadata_deletable = True
 
     def finalize_mpr_initialization(self, **kwargs):
         """Set the active volume label after UI is ready to avoid race condition."""

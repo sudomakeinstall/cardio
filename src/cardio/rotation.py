@@ -51,6 +51,7 @@ class RotationMetadata(pc.BaseModel):
     angle_units: AngleUnits = AngleUnits.RADIANS
     timestamp: str = pc.Field(default_factory=lambda: dt.datetime.now().isoformat())
     volume_label: str = ""
+    deletable: bool = True
 
 
 class RotationSequence(pc.BaseModel):
