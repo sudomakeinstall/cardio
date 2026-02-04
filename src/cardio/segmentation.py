@@ -40,6 +40,8 @@ class Segmentation(Object):
             # Create SurfaceNets3D filter
             surface_nets = vtk.vtkSurfaceNets3D()
             surface_nets.SetInputData(vtk_image)
+            max_label = int(vtk_image.GetPointData().GetScalars().GetRange()[1])
+            surface_nets.GenerateLabels(max_label, 1, max_label)
 
             # Configure label selection if specified
             if self.include_labels is not None:
