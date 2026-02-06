@@ -20,6 +20,8 @@ class Segmentation(Object):
         description="Filename pattern with $frame placeholder",
     )
     _actors: list[vtk.vtkActor] = pc.PrivateAttr(default_factory=list)
+    _label_images: list[vtk.vtkImageData] = pc.PrivateAttr(default_factory=list)
+    _mpr_actors: dict[int, dict[str, dict]] = pc.PrivateAttr(default_factory=dict)
     properties: vtkPropertyConfig = pc.Field(
         default_factory=vtkPropertyConfig, description="Property configuration"
     )
@@ -36,6 +38,7 @@ class Segmentation(Object):
             image = itk.imread(path)
             image = reset_direction(image)
             vtk_image = itk.vtk_image_from_image(image)
+            self._label_images.append(vtk_image)
 
             # Create SurfaceNets3D filter
             surface_nets = vtk.vtkSurfaceNets3D()
@@ -177,3 +180,160 @@ class Segmentation(Object):
             for actor in self._actors:
                 mapper = actor.GetMapper()
                 mapper.SetClippingPlanes(self.clipping_planes)
+
+    def create_mpr_actors(self, frame: int = 0):
+        """Create MPR actors for axial, sagittal, and coronal views."""
+        if frame >= len(self._label_images):
+            frame = 0
+
+        image_data = self._label_images[frame]
+        mpr_actors = {}
+
+        for orientation in ["axial", "sagittal", "coronal"]:
+            reslice = vtk.vtkImageReslice()
+            reslice.SetInputData(image_data)
+            reslice.SetOutputDimensionality(2)
+            reslice.SetInterpolationModeToNearestNeighbor()
+            reslice.SetBackgroundLevel(0)
+
+            lut = self._create_label_lookup_table(image_data, opacity=1.0)
+            image_to_colors = vtk.vtkImageMapToColors()
+            image_to_colors.SetInputConnection(reslice.GetOutputPort())
+            image_to_colors.SetLookupTable(lut)
+            image_to_colors.SetOutputFormatToRGBA()
+
+            actor = vtk.vtkImageActor()
+            actor.GetMapper().SetInputConnection(image_to_colors.GetOutputPort())
+            actor.SetVisibility(False)
+
+            mpr_actors[orientation] = {
+                "reslice": reslice,
+                "actor": actor,
+                "image_to_colors": image_to_colors,
+                "lut": lut,
+            }
+
+        self._mpr_actors[frame] = mpr_actors
+        self._setup_center_slices(image_data, frame)
+        return mpr_actors
+
+    def _create_label_lookup_table(self, image_data, opacity: float = 1.0):
+        """Create lookup table for label-to-color mapping."""
+        scalar_range = image_data.GetPointData().GetScalars().GetRange()
+        min_label = int(scalar_range[0])
+        max_label = int(scalar_range[1])
+
+        lut = vtk.vtkLookupTable()
+        lut.SetNumberOfTableValues(max_label + 1)
+        lut.SetRange(min_label, max_label)
+
+        lut.SetTableValue(0, 0.0, 0.0, 0.0, 0.0)
+
+        for label in range(min_label + 1, max_label + 1):
+            if label in self.label_properties:
+                r = self.label_properties[label].get("r", 1.0)
+                g = self.label_properties[label].get("g", 1.0)
+                b = self.label_properties[label].get("b", 1.0)
+            else:
+                np.random.seed(label)
+                r, g, b = np.random.rand(3)
+            lut.SetTableValue(label, r, g, b, opacity)
+
+        lut.Build()
+        return lut
+
+    def _setup_center_slices(self, image_data, frame: int):
+        """Set up reslice matrices to show center slices."""
+        from .orientation import create_vtk_reslice_matrix
+
+        center = image_data.GetCenter()
+        actors = self._mpr_actors[frame]
+        transforms = self._get_mpr_coordinate_systems()
+        origin = [center[0], center[1], center[2]]
+
+        for orientation in ["axial", "sagittal", "coronal"]:
+            mat = create_vtk_reslice_matrix(transforms[orientation], origin)
+            actors[orientation]["reslice"].SetResliceAxes(mat)
+
+    def _get_mpr_coordinate_systems(self):
+        """Get coordinate system transformation matrices for MPR views."""
+        from .orientation import axcode_transform_matrix
+
+        view_axcodes = {
+            "axial": "LAS",
+            "sagittal": "ASL",
+            "coronal": "LSA",
+        }
+
+        transforms = {}
+        for view, target_axcode in view_axcodes.items():
+            transforms[view] = axcode_transform_matrix("LPS", target_axcode)
+
+        return transforms
+
+    def get_mpr_actors_for_frame(self, frame: int) -> dict:
+        """Get MPR actors for a specific frame."""
+        if frame not in self._mpr_actors:
+            return self.create_mpr_actors(frame)
+        return self._mpr_actors[frame]
+
+    def update_slice_positions(
+        self,
+        frame: int,
+        origin: list,
+        rotation_sequence=None,
+        rotation_angles=None,
+        angle_units=None,
+    ):
+        """Update slice positions for MPR views with optional rotation."""
+        from .orientation import (
+            AngleUnits,
+            EulerAxis,
+            create_vtk_reslice_matrix,
+            euler_angle_to_rotation_matrix,
+        )
+
+        if angle_units is None:
+            angle_units = AngleUnits.DEGREES
+        if frame not in self._mpr_actors:
+            return
+
+        actors = self._mpr_actors[frame]
+        transforms = self._get_mpr_coordinate_systems()
+
+        cumulative_rotation = np.eye(3)
+        if rotation_sequence and rotation_angles:
+            for i, rotation in enumerate(rotation_sequence):
+                angle = rotation_angles.get(i, 0)
+                rotation_matrix = euler_angle_to_rotation_matrix(
+                    EulerAxis(rotation["axis"]), angle, angle_units
+                )
+                cumulative_rotation = cumulative_rotation @ rotation_matrix
+
+        axial_transform = cumulative_rotation @ transforms["axial"]
+        sagittal_transform = cumulative_rotation @ transforms["sagittal"]
+        coronal_transform = cumulative_rotation @ transforms["coronal"]
+
+        axial_matrix = create_vtk_reslice_matrix(axial_transform, origin)
+        actors["axial"]["reslice"].SetResliceAxes(axial_matrix)
+
+        sagittal_matrix = create_vtk_reslice_matrix(sagittal_transform, origin)
+        actors["sagittal"]["reslice"].SetResliceAxes(sagittal_matrix)
+
+        coronal_matrix = create_vtk_reslice_matrix(coronal_transform, origin)
+        actors["coronal"]["reslice"].SetResliceAxes(coronal_matrix)
+
+    def update_mpr_opacity(self, frame: int, opacity: float):
+        """Update opacity for all MPR overlay labels."""
+        if frame not in self._mpr_actors:
+            return
+
+        actors = self._mpr_actors[frame]
+
+        for orientation in ["axial", "sagittal", "coronal"]:
+            lut = actors[orientation]["lut"]
+            for i in range(1, lut.GetNumberOfTableValues()):
+                rgba = list(lut.GetTableValue(i))
+                rgba[3] = opacity
+                lut.SetTableValue(i, *rgba)
+            actors[orientation]["image_to_colors"].Modified()

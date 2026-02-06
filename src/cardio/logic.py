@@ -102,6 +102,13 @@ class Logic:
         self.server.state.change("angle_units")(self.sync_angle_units)
         self.server.state.change("index_order")(self.sync_index_order)
         self.server.state.change("clip_depth")(self.sync_clip_depth)
+        self.server.state.change("mpr_segmentation_opacity")(
+            self.update_segmentation_opacity
+        )
+        for s in self.scene.segmentations:
+            self.server.state.change(f"mpr_segmentation_overlay_{s.label}")(
+                self.sync_segmentation_overlays
+            )
 
         # Initialize visibility state variables
         for m in self.scene.meshes:
@@ -110,6 +117,11 @@ class Logic:
             self.server.state[f"volume_visibility_{v.label}"] = v.visible
         for s in self.scene.segmentations:
             self.server.state[f"segmentation_visibility_{s.label}"] = s.visible
+
+        # Initialize MPR overlay state variables
+        for s in self.scene.segmentations:
+            self.server.state[f"mpr_segmentation_overlay_{s.label}"] = False
+        self.server.state.mpr_segmentation_opacity = 0.7
 
         # Initialize preset state variables
         for v in self.scene.volumes:
@@ -347,6 +359,9 @@ class Logic:
                         line_data["actor"].SetVisibility(crosshairs_visible)
                 sagittal_renderer.ResetCamera()
 
+        # Add segmentation overlays
+        self._add_segmentation_overlays_to_mpr(frame)
+
         # Apply current slice position and window/level to all views
         self._apply_current_mpr_settings(active_volume, frame)
 
@@ -371,6 +386,17 @@ class Logic:
             rotation_angles,
             self.scene.mpr_rotation_sequence.metadata.angle_units,
         )
+
+        # Apply same transformations to segmentation overlays
+        for seg in self.scene.segmentations:
+            if self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
+                seg.update_slice_positions(
+                    frame,
+                    origin,
+                    rotation_sequence,
+                    rotation_angles,
+                    self.scene.mpr_rotation_sequence.metadata.angle_units,
+                )
 
         # Apply window/level
         window = getattr(self.server.state, "mpr_window", 400.0)
@@ -856,6 +882,9 @@ class Logic:
                     line_data["actor"].SetVisibility(crosshairs_visible)
                 sagittal_renderer.ResetCamera()
 
+        # Add segmentation overlays
+        self._add_segmentation_overlays_to_mpr(current_frame)
+
         # Apply current window/level settings to the MPR actors
         window = getattr(self.server.state, "mpr_window", 800.0)
         level = getattr(self.server.state, "mpr_level", 200.0)
@@ -905,6 +934,17 @@ class Logic:
             rotation_angles,
             self.scene.mpr_rotation_sequence.metadata.angle_units,
         )
+
+        # Update segmentation overlay positions
+        for seg in self.scene.segmentations:
+            if self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
+                seg.update_slice_positions(
+                    current_frame,
+                    origin,
+                    rotation_sequence,
+                    rotation_angles,
+                    self.scene.mpr_rotation_sequence.metadata.angle_units,
+                )
 
         # Update all views
         self.server.controller.view_update()
@@ -1013,6 +1053,17 @@ class Logic:
             self.scene.mpr_rotation_sequence.metadata.angle_units,
         )
 
+        # Update segmentation overlay positions
+        for seg in self.scene.segmentations:
+            if self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
+                seg.update_slice_positions(
+                    current_frame,
+                    origin,
+                    rotation_sequence,
+                    rotation_angles,
+                    self.scene.mpr_rotation_sequence.metadata.angle_units,
+                )
+
         # Update all views
         self.server.controller.view_update()
 
@@ -1112,6 +1163,141 @@ class Logic:
 
         # Apply loaded rotation data to MPR views
         self.update_mpr_rotation()
+
+    def _add_segmentation_overlays_to_mpr(self, frame: int):
+        """Add segmentation overlays to MPR renderers."""
+        opacity = self.server.state.mpr_segmentation_opacity
+
+        for seg in self.scene.segmentations:
+            overlay_enabled = self.server.state[f"mpr_segmentation_overlay_{seg.label}"]
+            if not overlay_enabled:
+                continue
+
+            seg_mpr_actors = seg.get_mpr_actors_for_frame(frame)
+            seg.update_mpr_opacity(frame, opacity)
+
+            if self.scene.axial_renderWindow:
+                renderer = (
+                    self.scene.axial_renderWindow.GetRenderers().GetFirstRenderer()
+                )
+                renderer.AddActor(seg_mpr_actors["axial"]["actor"])
+                seg_mpr_actors["axial"]["actor"].SetVisibility(True)
+
+            if self.scene.coronal_renderWindow:
+                renderer = (
+                    self.scene.coronal_renderWindow.GetRenderers().GetFirstRenderer()
+                )
+                renderer.AddActor(seg_mpr_actors["coronal"]["actor"])
+                seg_mpr_actors["coronal"]["actor"].SetVisibility(True)
+
+            if self.scene.sagittal_renderWindow:
+                renderer = (
+                    self.scene.sagittal_renderWindow.GetRenderers().GetFirstRenderer()
+                )
+                renderer.AddActor(seg_mpr_actors["sagittal"]["actor"])
+                seg_mpr_actors["sagittal"]["actor"].SetVisibility(True)
+
+    def sync_segmentation_overlays(self, **kwargs):
+        """Toggle segmentation overlay visibility on MPR views."""
+        if not self.server.state.mpr_enabled:
+            return
+
+        current_frame = self.server.state.frame
+
+        for rw in [
+            self.scene.axial_renderWindow,
+            self.scene.coronal_renderWindow,
+            self.scene.sagittal_renderWindow,
+        ]:
+            if rw:
+                rw.GetRenderers().GetFirstRenderer().RemoveAllViewProps()
+
+        active_volume = next(
+            (
+                v
+                for v in self.scene.volumes
+                if v.label == self.server.state.active_volume_label
+            ),
+            None,
+        )
+        if active_volume:
+            volume_mpr_actors = active_volume.get_mpr_actors_for_frame(current_frame)
+            crosshairs = active_volume.crosshair_actors
+            crosshairs_visible = getattr(
+                self.server.state, "mpr_crosshairs_enabled", True
+            )
+
+            if self.scene.axial_renderWindow:
+                renderer = (
+                    self.scene.axial_renderWindow.GetRenderers().GetFirstRenderer()
+                )
+                renderer.AddActor(volume_mpr_actors["axial"]["actor"])
+                volume_mpr_actors["axial"]["actor"].SetVisibility(True)
+                if crosshairs and "axial" in crosshairs:
+                    for line_data in crosshairs["axial"].values():
+                        renderer.AddActor2D(line_data["actor"])
+                        line_data["actor"].SetVisibility(crosshairs_visible)
+
+            if self.scene.coronal_renderWindow:
+                renderer = (
+                    self.scene.coronal_renderWindow.GetRenderers().GetFirstRenderer()
+                )
+                renderer.AddActor(volume_mpr_actors["coronal"]["actor"])
+                volume_mpr_actors["coronal"]["actor"].SetVisibility(True)
+                if crosshairs and "coronal" in crosshairs:
+                    for line_data in crosshairs["coronal"].values():
+                        renderer.AddActor2D(line_data["actor"])
+                        line_data["actor"].SetVisibility(crosshairs_visible)
+
+            if self.scene.sagittal_renderWindow:
+                renderer = (
+                    self.scene.sagittal_renderWindow.GetRenderers().GetFirstRenderer()
+                )
+                renderer.AddActor(volume_mpr_actors["sagittal"]["actor"])
+                volume_mpr_actors["sagittal"]["actor"].SetVisibility(True)
+                if crosshairs and "sagittal" in crosshairs:
+                    for line_data in crosshairs["sagittal"].values():
+                        renderer.AddActor2D(line_data["actor"])
+                        line_data["actor"].SetVisibility(crosshairs_visible)
+
+        self._add_segmentation_overlays_to_mpr(current_frame)
+
+        # Apply current transformation state to segmentation overlays
+        if active_volume:
+            from .orientation import IndexOrder
+
+            origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+            rotation_sequence, rotation_angles = self._get_visible_rotation_data()
+
+            current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
+            if current_convention == IndexOrder.ROMA:
+                origin = [origin[2], origin[1], origin[0]]
+
+            for seg in self.scene.segmentations:
+                if self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
+                    seg.update_slice_positions(
+                        current_frame,
+                        origin,
+                        rotation_sequence,
+                        rotation_angles,
+                        self.scene.mpr_rotation_sequence.metadata.angle_units,
+                    )
+
+        self.server.controller.view_update()
+
+    def update_segmentation_opacity(self, **kwargs):
+        """Update segmentation overlay opacity."""
+        if not self.server.state.mpr_enabled:
+            return
+
+        current_frame = self.server.state.frame
+        opacity = self.server.state.mpr_segmentation_opacity
+
+        for seg in self.scene.segmentations:
+            if self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
+                seg.update_mpr_opacity(current_frame, opacity)
+
+        self.server.controller.view_update()
 
     @asynchronous.task
     async def close_application(self):

@@ -696,6 +696,36 @@ class UI:
                         disabled=("!mpr_rotation_data.metadata.deletable",),
                     )
 
+                if self.scene.segmentations:
+                    vuetify.VDivider(
+                        classes="my-2", v_if="!maximized_view && active_volume_label"
+                    )
+
+                    vuetify.VListSubheader(
+                        "MPR Overlays", v_if="!maximized_view && active_volume_label"
+                    )
+
+                    vuetify.VSlider(
+                        v_if="!maximized_view && active_volume_label",
+                        v_model=("mpr_segmentation_opacity", 0.7),
+                        label="Overlay Opacity",
+                        min=0.0,
+                        max=1.0,
+                        step=0.05,
+                        hide_details=True,
+                        dense=True,
+                        thumb_label=True,
+                    )
+
+                    for seg in self.scene.segmentations:
+                        vuetify.VCheckbox(
+                            v_if="!maximized_view && active_volume_label",
+                            v_model=(f"mpr_segmentation_overlay_{seg.label}", False),
+                            label=f"{seg.label}",
+                            hide_details=True,
+                            dense=True,
+                        )
+
                     vuetify.VDivider(classes="my-2")
 
                 vuetify.VListSubheader("Playback Controls")
