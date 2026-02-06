@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "cardio"
-version = "2026.2.1"
+version = "2026.2.2"
 authors = [
     {name = "Davis Marc Vigneault", email = "davis.vigneault@gmail.com"}
 ]
@@ -62,7 +62,7 @@ repository = "https://github.com/sudomakeinstall/cardio"
 profile = "black"
 
 [tool.bumpver]
-current_version = "2026.2.1"
+current_version = "2026.2.2"
 version_pattern = "YYYY.MM.INC0"
 commit_message = "ENH: Bump version from {old_version} => {new_version}"
 commit = true
