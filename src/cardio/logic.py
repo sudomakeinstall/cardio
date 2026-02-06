@@ -72,6 +72,18 @@ class Logic:
 
         # Initialize MPR origin (will be updated when active volume changes)
         self.server.state.mpr_origin = [0.0, 0.0, 0.0]
+
+        camera = self.scene.renderer.GetActiveCamera()
+        self.server.state.clip_depth = list(camera.GetClippingRange())
+
+        def _reapply_clip(obj, event):
+            near, far = self.server.state.clip_depth
+            if camera.GetClippingRange() != (near, far):
+                camera.SetClippingRange(near, far)
+
+        self._clip_observer = _reapply_clip
+        self.scene.renderWindow.AddObserver("StartEvent", self._clip_observer)
+
         self.server.state.mpr_crosshairs_enabled = self.scene.mpr_crosshairs_enabled
 
         self.server.state.change("frame")(self.update_frame)
@@ -89,6 +101,7 @@ class Logic:
         self.server.state.change("mpr_rotation_data")(self.update_mpr_rotation)
         self.server.state.change("angle_units")(self.sync_angle_units)
         self.server.state.change("index_order")(self.sync_index_order)
+        self.server.state.change("clip_depth")(self.sync_clip_depth)
 
         # Initialize visibility state variables
         for m in self.scene.meshes:
@@ -487,6 +500,11 @@ class Logic:
                     ]
                     s.update_clipping_bounds(bounds)
 
+        self.server.controller.view_update()
+
+    def sync_clip_depth(self, **kwargs):
+        near, far = self.server.state.clip_depth
+        self.scene.renderer.GetActiveCamera().SetClippingRange(near, far)
         self.server.controller.view_update()
 
     def increment_frame(self):

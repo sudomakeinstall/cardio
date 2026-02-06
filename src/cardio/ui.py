@@ -474,6 +474,9 @@ class UI:
                             )
 
             with layout.drawer:
+                _camera = self.scene.renderer.GetActiveCamera()
+                _clip_near, _clip_far = _camera.GetClippingRange()
+
                 # Volume selection dropdown
                 if self.scene.volumes:
                     vuetify.VSelect(
@@ -807,6 +810,21 @@ class UI:
                         title=f"Capture cine to {self.scene.screenshot_directory}",
                         prepend_icon="mdi-video",
                     )
+
+                vuetify.VDivider(classes="my-2")
+
+                vuetify.VListSubheader("Depth Clipping")
+
+                vuetify.VRangeSlider(
+                    v_model=("clip_depth", [_clip_near, _clip_far]),
+                    label="Near / Far",
+                    min=0.1,
+                    max=_clip_far,
+                    step=_clip_far / 100,
+                    hide_details=True,
+                    dense=True,
+                    thumb_label=True,
+                )
 
                 vuetify.VListSubheader("Appearance and Visibility")
 
