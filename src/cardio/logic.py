@@ -1166,7 +1166,15 @@ class Logic:
 
     def _add_segmentation_overlays_to_mpr(self, frame: int):
         """Add segmentation overlays to MPR renderers."""
+        from .orientation import IndexOrder
+
         opacity = self.server.state.mpr_segmentation_opacity
+        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+        rotation_sequence, rotation_angles = self._get_visible_rotation_data()
+
+        current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
+        if current_convention == IndexOrder.ROMA:
+            origin = [origin[2], origin[1], origin[0]]
 
         for seg in self.scene.segmentations:
             overlay_enabled = self.server.state[f"mpr_segmentation_overlay_{seg.label}"]
@@ -1175,6 +1183,15 @@ class Logic:
 
             seg_mpr_actors = seg.get_mpr_actors_for_frame(frame)
             seg.update_mpr_opacity(frame, opacity)
+
+            # Apply current transformation immediately to ensure sync
+            seg.update_slice_positions(
+                frame,
+                origin,
+                rotation_sequence,
+                rotation_angles,
+                self.scene.mpr_rotation_sequence.metadata.angle_units,
+            )
 
             if self.scene.axial_renderWindow:
                 renderer = (
