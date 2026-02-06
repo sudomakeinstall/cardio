@@ -49,6 +49,12 @@ class Logic:
         self.server = server
         self.scene = scene
 
+        # Playback timing state
+        self._playback_start_time = None
+        self._last_render_duration = 0.0
+        self._last_target_frame = None
+        self._is_rendering = False
+
         # Initialize mpr_presets early to avoid undefined errors
         self.server.state.mpr_presets = []
 
@@ -403,19 +409,114 @@ class Logic:
         level = getattr(self.server.state, "mpr_level", 40.0)
         active_volume.update_mpr_window_level(frame, window, level)
 
+    def _calculate_target_frame(self, elapsed_seconds, bpm, nframes):
+        """Calculate target frame based on elapsed time.
+
+        Args:
+            elapsed_seconds: Time since playback started
+            bpm: Beats per minute (playback speed)
+            nframes: Total number of frames
+
+        Returns:
+            Target frame index (0 to nframes-1)
+        """
+        cycle_duration = 60.0 / bpm
+        cycles_elapsed = elapsed_seconds / cycle_duration
+        fractional_frame = (cycles_elapsed * nframes) % nframes
+        return int(fractional_frame)
+
     @asynchronous.task
     async def play(self, playing, **kwargs):
+        """Robust cine playback loop with adaptive timing and frame skipping.
+
+        Addresses:
+        - Time-based frame calculation (not frame-increment based)
+        - Render time accounting with adaptive sleep
+        - Frequent cancellation checks for responsiveness
+        - Frame skipping when behind schedule
+        - Render debouncing to prevent concurrent renders
+        """
+        # Validate that at least one playback mode is active
         if not (self.server.state.incrementing or self.server.state.rotating):
             self.server.state.playing = False
+            return
+
+        # Initialize playback timing state
+        import time
+
+        self._playback_start_time = time.perf_counter()
+        self._last_target_frame = self.server.state.frame
+        self._last_render_duration = 0.0
+
+        # Playback parameters
+        CHECK_INTERVAL = 0.01  # Check pause flag every 10ms for responsiveness
+
         while self.server.state.playing:
+            # Calculate elapsed time and target frame
+            elapsed = time.perf_counter() - self._playback_start_time
+
+            # Get current playback parameters from state
             with self.server.state as state:
-                if state.incrementing:
-                    state.frame = (state.frame + 1) % self.scene.nframes
-                if state.rotating:
-                    deg = 360 / (self.scene.nframes * state.bpr)
-                    self.scene.renderer.GetActiveCamera().Azimuth(deg)
-                self.server.controller.view_update()
-            await asyncio.sleep(1 / state.bpm * 60 / self.scene.nframes)
+                bpm = state.bpm
+                nframes = self.scene.nframes
+                incrementing = state.incrementing
+                rotating = state.rotating
+                bpr = state.bpr
+
+            # Calculate target frame from elapsed time (time-based, not frame-based)
+            target_frame = self._calculate_target_frame(elapsed, bpm, nframes)
+
+            # Determine if render is needed
+            frame_changed = incrementing and (target_frame != self._last_target_frame)
+            needs_rotation = rotating
+            needs_render = frame_changed or needs_rotation
+
+            # Render only if needed and not already rendering (debouncing)
+            if needs_render and not self._is_rendering:
+                self._is_rendering = True
+                render_start = time.perf_counter()
+
+                try:
+                    with self.server.state as state:
+                        # Update frame if incrementing
+                        if incrementing and frame_changed:
+                            state.frame = target_frame
+                            self._last_target_frame = target_frame
+
+                        # Rotate camera if rotating
+                        if rotating:
+                            deg = 360 / (nframes * bpr)
+                            self.scene.renderer.GetActiveCamera().Azimuth(deg)
+
+                        # Synchronous blocking render
+                        self.server.controller.view_update()
+
+                    # Track render duration for adaptive timing
+                    self._last_render_duration = time.perf_counter() - render_start
+
+                finally:
+                    self._is_rendering = False
+
+            # Adaptive sleep interval calculation
+            base_interval = 60.0 / bpm / nframes
+            adjusted_interval = max(
+                CHECK_INTERVAL, base_interval - self._last_render_duration
+            )
+
+            # Sleep in small chunks to remain responsive to pause
+            remaining_sleep = adjusted_interval
+            while remaining_sleep > 0 and self.server.state.playing:
+                sleep_chunk = min(CHECK_INTERVAL, remaining_sleep)
+                await asyncio.sleep(sleep_chunk)
+                remaining_sleep -= sleep_chunk
+
+                # Early exit check after each sleep chunk
+                if not self.server.state.playing:
+                    break
+
+        # Clean up playback state
+        self._playback_start_time = None
+        self._last_target_frame = None
 
     def sync_mesh_visibility(self, **kwargs):
         for m in self.scene.meshes:
