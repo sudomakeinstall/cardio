@@ -54,6 +54,7 @@ class Logic:
         self._last_render_duration = 0.0
         self._last_target_frame = None
         self._is_rendering = False
+        self._playback_task = None
 
         # Initialize mpr_presets early to avoid undefined errors
         self.server.state.mpr_presets = []
@@ -93,7 +94,7 @@ class Logic:
         self.server.state.mpr_crosshairs_enabled = self.scene.mpr_crosshairs_enabled
 
         self.server.state.change("frame")(self.update_frame)
-        self.server.state.change("playing")(self.play)
+        self.server.state.change("playing")(self._handle_playing_change)
         self.server.state.change("theme_mode")(self.sync_background_color)
         self.server.state.change("active_volume_label")(self.sync_active_volume)
         self.server.state.change("mpr_origin")(self.update_slice_positions)
@@ -409,6 +410,21 @@ class Logic:
         level = getattr(self.server.state, "mpr_level", 40.0)
         active_volume.update_mpr_window_level(frame, window, level)
 
+    def _handle_playing_change(self, playing, **kwargs):
+        """Handle playback state changes with task cancellation support."""
+        from trame.app import asynchronous
+
+        # Cancel existing playback task if any
+        if self._playback_task and not self._playback_task.done():
+            self._playback_task.cancel()
+            self._playback_task = None
+
+        # Start new playback task if playing
+        if playing:
+            self._playback_task = asynchronous.create_task(
+                self._play_loop(playing, **kwargs)
+            )
+
     def _calculate_target_frame(self, elapsed_seconds, bpm, nframes):
         """Calculate target frame based on elapsed time.
 
@@ -425,8 +441,7 @@ class Logic:
         fractional_frame = (cycles_elapsed * nframes) % nframes
         return int(fractional_frame)
 
-    @asynchronous.task
-    async def play(self, playing, **kwargs):
+    async def _play_loop(self, playing, **kwargs):
         """Robust cine playback loop with adaptive timing and frame skipping.
 
         Addresses:
@@ -435,6 +450,7 @@ class Logic:
         - Frequent cancellation checks for responsiveness
         - Frame skipping when behind schedule
         - Render debouncing to prevent concurrent renders
+        - Task cancellation support for immediate pause
         """
         # Validate that at least one playback mode is active
         if not (self.server.state.incrementing or self.server.state.rotating):
@@ -451,72 +467,80 @@ class Logic:
         # Playback parameters
         CHECK_INTERVAL = 0.01  # Check pause flag every 10ms for responsiveness
 
-        while self.server.state.playing:
-            # Calculate elapsed time and target frame
-            elapsed = time.perf_counter() - self._playback_start_time
+        try:
+            while self.server.state.playing:
+                # Calculate elapsed time and target frame
+                elapsed = time.perf_counter() - self._playback_start_time
 
-            # Get current playback parameters from state
-            with self.server.state as state:
-                bpm = state.bpm
-                nframes = self.scene.nframes
-                incrementing = state.incrementing
-                rotating = state.rotating
-                bpr = state.bpr
+                # Get current playback parameters from state
+                with self.server.state as state:
+                    bpm = state.bpm
+                    nframes = self.scene.nframes
+                    incrementing = state.incrementing
+                    rotating = state.rotating
+                    bpr = state.bpr
 
-            # Calculate target frame from elapsed time (time-based, not frame-based)
-            target_frame = self._calculate_target_frame(elapsed, bpm, nframes)
+                # Calculate target frame from elapsed time (time-based, not frame-based)
+                target_frame = self._calculate_target_frame(elapsed, bpm, nframes)
 
-            # Determine if render is needed
-            frame_changed = incrementing and (target_frame != self._last_target_frame)
-            needs_rotation = rotating
-            needs_render = frame_changed or needs_rotation
+                # Determine if render is needed
+                frame_changed = incrementing and (
+                    target_frame != self._last_target_frame
+                )
+                needs_rotation = rotating
+                needs_render = frame_changed or needs_rotation
 
-            # Render only if needed and not already rendering (debouncing)
-            if needs_render and not self._is_rendering:
-                self._is_rendering = True
-                render_start = time.perf_counter()
+                # Render only if needed and not already rendering (debouncing)
+                if needs_render and not self._is_rendering:
+                    self._is_rendering = True
+                    render_start = time.perf_counter()
 
-                try:
-                    with self.server.state as state:
-                        # Update frame if incrementing
-                        if incrementing and frame_changed:
-                            state.frame = target_frame
-                            self._last_target_frame = target_frame
+                    try:
+                        with self.server.state as state:
+                            # Update frame if incrementing
+                            if incrementing and frame_changed:
+                                state.frame = target_frame
+                                self._last_target_frame = target_frame
 
-                        # Rotate camera if rotating
-                        if rotating:
-                            deg = 360 / (nframes * bpr)
-                            self.scene.renderer.GetActiveCamera().Azimuth(deg)
+                            # Rotate camera if rotating
+                            if rotating:
+                                deg = 360 / (nframes * bpr)
+                                self.scene.renderer.GetActiveCamera().Azimuth(deg)
 
-                        # Synchronous blocking render
-                        self.server.controller.view_update()
+                            # Synchronous blocking render
+                            self.server.controller.view_update()
 
-                    # Track render duration for adaptive timing
-                    self._last_render_duration = time.perf_counter() - render_start
+                        # Track render duration for adaptive timing
+                        self._last_render_duration = time.perf_counter() - render_start
 
-                finally:
-                    self._is_rendering = False
+                    finally:
+                        self._is_rendering = False
 
-            # Adaptive sleep interval calculation
-            base_interval = 60.0 / bpm / nframes
-            adjusted_interval = max(
-                CHECK_INTERVAL, base_interval - self._last_render_duration
-            )
+                # Adaptive sleep interval calculation
+                base_interval = 60.0 / bpm / nframes
+                adjusted_interval = max(
+                    CHECK_INTERVAL, base_interval - self._last_render_duration
+                )
 
-            # Sleep in small chunks to remain responsive to pause
-            remaining_sleep = adjusted_interval
-            while remaining_sleep > 0 and self.server.state.playing:
-                sleep_chunk = min(CHECK_INTERVAL, remaining_sleep)
-                await asyncio.sleep(sleep_chunk)
-                remaining_sleep -= sleep_chunk
+                # Sleep in small chunks to remain responsive to pause
+                remaining_sleep = adjusted_interval
+                while remaining_sleep > 0 and self.server.state.playing:
+                    sleep_chunk = min(CHECK_INTERVAL, remaining_sleep)
+                    await asyncio.sleep(sleep_chunk)
+                    remaining_sleep -= sleep_chunk
 
-                # Early exit check after each sleep chunk
-                if not self.server.state.playing:
-                    break
+                    # Early exit check after each sleep chunk
+                    if not self.server.state.playing:
+                        break
 
-        # Clean up playback state
-        self._playback_start_time = None
-        self._last_target_frame = None
+        except asyncio.CancelledError:
+            # Task was cancelled (pause button pressed) - exit gracefully
+            pass
+        finally:
+            # Clean up playback state
+            self._playback_start_time = None
+            self._last_target_frame = None
+            self._is_rendering = False
 
     def sync_mesh_visibility(self, **kwargs):
         for m in self.scene.meshes:
