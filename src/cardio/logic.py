@@ -316,6 +316,35 @@ class Logic:
         # Get or create MPR actors for the new frame
         mpr_actors = active_volume.get_mpr_actors_for_frame(frame)
 
+        # CRITICAL: Sync slice positions IMMEDIATELY after creation
+        # This ensures actors have correct origin before being added to renderers
+        from .orientation import IndexOrder
+
+        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+        rotation_sequence, rotation_angles = self._get_visible_rotation_data()
+
+        current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
+        if current_convention == IndexOrder.ROMA:
+            origin = [origin[2], origin[1], origin[0]]
+
+        active_volume.update_slice_positions(
+            frame,
+            origin,
+            rotation_sequence,
+            rotation_angles,
+            self.scene.mpr_rotation_sequence.metadata.angle_units,
+        )
+
+        for seg in self.scene.segmentations:
+            if self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
+                seg.update_slice_positions(
+                    frame,
+                    origin,
+                    rotation_sequence,
+                    rotation_angles,
+                    self.scene.mpr_rotation_sequence.metadata.angle_units,
+                )
+
         # Get crosshair visibility state
         crosshairs_visible = getattr(self.server.state, "mpr_crosshairs_enabled", True)
         crosshairs = active_volume.crosshair_actors
@@ -334,7 +363,6 @@ class Logic:
                     for line_data in crosshairs["axial"].values():
                         axial_renderer.AddActor2D(line_data["actor"])
                         line_data["actor"].SetVisibility(crosshairs_visible)
-                axial_renderer.ResetCamera()
 
         if self.scene.coronal_renderWindow:
             coronal_renderer = (
@@ -349,7 +377,6 @@ class Logic:
                     for line_data in crosshairs["coronal"].values():
                         coronal_renderer.AddActor2D(line_data["actor"])
                         line_data["actor"].SetVisibility(crosshairs_visible)
-                coronal_renderer.ResetCamera()
 
         if self.scene.sagittal_renderWindow:
             sagittal_renderer = (
@@ -364,48 +391,11 @@ class Logic:
                     for line_data in crosshairs["sagittal"].values():
                         sagittal_renderer.AddActor2D(line_data["actor"])
                         line_data["actor"].SetVisibility(crosshairs_visible)
-                sagittal_renderer.ResetCamera()
 
         # Add segmentation overlays
         self._add_segmentation_overlays_to_mpr(frame)
 
-        # Apply current slice position and window/level to all views
-        self._apply_current_mpr_settings(active_volume, frame)
-
-    def _apply_current_mpr_settings(self, active_volume, frame):
-        """Apply current slice positions and window/level to MPR actors."""
-        from .orientation import IndexOrder
-
-        # Apply slice positions
-        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
-        rotation_sequence, rotation_angles = self._get_visible_rotation_data()
-
-        # VTK needs origin in ITK convention - convert if necessary
-        current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
-        if current_convention == IndexOrder.ROMA:
-            # Convert Roma to ITK: swap X and Z
-            origin = [origin[2], origin[1], origin[0]]
-
-        active_volume.update_slice_positions(
-            frame,
-            origin,
-            rotation_sequence,
-            rotation_angles,
-            self.scene.mpr_rotation_sequence.metadata.angle_units,
-        )
-
-        # Apply same transformations to segmentation overlays
-        for seg in self.scene.segmentations:
-            if self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
-                seg.update_slice_positions(
-                    frame,
-                    origin,
-                    rotation_sequence,
-                    rotation_angles,
-                    self.scene.mpr_rotation_sequence.metadata.angle_units,
-                )
-
-        # Apply window/level
+        # Apply current window/level settings to the MPR actors
         window = getattr(self.server.state, "mpr_window", 400.0)
         level = getattr(self.server.state, "mpr_level", 40.0)
         active_volume.update_mpr_window_level(frame, window, level)
@@ -1039,10 +1029,8 @@ class Logic:
         if not active_volume:
             return
 
-        # Get current origin and frame
+        # Get current origin
         origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
-        current_frame = getattr(self.server.state, "frame", 0)
-
         rotation_sequence, rotation_angles = self._get_visible_rotation_data()
 
         # VTK needs origin in ITK convention - convert if necessary
@@ -1051,27 +1039,29 @@ class Logic:
             # Convert Roma to ITK: swap X and Z
             origin = [origin[2], origin[1], origin[0]]
 
-        # Update slice positions with rotation
-        active_volume.update_slice_positions(
-            current_frame,
-            origin,
-            rotation_sequence,
-            rotation_angles,
-            self.scene.mpr_rotation_sequence.metadata.angle_units,
-        )
+        # CRITICAL FIX: Update ALL cached frames, not just current frame
+        # This ensures all frames use the same global origin when switching
+        for frame in active_volume._mpr_actors.keys():
+            active_volume.update_slice_positions(
+                frame,
+                origin,
+                rotation_sequence,
+                rotation_angles,
+                self.scene.mpr_rotation_sequence.metadata.angle_units,
+            )
 
-        # Update segmentation overlay positions
+        # Update segmentation overlay positions for all cached frames
         for seg in self.scene.segmentations:
             if self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
-                seg.update_slice_positions(
-                    current_frame,
-                    origin,
-                    rotation_sequence,
-                    rotation_angles,
-                    self.scene.mpr_rotation_sequence.metadata.angle_units,
-                )
+                for frame in seg._mpr_actors.keys():
+                    seg.update_slice_positions(
+                        frame,
+                        origin,
+                        rotation_sequence,
+                        rotation_angles,
+                        self.scene.mpr_rotation_sequence.metadata.angle_units,
+                    )
 
-        # Update all views
         self.server.controller.view_update()
 
     def update_mpr_window_level(self, **kwargs):

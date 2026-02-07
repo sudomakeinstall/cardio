@@ -391,12 +391,15 @@ class Volume(Object):
         # All views share the same origin
         axial_matrix = create_vtk_reslice_matrix(axial_transform, origin)
         actors["axial"]["reslice"].SetResliceAxes(axial_matrix)
+        actors["axial"]["reslice"].Update()  # Force VTK pipeline update
 
         sagittal_matrix = create_vtk_reslice_matrix(sagittal_transform, origin)
         actors["sagittal"]["reslice"].SetResliceAxes(sagittal_matrix)
+        actors["sagittal"]["reslice"].Update()  # Force VTK pipeline update
 
         coronal_matrix = create_vtk_reslice_matrix(coronal_transform, origin)
         actors["coronal"]["reslice"].SetResliceAxes(coronal_matrix)
+        actors["coronal"]["reslice"].Update()  # Force VTK pipeline update
 
     def update_mpr_window_level(self, frame: int, window: float, level: float):
         """Update window/level properties for MPR actors."""
