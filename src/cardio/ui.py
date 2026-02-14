@@ -214,6 +214,7 @@ class UI:
         self.keypress_debounce_ms = 100
         self.server.state.help_overlay_visible = False
         self.server.state.maximized_view = ""
+        self.server.state.rotations_saved_at = None
 
         self.setup()
 
@@ -680,6 +681,23 @@ class UI:
                         classes="mb-2",
                         prepend_icon="mdi-content-save",
                     )
+
+                    # Saved indicator
+                    with vuetify.VRow(
+                        v_if="rotations_saved_at",
+                        no_gutters=True,
+                        classes="align-center mb-2",
+                    ):
+                        vuetify.VIcon(
+                            "mdi-check-circle",
+                            color="success",
+                            size="small",
+                            classes="mr-1",
+                        )
+                        html.Span(
+                            "Rotations saved at {{ rotations_saved_at }}",
+                            classes="text-caption text-success",
+                        )
 
                     # Delete rotations button
                     vuetify.VBtn(

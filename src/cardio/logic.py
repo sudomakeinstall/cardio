@@ -713,6 +713,9 @@ class Logic:
         output_path = save_dir / f"{timestamp_str}.toml"
         rotation_seq.to_file(output_path)
 
+        with self.server.state as state:
+            state.rotations_saved_at = timestamp.strftime("%H:%M:%S")
+
     def reset_all(self):
         self.server.state.frame = 0
         self.server.state.playing = False
