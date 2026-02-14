@@ -1,4 +1,3 @@
-project_name = "Cardio"
 current_frame = 0
 rotation_factor = 3
 serialization_directory = "./data"

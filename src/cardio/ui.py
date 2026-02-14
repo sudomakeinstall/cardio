@@ -8,6 +8,7 @@ from trame.widgets import html
 from trame.widgets import vtk as vtk_widgets
 from trame.widgets import vuetify3 as vuetify
 
+from . import __version__
 from .orientation import (
     AngleUnits,
     EulerAxis,
@@ -219,13 +220,13 @@ class UI:
         self.setup()
 
     def setup(self):
-        self.server.state.trame__title = self.scene.project_name
+        self.server.state.trame__title = f"cardio v{__version__}"
 
         with SinglePageWithDrawerLayout(
             self.server, theme=("theme_mode", "dark")
         ) as layout:
             layout.icon.click = self.server.controller.view_reset_camera
-            layout.title.set_text(self.scene.project_name)
+            layout.title.set_text(f"cardio v{__version__}")
 
             with layout.toolbar as toolbar:
                 toolbar.dense = True

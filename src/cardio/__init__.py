@@ -1,3 +1,5 @@
+__version__ = "2026.2.2"
+
 from . import window_level
 from .logic import Logic
 from .mesh import Mesh
@@ -25,5 +27,3 @@ __all__ = [
     "list_volume_property_presets",
     "window_level",
 ]
-
-__version__ = "2026.2.2"

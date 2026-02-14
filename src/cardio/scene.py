@@ -86,7 +86,6 @@ class Scene(ps.BaseSettings):
         sources.extend([env_settings, file_secret_settings])
         return tuple(sources)
 
-    project_name: str = "Cardio"
     current_frame: int = 0
     serialization_directory: pl.Path = pc.Field(
         default=pl.Path("./data"),

@@ -1,4 +1,3 @@
-project_name = "Cardio"
 current_frame = 0
 screenshot_directory = "./data/screenshots"
 screenshot_subdirectory_format = "%Y-%m-%d-%H-%M-%S"
