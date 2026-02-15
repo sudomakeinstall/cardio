@@ -216,6 +216,7 @@ class UI:
         self.server.state.help_overlay_visible = False
         self.server.state.maximized_view = ""
         self.server.state.rotations_saved_at = None
+        self.server.state.rotations_stale = False
 
         self.setup()
 
@@ -690,14 +691,18 @@ class UI:
                         classes="align-center mb-2",
                     ):
                         vuetify.VIcon(
-                            "mdi-check-circle",
-                            color="success",
+                            icon=(
+                                "rotations_stale ? 'mdi-alert-circle' : 'mdi-check-circle'",
+                            ),
+                            color=("rotations_stale ? 'warning' : 'success'",),
                             size="small",
                             classes="mr-1",
                         )
                         html.Span(
-                            "Rotations saved at {{ rotations_saved_at }}",
-                            classes="text-caption text-success",
+                            "Rotations saved at {{ rotations_saved_at }}{{ rotations_stale ? ' *' : '' }}",
+                            classes=(
+                                "'text-caption ' + (rotations_stale ? 'text-warning' : 'text-success')",
+                            ),
                         )
 
                     # Delete rotations button

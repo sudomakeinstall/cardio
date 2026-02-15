@@ -715,6 +715,7 @@ class Logic:
 
         with self.server.state as state:
             state.rotations_saved_at = timestamp.strftime("%H:%M:%S")
+            state.rotations_stale = False
 
     def reset_all(self):
         self.server.state.frame = 0
@@ -1132,6 +1133,9 @@ class Logic:
     def update_mpr_rotation(self, **kwargs):
         """Update MPR views when rotation changes."""
         from .orientation import IndexOrder
+
+        if self.server.state.rotations_saved_at:
+            self.server.state.rotations_stale = True
 
         if not getattr(self.server.state, "mpr_enabled", False):
             return
