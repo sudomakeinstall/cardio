@@ -1,8 +1,13 @@
 #!/usr/bin/env python
 
+# System
+import os
+
+# Third Party
 import pydantic_settings as ps
 import trame as tm
 import trame.decorators
+import vtk
 
 from . import __version__
 from .logic import Logic
@@ -46,6 +51,8 @@ class CardioApp:
 
 
 def main():
+    if hasattr(vtk, "vtkEGLRenderWindow"):
+        os.environ.setdefault("VTK_DEFAULT_OPENGL_WINDOW", "vtkEGLRenderWindow")
     app = CardioApp()
     app.server.start(open_browser=False)
 
