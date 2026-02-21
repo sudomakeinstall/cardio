@@ -19,7 +19,7 @@ $ uv init
 $ uv add cardio
 $ . ./.venv/bin/activate
 (project) cardio --version
-cardio 2026.2.3
+cardio 2026.2.4
 ```
 
 ### Developing
