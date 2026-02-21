@@ -195,6 +195,7 @@ class Segmentation(Object):
             reslice.SetOutputDimensionality(2)
             reslice.SetInterpolationModeToNearestNeighbor()
             reslice.SetBackgroundLevel(0)
+            reslice.AutoCropOutputOn()
 
             lut = self._create_label_lookup_table(image_data, opacity=1.0)
             image_to_colors = vtk.vtkImageMapToColors()

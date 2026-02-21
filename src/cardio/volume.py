@@ -93,6 +93,7 @@ class Volume(Object):
             reslice.SetOutputDimensionality(2)
             reslice.SetInterpolationModeToLinear()
             reslice.SetBackgroundLevel(-1000.0)
+            reslice.AutoCropOutputOn()
 
             # Create image actor
             actor = vtk.vtkImageActor()
