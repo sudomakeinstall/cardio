@@ -192,7 +192,11 @@ class Scene(ps.BaseSettings):
                 )
 
             if self.mpr_rotation_sequence.mpr_origin:
-                self.mpr_origin = list(self.mpr_rotation_sequence.mpr_origin)
+                origin = list(self.mpr_rotation_sequence.mpr_origin)
+                if self.mpr_rotation_sequence.metadata.index_order == IndexOrder.ROMA:
+                    # Convert Roma (X=S, Y=P, Z=L) → ITK (X=L, Y=P, Z=S): swap X and Z
+                    origin = [origin[2], origin[1], origin[0]]
+                self.mpr_origin = origin
 
         return self
 

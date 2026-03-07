@@ -123,6 +123,16 @@ def euler_angle_to_rotation_matrix(
             return np.array([[cos_a, -sin_a, 0], [sin_a, cos_a, 0], [0, 0, 1]])
 
 
+def quaternion_to_rotation_matrix(q: list[float]) -> np.ndarray:
+    """Convert quaternion [x, y, z, w] to 3x3 rotation matrix (normalizes input)."""
+    import roma
+    import torch as t
+
+    tensor = t.tensor(q, dtype=t.float64)
+    tensor = tensor / tensor.norm()
+    return roma.unitquat_to_rotmat(tensor).numpy()
+
+
 def is_axis_aligned(image) -> bool:
     """Check if ITK image orientation is axis-aligned.
 

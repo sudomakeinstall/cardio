@@ -12,6 +12,7 @@ from cardio.orientation import (
     is_axis_aligned,
     is_righthanded_axcode,
     is_valid_axcode,
+    quaternion_to_rotation_matrix,
     reset_direction,
 )
 
@@ -272,3 +273,58 @@ def test_axis_convention_roma_negates_angles():
     axis, angle = convert_for_roma("X", 0.0)
     assert axis == "Z"
     assert angle == 0.0
+
+
+def test_quaternion_roma_to_itk_conversion():
+    """Roma→ITK quaternion conversion: [-z, -y, -x, w].
+
+    90° around Roma Z (Left axis) should equal -90° around ITK X (Left axis).
+    Both represent the same physical rotation, just in different frames.
+    """
+    s = np.sin(np.pi / 4)
+    c = np.cos(np.pi / 4)
+
+    # +90° around Roma Z (Left) in Roma frame
+    q_roma = [0.0, 0.0, s, c]
+    r_roma = quaternion_to_rotation_matrix(q_roma)
+
+    # Convert to ITK: [-z, -y, -x, w]
+    q_itk = [-q_roma[2], -q_roma[1], -q_roma[0], q_roma[3]]
+    r_itk_from_quat = quaternion_to_rotation_matrix(q_itk)
+
+    # -90° around ITK X (Left) using Euler
+    r_itk_from_euler = euler_angle_to_rotation_matrix(
+        EulerAxis.X, -90.0, AngleUnits.DEGREES
+    )
+
+    assert np.allclose(r_itk_from_quat, r_itk_from_euler, atol=1e-6)
+
+    # Also verify basis-change formula: R_itk = P @ R_roma @ P
+    P = np.array([[0, 0, 1], [0, 1, 0], [1, 0, 0]], dtype=float)
+    r_itk_from_basis_change = P @ r_roma @ P
+    assert np.allclose(r_itk_from_quat, r_itk_from_basis_change, atol=1e-6)
+
+
+def test_quaternion_to_rotation_matrix_identity():
+    mat = quaternion_to_rotation_matrix([0.0, 0.0, 0.0, 1.0])
+    assert mat.shape == (3, 3)
+    assert np.allclose(mat, np.eye(3))
+
+
+def test_quaternion_to_rotation_matrix_90z():
+    """90° around Z: quaternion [0, 0, sin(45°), cos(45°)] matches euler."""
+    s = np.sin(np.pi / 4)
+    c = np.cos(np.pi / 4)
+    mat = quaternion_to_rotation_matrix([0.0, 0.0, s, c])
+    expected = euler_angle_to_rotation_matrix(EulerAxis.Z, 90.0, AngleUnits.DEGREES)
+    assert np.allclose(mat, expected, atol=1e-6)
+
+
+def test_quaternion_to_rotation_matrix_is_rotation():
+    """Result must be a proper rotation matrix (orthogonal, det=1)."""
+    # -30° around Y: [0, sin(-15°), 0, cos(15°)]
+    s, c = np.sin(np.radians(-15)), np.cos(np.radians(15))
+    q = [0.0, s, 0.0, c]
+    mat = quaternion_to_rotation_matrix(q)
+    assert np.allclose(mat @ mat.T, np.eye(3), atol=1e-6)
+    assert np.isclose(np.linalg.det(mat), 1.0, atol=1e-6)

@@ -28,8 +28,12 @@ class Logic:
         visible_index = 0
         for rotation in angles_list:
             if rotation.get("visible", True):
-                rotation_sequence.append({"axis": rotation["axis"]})
-                rotation_angles[visible_index] = rotation["angle"]
+                if rotation.get("quaternion") is not None:
+                    rotation_sequence.append({"quaternion": rotation["quaternion"]})
+                    rotation_angles[visible_index] = 0
+                else:
+                    rotation_sequence.append({"axis": rotation["axis"]})
+                    rotation_angles[visible_index] = rotation["angle"]
                 visible_index += 1
 
         # CRITICAL: VTK always needs rotations in ITK convention
@@ -37,11 +41,24 @@ class Logic:
         current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
         if current_convention == IndexOrder.ROMA:
             # Convert ROMA to ITK: X→Z, Y→Y, Z→X, angle→-angle
-            rotation_sequence = [
-                {"axis": {"X": "Z", "Y": "Y", "Z": "X"}[rot["axis"]]}
-                for rot in rotation_sequence
-            ]
-            rotation_angles = {idx: -angle for idx, angle in rotation_angles.items()}
+            # For quaternion steps [x, y, z, w] in Roma (X=S, Y=P, Z=L):
+            # ITK quaternion = [-z, -y, -x, w] (axis permutation + handedness flip)
+            converted_sequence = []
+            converted_angles = {}
+            for idx, rot in enumerate(rotation_sequence):
+                if rot.get("quaternion") is not None:
+                    q = rot["quaternion"]
+                    converted_sequence.append(
+                        {"quaternion": [-q[2], -q[1], -q[0], q[3]]}
+                    )
+                    converted_angles[idx] = 0
+                else:
+                    converted_sequence.append(
+                        {"axis": {"X": "Z", "Y": "Y", "Z": "X"}[rot["axis"]]}
+                    )
+                    converted_angles[idx] = -rotation_angles[idx]
+            rotation_sequence = converted_sequence
+            rotation_angles = converted_angles
 
         return rotation_sequence, rotation_angles
 
@@ -766,9 +783,11 @@ class Logic:
             getattr(self.server.state, "mpr_rotation_data", {})
         )
 
-        # Convert all existing rotation angles
+        # Convert all existing rotation angles (skip quaternion steps)
         if rotation_data.get("angles_list"):
             for rotation in rotation_data["angles_list"]:
+                if rotation.get("quaternion") is not None:
+                    continue
                 current_angle = rotation.get("angle", 0)
 
                 # Convert based on old -> new units
@@ -816,9 +835,11 @@ class Logic:
             getattr(self.server.state, "mpr_rotation_data", {})
         )
 
-        # Convert rotation axes and angles
+        # Convert rotation axes and angles (skip quaternion steps)
         if rotation_data.get("angles_list"):
             for rotation in rotation_data["angles_list"]:
+                if rotation.get("quaternion") is not None:
+                    continue
                 current_axis = rotation.get("axis")
                 current_angle = rotation.get("angle", 0)
 

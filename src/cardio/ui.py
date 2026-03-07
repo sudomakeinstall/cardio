@@ -174,10 +174,17 @@ class UI:
 
         for rotation in angles_list:
             if rotation.get("visible", True):
-                angle = rotation.get("angle", 0)
-                rotation_matrix = euler_angle_to_rotation_matrix(
-                    EulerAxis(rotation["axis"]), angle, angle_units
-                )
+                if rotation.get("quaternion") is not None:
+                    from .orientation import quaternion_to_rotation_matrix
+
+                    rotation_matrix = quaternion_to_rotation_matrix(
+                        rotation["quaternion"]
+                    )
+                else:
+                    angle = rotation.get("angle", 0)
+                    rotation_matrix = euler_angle_to_rotation_matrix(
+                        EulerAxis(rotation["axis"]), angle, angle_units
+                    )
                 cumulative_rotation = cumulative_rotation @ rotation_matrix
 
         return cumulative_rotation @ base_normals[view_name]

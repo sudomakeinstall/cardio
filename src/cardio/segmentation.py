@@ -304,12 +304,19 @@ class Segmentation(Object):
         transforms = self._get_mpr_coordinate_systems()
 
         cumulative_rotation = np.eye(3)
-        if rotation_sequence and rotation_angles:
+        if rotation_sequence:
+            from .orientation import quaternion_to_rotation_matrix
+
             for i, rotation in enumerate(rotation_sequence):
-                angle = rotation_angles.get(i, 0)
-                rotation_matrix = euler_angle_to_rotation_matrix(
-                    EulerAxis(rotation["axis"]), angle, angle_units
-                )
+                if rotation.get("quaternion") is not None:
+                    rotation_matrix = quaternion_to_rotation_matrix(
+                        rotation["quaternion"]
+                    )
+                else:
+                    angle = rotation_angles.get(i, 0) if rotation_angles else 0
+                    rotation_matrix = euler_angle_to_rotation_matrix(
+                        EulerAxis(rotation["axis"]), angle, angle_units
+                    )
                 cumulative_rotation = cumulative_rotation @ rotation_matrix
 
         axial_transform = cumulative_rotation @ transforms["axial"]

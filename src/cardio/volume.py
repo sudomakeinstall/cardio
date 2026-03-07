@@ -309,12 +309,23 @@ class Volume(Object):
             angle_units = AngleUnits.DEGREES
 
         cumulative_rotation = np.eye(3)
-        if rotation_sequence and rotation_angles:
-            for i, rotation in enumerate(rotation_sequence):
-                angle = rotation_angles.get(i, 0)
-                rotation_matrix = euler_angle_to_rotation_matrix(
-                    EulerAxis(rotation["axis"]), angle, angle_units
+        if rotation_sequence:
+            for i, step in enumerate(rotation_sequence):
+                quat = (
+                    step.get("quaternion")
+                    if isinstance(step, dict)
+                    else step.quaternion
                 )
+                if quat is not None:
+                    from .orientation import quaternion_to_rotation_matrix
+
+                    rotation_matrix = quaternion_to_rotation_matrix(quat)
+                else:
+                    axis = step.get("axis") if isinstance(step, dict) else step.axis
+                    angle = rotation_angles.get(i, 0) if rotation_angles else 0
+                    rotation_matrix = euler_angle_to_rotation_matrix(
+                        EulerAxis(axis), angle, angle_units
+                    )
                 cumulative_rotation = cumulative_rotation @ rotation_matrix
         return cumulative_rotation
 

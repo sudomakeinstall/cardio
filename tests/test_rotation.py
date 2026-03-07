@@ -16,6 +16,93 @@ def test_rotation_step_creation():
     assert step.deletable is True
 
 
+def test_rotation_step_quaternion_creation():
+    q = [0.0, -0.2588, 0.0, 0.9659]
+    step = RotationStep(quaternion=q, name="vla", name_editable=False, deletable=False)
+    assert step.quaternion == q
+    assert step.axis is None
+    assert step.angle is None
+    assert step.name == "vla"
+
+
+def test_rotation_step_quaternion_requires_4_elements():
+    with pytest.raises(pc.ValidationError):
+        RotationStep(quaternion=[1.0, 0.0, 0.0])
+
+
+def test_rotation_step_rejects_both_forms():
+    with pytest.raises(pc.ValidationError):
+        RotationStep(axis="X", angle=0.5, quaternion=[0.0, 0.0, 0.0, 1.0])
+
+
+def test_rotation_step_rejects_neither_form():
+    with pytest.raises(pc.ValidationError):
+        RotationStep()
+
+
+def test_rotation_step_euler_to_rotation_matrix():
+    from cardio.orientation import AngleUnits
+
+    step = RotationStep(axis="Z", angle=90.0)
+    mat = step.to_rotation_matrix(AngleUnits.DEGREES)
+    assert mat.shape == (3, 3)
+    assert np.isclose(mat[0, 1], -1.0, atol=1e-10)
+    assert np.isclose(mat[1, 0], 1.0, atol=1e-10)
+
+
+def test_rotation_step_quaternion_to_rotation_matrix():
+    from cardio.orientation import AngleUnits
+
+    # Identity quaternion [x, y, z, w] = [0, 0, 0, 1]
+    step = RotationStep(quaternion=[0.0, 0.0, 0.0, 1.0])
+    mat = step.to_rotation_matrix(AngleUnits.RADIANS)
+    assert mat.shape == (3, 3)
+    assert np.allclose(mat, np.eye(3))
+
+
+def test_rotation_step_quaternion_matches_euler():
+    """90° rotation about Z: quaternion vs Euler should agree."""
+    from cardio.orientation import AngleUnits
+
+    # quaternion for 90° about Z: [0, 0, sin(45°), cos(45°)]
+    s = np.sin(np.pi / 4)
+    c = np.cos(np.pi / 4)
+    qstep = RotationStep(quaternion=[0.0, 0.0, s, c])
+    estep = RotationStep(axis="Z", angle=90.0)
+
+    qmat = qstep.to_rotation_matrix(AngleUnits.DEGREES)
+    emat = estep.to_rotation_matrix(AngleUnits.DEGREES)
+    assert np.allclose(qmat, emat, atol=1e-6)
+
+
+def test_rotation_sequence_with_quaternion_step():
+    steps = [
+        RotationStep(axis="X", angle=0.5),
+        RotationStep(quaternion=[0.0, 0.0, 0.0, 1.0], name="vla"),
+    ]
+    seq = RotationSequence(angles_list=steps)
+    assert len(seq.angles_list) == 2
+    assert seq.angles_list[1].quaternion == [0.0, 0.0, 0.0, 1.0]
+
+
+def test_rotation_sequence_quaternion_round_trip():
+    q = [0.0, -0.2588, 0.0, 0.9659]
+    steps = [
+        RotationStep(axis="X", angle=1.57, name="euler"),
+        RotationStep(quaternion=q, name="vla", name_editable=False, deletable=False),
+    ]
+    seq = RotationSequence(angles_list=steps)
+    toml_str = seq.to_toml()
+    restored = RotationSequence.from_toml(toml_str)
+
+    assert len(restored.angles_list) == 2
+    assert restored.angles_list[0].axis == "X"
+    assert np.isclose(restored.angles_list[0].angle, 1.57)
+    assert restored.angles_list[1].quaternion is not None
+    assert np.allclose(restored.angles_list[1].quaternion, q, atol=1e-10)
+    assert restored.angles_list[1].name == "vla"
+
+
 # NOTE: Conversion methods removed - data is always stored in current convention/units
 # Conversions happen at UI layer when user changes settings via sync_index_order() and sync_angle_units()
 
