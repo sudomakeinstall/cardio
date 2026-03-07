@@ -689,11 +689,23 @@ class Logic:
     async def screenshot(self):
         dr = dt.datetime.now().strftime(self.scene.timestamp_format)
         dr = self.scene.screenshot_directory / dr
-        dr.mkdir(parents=True, exist_ok=True)
+
+        mpr_enabled = getattr(self.server.state, "mpr_enabled", False)
+        render_windows = {"vr": self.scene.renderWindow}
+        if mpr_enabled:
+            render_windows["axial"] = self.scene.axial_renderWindow
+            render_windows["coronal"] = self.scene.coronal_renderWindow
+            render_windows["sagittal"] = self.scene.sagittal_renderWindow
+
+        for folder in render_windows:
+            (dr / folder).mkdir(parents=True, exist_ok=True)
+
+        def _save_all(i):
+            for folder, rw in render_windows.items():
+                Screenshot(rw).save(str(dr / folder / f"{i}.png"))
 
         if not (self.server.state.incrementing or self.server.state.rotating):
-            ss = Screenshot(self.scene.renderWindow)
-            ss.save(f"{dr}/0.png")
+            _save_all(0)
         else:
             n = self.scene.nframes
             if self.server.state.rotating:
@@ -706,8 +718,7 @@ class Logic:
                     if self.server.state.incrementing:
                         self.increment_frame()
                     self.server.controller.view_update()
-                    ss = Screenshot(self.scene.renderWindow)
-                    ss.save(f"{dr}/{i}.png")
+                    _save_all(i)
                     await asyncio.sleep(
                         1 / self.server.state.bpm * 60 / self.scene.nframes
                     )
