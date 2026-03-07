@@ -1,6 +1,7 @@
 import asyncio
 import datetime as dt
 
+import numpy as np
 from trame.app import asynchronous
 
 from .scene import Scene
@@ -94,6 +95,14 @@ class Logic:
             {"text": "Roma (X=S, Y=P, Z=L)", "value": "roma"},
         ]
 
+        self.server.state.camera_lock = "free"
+        self.server.state.camera_lock_items = [
+            {"title": "Free", "value": "free"},
+            {"title": "UL (Axial)", "value": "UL"},
+            {"title": "LL (Coronal)", "value": "LL"},
+            {"title": "LR (Sagittal)", "value": "LR"},
+        ]
+
         # Initialize MPR origin (will be updated when active volume changes)
         self.server.state.mpr_origin = [0.0, 0.0, 0.0]
 
@@ -126,6 +135,7 @@ class Logic:
         self.server.state.change("angle_units")(self.sync_angle_units)
         self.server.state.change("index_order")(self.sync_index_order)
         self.server.state.change("clip_depth")(self.sync_clip_depth)
+        self.server.state.change("camera_lock")(self._on_camera_lock_change)
         self.server.state.change("mpr_segmentation_opacity")(
             self.update_segmentation_opacity
         )
@@ -1207,7 +1217,62 @@ class Logic:
                     self.scene.mpr_rotation_sequence.metadata.angle_units,
                 )
 
-        # Update all views
+        self._sync_vr_camera_to_mpr()
+        self.server.controller.view_update()
+
+    def _sync_vr_camera_to_mpr(self):
+        lock = self.server.state.camera_lock
+        if lock == "free":
+            return
+
+        orientation = {"UL": "axial", "LL": "coronal", "LR": "sagittal"}[lock]
+
+        # Base slice normals and up vectors in LPS coordinates.
+        # Normal = out-of-plane direction; up = Y axis of the reslice frame.
+        base_normals = {
+            "axial": np.array([0.0, 0.0, 1.0]),  # Superior (Z in LAS)
+            "sagittal": np.array([1.0, 0.0, 0.0]),  # Left (Z in ASL)
+            "coronal": np.array([0.0, 1.0, 0.0]),  # Posterior (Z in LSA)
+        }
+        base_ups = {
+            "axial": np.array([0.0, -1.0, 0.0]),  # Anterior (Y in LAS)
+            "sagittal": np.array([0.0, 0.0, 1.0]),  # Superior (Y in ASL)
+            "coronal": np.array([0.0, 0.0, 1.0]),  # Superior (Y in LSA)
+        }
+
+        normal = base_normals[orientation]
+        up = base_ups[orientation]
+
+        active_volume = next(
+            (
+                v
+                for v in self.scene.volumes
+                if v.label == getattr(self.server.state, "active_volume_label", "")
+            ),
+            None,
+        )
+        if active_volume is not None:
+            rotation_sequence, rotation_angles = self._get_visible_rotation_data()
+            rotation = active_volume._build_cumulative_rotation(
+                rotation_sequence,
+                rotation_angles,
+                self.scene.mpr_rotation_sequence.metadata.angle_units,
+            )
+            normal = rotation @ normal
+            up = rotation @ up
+
+        vr_renderer = self.scene.renderer
+        vr_cam = vr_renderer.GetActiveCamera()
+        vr_fp = np.array(vr_cam.GetFocalPoint())
+        vr_pos = np.array(vr_cam.GetPosition())
+        vr_dist = np.linalg.norm(vr_fp - vr_pos)
+
+        vr_cam.SetPosition(*(vr_fp - normal * vr_dist))
+        vr_cam.SetViewUp(*up)
+        vr_renderer.ResetCameraClippingRange()
+
+    def _on_camera_lock_change(self, camera_lock, **kwargs):
+        self._sync_vr_camera_to_mpr()
         self.server.controller.view_update()
 
     def sync_crosshairs_visibility(self, **kwargs):

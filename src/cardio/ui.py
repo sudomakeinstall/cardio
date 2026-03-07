@@ -677,6 +677,25 @@ class UI:
                                 outlined=True,
                             )
 
+                    # Fix Camera selector
+                    with vuetify.VRow(
+                        v_if="!maximized_view",
+                        no_gutters=True,
+                        classes="align-center mb-2",
+                    ):
+                        with vuetify.VCol(cols="4"):
+                            vuetify.VLabel("Fix Camera:")
+                        with vuetify.VCol(cols="8"):
+                            vuetify.VSelect(
+                                v_model=("camera_lock", "free"),
+                                items=("camera_lock_items", []),
+                                item_title="title",
+                                item_value="value",
+                                dense=True,
+                                hide_details=True,
+                                outlined=True,
+                            )
+
                     # Save rotations button
                     vuetify.VBtn(
                         "Save Rotations",
