@@ -134,11 +134,14 @@ class Segmentation(Object):
 
         return actor
 
-    def _get_default_color(self, label):
-        """Generate a default color for a label."""
-        # Simple color generation based on label value
-        np.random.seed(label)
-        return np.random.rand(3)
+    @staticmethod
+    def _get_default_color(label):
+        import colorsys
+
+        golden_ratio = 0.618033988749895
+        sat, val = 0.65, 0.88
+        hue = (label * golden_ratio) % 1.0
+        return colorsys.hsv_to_rgb(hue, sat, val)
 
     def configure_actors(self):
         """Configure actor properties without adding to renderer."""
@@ -236,8 +239,7 @@ class Segmentation(Object):
                 g = self.label_properties[label].get("g", 1.0)
                 b = self.label_properties[label].get("b", 1.0)
             else:
-                np.random.seed(label)
-                r, g, b = np.random.rand(3)
+                r, g, b = self._get_default_color(label)
             lut.SetTableValue(label, r, g, b, opacity)
 
         lut.Build()
