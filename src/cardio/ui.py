@@ -500,6 +500,19 @@ class UI:
                         hide_details=True,
                     )
 
+                    # Reset origin button
+                    vuetify.VBtn(
+                        "Reset Origin",
+                        v_if="!maximized_view && active_volume_label",
+                        click=self.server.controller.reset_mpr_origin,
+                        small=True,
+                        dense=True,
+                        outlined=True,
+                        block=True,
+                        classes="mb-2",
+                        prepend_icon="mdi-crosshairs-gps",
+                    )
+
                     # MPR Rotation controls
                     vuetify.VListSubheader(
                         "Rotations", v_if="!maximized_view && active_volume_label"

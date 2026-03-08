@@ -244,6 +244,7 @@ class Logic:
         self.server.controller.remove_rotation_event = self.remove_mpr_rotation
         self.server.controller.reset_rotation_angle = self.reset_rotation_angle
         self.server.controller.reset_rotations = self.reset_mpr_rotations
+        self.server.controller.reset_mpr_origin = self.reset_mpr_origin
 
         # Initialize MPR state
         self.server.state.mpr_enabled = self.scene.mpr_enabled
@@ -1371,6 +1372,22 @@ class Logic:
         # Update mirror variables
         self.server.state.angle_units = "radians"
         self.server.state.index_order = "itk"
+
+    def reset_mpr_origin(self):
+        from .orientation import IndexOrder
+
+        active_volume_label = getattr(self.server.state, "active_volume_label", "")
+        active_volume = next(
+            (v for v in self.scene.volumes if v.label == active_volume_label), None
+        )
+        if not active_volume:
+            return
+        current_frame = getattr(self.server.state, "frame", 0)
+        image_data = active_volume.actors[current_frame].GetMapper().GetInput()
+        center_list = list(image_data.GetCenter())
+        if self.scene.mpr_rotation_sequence.metadata.index_order == IndexOrder.ROMA:
+            center_list = [center_list[2], center_list[1], center_list[0]]
+        self.server.state.mpr_origin = center_list
 
     def finalize_mpr_initialization(self, **kwargs):
         """Set the active volume label after UI is ready to avoid race condition."""
