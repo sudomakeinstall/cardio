@@ -500,18 +500,86 @@ class UI:
                         hide_details=True,
                     )
 
-                    # Reset origin button
-                    vuetify.VBtn(
-                        "Reset Origin",
-                        v_if="!maximized_view && active_volume_label",
-                        click=self.server.controller.reset_mpr_origin,
-                        small=True,
-                        dense=True,
-                        outlined=True,
-                        block=True,
-                        classes="mb-2",
-                        prepend_icon="mdi-crosshairs-gps",
-                    )
+                    if self.scene.segmentations:
+                        vuetify.VDivider(
+                            classes="my-2",
+                            v_if="!maximized_view && active_volume_label",
+                        )
+                        vuetify.VListSubheader(
+                            "Snap to Centroid",
+                            v_if="!maximized_view && active_volume_label",
+                        )
+                        vuetify.VSelect(
+                            v_if="!maximized_view && active_volume_label && snap_seg_items.length >= 2",
+                            v_model=("snap_seg_label", ""),
+                            items=("snap_seg_items", []),
+                            item_title="title",
+                            item_value="value",
+                            label="Segmentation",
+                            dense=True,
+                            hide_details=True,
+                            classes="mb-2",
+                        )
+                        with vuetify.VBtnToggle(
+                            v_if="!maximized_view && active_volume_label",
+                            v_model=("snap_mode", "label"),
+                            mandatory=True,
+                            dense=True,
+                            classes="mb-2",
+                        ):
+                            vuetify.VBtn(value="label", text="Label", small=True)
+                            vuetify.VBtn(
+                                value="interface", text="Interface", small=True
+                            )
+                            vuetify.VBtn(value="reset", text="Reset", small=True)
+                        vuetify.VSelect(
+                            v_if="!maximized_view && active_volume_label && snap_mode !== 'reset'",
+                            v_model=("snap_labels_a", []),
+                            items=("snap_available_labels", []),
+                            item_title="title",
+                            item_value="value",
+                            label=("snap_mode === 'interface' ? 'Group A' : 'Labels'",),
+                            multiple=True,
+                            chips=True,
+                            dense=True,
+                            hide_details=True,
+                            classes="mb-2",
+                        )
+                        vuetify.VSelect(
+                            v_if="!maximized_view && active_volume_label && snap_mode === 'interface'",
+                            v_model=("snap_labels_b", []),
+                            items=("snap_available_labels", []),
+                            item_title="title",
+                            item_value="value",
+                            label="Group B",
+                            multiple=True,
+                            chips=True,
+                            dense=True,
+                            hide_details=True,
+                            classes="mb-2",
+                        )
+                        vuetify.VAlert(
+                            "No interface found between selected groups.",
+                            v_if="snap_no_interface",
+                            type="warning",
+                            dense=True,
+                            classes="mb-2",
+                            variant="tonal",
+                        )
+                        vuetify.VBtn(
+                            "Snap",
+                            v_if="!maximized_view && active_volume_label",
+                            click=self.server.controller.snap_to_centroid,
+                            disabled=(
+                                "snap_mode === 'reset' ? false : snap_mode === 'label' ? snap_labels_a.length === 0 : snap_labels_a.length === 0 || snap_labels_b.length === 0",
+                            ),
+                            small=True,
+                            dense=True,
+                            outlined=True,
+                            block=True,
+                            classes="mb-2",
+                            prepend_icon="mdi-target",
+                        )
 
                     # MPR Rotation controls
                     vuetify.VListSubheader(

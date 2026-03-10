@@ -144,6 +144,9 @@ class Logic:
                 self.sync_segmentation_overlays
             )
 
+        if self.scene.segmentations:
+            self.server.state.change("snap_seg_label")(self._on_snap_seg_changed)
+
         # Initialize visibility state variables
         for m in self.scene.meshes:
             self.server.state[f"mesh_visibility_{m.label}"] = m.visible
@@ -156,6 +159,17 @@ class Logic:
         for s in self.scene.segmentations:
             self.server.state[f"mpr_segmentation_overlay_{s.label}"] = False
         self.server.state.mpr_segmentation_opacity = 0.7
+
+        if self.scene.segmentations:
+            self.server.state.snap_mode = "label"
+            self.server.state.snap_seg_label = self.scene.segmentations[0].label
+            self.server.state.snap_labels_a = []
+            self.server.state.snap_labels_b = []
+            self.server.state.snap_available_labels = []
+            self.server.state.snap_seg_items = [
+                {"title": s.label, "value": s.label} for s in self.scene.segmentations
+            ]
+            self.server.state.snap_no_interface = False
 
         # Initialize preset state variables
         for v in self.scene.volumes:
@@ -245,6 +259,7 @@ class Logic:
         self.server.controller.reset_rotation_angle = self.reset_rotation_angle
         self.server.controller.reset_rotations = self.reset_mpr_rotations
         self.server.controller.reset_mpr_origin = self.reset_mpr_origin
+        self.server.controller.snap_to_centroid = self.snap_to_centroid
 
         # Initialize MPR state
         self.server.state.mpr_enabled = self.scene.mpr_enabled
@@ -296,6 +311,9 @@ class Logic:
 
         # Initialize clipping state variables
         self._initialize_clipping_state()
+
+        if self.scene.segmentations:
+            self._on_snap_seg_changed()
 
     def update_frame(self, frame, **kwargs):
         self.scene.hide_all_frames()
@@ -1385,6 +1403,55 @@ class Logic:
         current_frame = getattr(self.server.state, "frame", 0)
         image_data = active_volume.actors[current_frame].GetMapper().GetInput()
         center_list = list(image_data.GetCenter())
+        if self.scene.mpr_rotation_sequence.metadata.index_order == IndexOrder.ROMA:
+            center_list = [center_list[2], center_list[1], center_list[0]]
+        self.server.state.mpr_origin = center_list
+
+    def _on_snap_seg_changed(self, snap_seg_label=None, **kwargs):
+        label = snap_seg_label or getattr(self.server.state, "snap_seg_label", "")
+        seg = next((s for s in self.scene.segmentations if s.label == label), None)
+        if not seg:
+            self.server.state.snap_available_labels = []
+            return
+        frame = getattr(self.server.state, "frame", 0) or 0
+        raw_labels = seg.get_labels(frame)
+        self.server.state.snap_available_labels = [
+            {"title": str(lv), "value": lv} for lv in raw_labels
+        ]
+        self.server.state.snap_labels_a = []
+        self.server.state.snap_labels_b = []
+        self.server.state.snap_no_interface = False
+
+    def snap_to_centroid(self, **kwargs):
+        from .orientation import IndexOrder
+
+        seg_label = getattr(self.server.state, "snap_seg_label", "")
+        seg = next((s for s in self.scene.segmentations if s.label == seg_label), None)
+        if not seg:
+            return
+        frame = getattr(self.server.state, "frame", 0)
+        mode = getattr(self.server.state, "snap_mode", "label")
+        labels_a = list(getattr(self.server.state, "snap_labels_a", []))
+        labels_b = list(getattr(self.server.state, "snap_labels_b", []))
+
+        if mode == "reset":
+            self.reset_mpr_origin()
+            return
+        elif mode == "label":
+            if not labels_a:
+                return
+            center = seg.label_centroid(labels_a, frame)
+        else:
+            if not labels_a or not labels_b:
+                return
+            center = seg.interface_centroid(labels_a, labels_b, frame)
+
+        if center is None:
+            self.server.state.snap_no_interface = True
+            return
+
+        self.server.state.snap_no_interface = False
+        center_list = list(center)
         if self.scene.mpr_rotation_sequence.metadata.index_order == IndexOrder.ROMA:
             center_list = [center_list[2], center_list[1], center_list[0]]
         self.server.state.mpr_origin = center_list

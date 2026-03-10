@@ -20,6 +20,7 @@ class Segmentation(Object):
         description="Filename pattern with $frame placeholder",
     )
     _actors: list[vtk.vtkActor] = pc.PrivateAttr(default_factory=list)
+    _meshes: list[vtk.vtkPolyData] = pc.PrivateAttr(default_factory=list)
     _label_images: list[vtk.vtkImageData] = pc.PrivateAttr(default_factory=list)
     _mpr_actors: dict[int, dict[str, dict]] = pc.PrivateAttr(default_factory=dict)
     properties: vtkPropertyConfig = pc.Field(
@@ -77,7 +78,11 @@ class Segmentation(Object):
                     )
                     scalar_array.SetValue(i, max_label)
 
-                mesh.GetCellData().SetScalars(scalar_array)
+                mesh.GetCellData().AddArray(scalar_array)
+                mesh.GetCellData().SetActiveScalars("Labels")
+
+            # Store mesh directly for centroid queries
+            self._meshes.append(mesh)
 
             # Create single actor with scalar coloring
             actor = self._create_segmentation_actor(mesh)
@@ -336,6 +341,100 @@ class Segmentation(Object):
         coronal_matrix = create_vtk_reslice_matrix(coronal_transform, origin)
         actors["coronal"]["reslice"].SetResliceAxes(coronal_matrix)
         actors["coronal"]["reslice"].Update()  # Force VTK pipeline update
+
+    def get_labels(self, frame: int = 0) -> list[int]:
+        if frame >= len(self._label_images):
+            frame = 0
+        image_data = self._label_images[frame]
+        max_label = int(image_data.GetPointData().GetScalars().GetRange()[1])
+        if max_label < 1:
+            return []
+        acc = vtk.vtkImageAccumulate()
+        acc.SetInputData(image_data)
+        acc.SetComponentExtent(0, max_label, 0, 0, 0, 0)
+        acc.SetComponentOrigin(0, 0, 0)
+        acc.SetComponentSpacing(1, 0, 0)
+        acc.Update()
+        hist = acc.GetOutput().GetPointData().GetScalars()
+        return [i for i in range(1, max_label + 1) if hist.GetTuple1(i) > 0]
+
+    def label_centroid(self, labels: list[int], frame: int = 0) -> list[float] | None:
+        if frame >= len(self._meshes) or not labels:
+            return None
+        mesh = self._meshes[frame]
+        if mesh.GetNumberOfCells() == 0:
+            return None
+        label_set = set(labels)
+        scalar_array = mesh.GetCellData().GetArray("Labels")
+        marker = vtk.vtkIntArray()
+        marker.SetName("_snap_marker")
+        marker.SetNumberOfTuples(scalar_array.GetNumberOfTuples())
+        for i in range(scalar_array.GetNumberOfTuples()):
+            marker.SetValue(i, 1 if int(scalar_array.GetTuple1(i)) in label_set else 0)
+        mesh_copy = vtk.vtkPolyData()
+        mesh_copy.ShallowCopy(mesh)
+        mesh_copy.GetCellData().AddArray(marker)
+        mesh_copy.GetCellData().SetActiveScalars("_snap_marker")
+        thresh = vtk.vtkThreshold()
+        thresh.SetInputData(mesh_copy)
+        thresh.SetLowerThreshold(1)
+        thresh.SetUpperThreshold(1)
+        thresh.SetThresholdFunction(thresh.THRESHOLD_BETWEEN)
+        thresh.Update()
+        if thresh.GetOutput().GetNumberOfCells() == 0:
+            return None
+        geom = vtk.vtkGeometryFilter()
+        geom.SetInputConnection(thresh.GetOutputPort())
+        geom.Update()
+        com = vtk.vtkCenterOfMass()
+        com.SetInputConnection(geom.GetOutputPort())
+        com.SetUseScalarsAsWeights(False)
+        com.Update()
+        return list(com.GetCenter())
+
+    def interface_centroid(
+        self, labels_a: list[int], labels_b: list[int], frame: int = 0
+    ) -> list[float] | None:
+        if frame >= len(self._meshes) or not labels_a or not labels_b:
+            return None
+        mesh = self._meshes[frame]
+        boundary_labels = mesh.GetCellData().GetArray("BoundaryLabels")
+        if not boundary_labels or mesh.GetNumberOfCells() == 0:
+            return None
+        set_a, set_b = set(labels_a), set(labels_b)
+        marker = vtk.vtkIntArray()
+        marker.SetName("_snap_marker")
+        marker.SetNumberOfTuples(boundary_labels.GetNumberOfTuples())
+        found = False
+        for i in range(boundary_labels.GetNumberOfTuples()):
+            l0 = int(boundary_labels.GetComponent(i, 0))
+            l1 = int(boundary_labels.GetComponent(i, 1))
+            is_iface = (l0 in set_a and l1 in set_b) or (l0 in set_b and l1 in set_a)
+            marker.SetValue(i, 1 if is_iface else 0)
+            if is_iface:
+                found = True
+        if not found:
+            return None
+        mesh_copy = vtk.vtkPolyData()
+        mesh_copy.ShallowCopy(mesh)
+        mesh_copy.GetCellData().AddArray(marker)
+        mesh_copy.GetCellData().SetActiveScalars("_snap_marker")
+        thresh = vtk.vtkThreshold()
+        thresh.SetInputData(mesh_copy)
+        thresh.SetLowerThreshold(1)
+        thresh.SetUpperThreshold(1)
+        thresh.SetThresholdFunction(thresh.THRESHOLD_BETWEEN)
+        thresh.Update()
+        if thresh.GetOutput().GetNumberOfCells() == 0:
+            return None
+        geom = vtk.vtkGeometryFilter()
+        geom.SetInputConnection(thresh.GetOutputPort())
+        geom.Update()
+        com = vtk.vtkCenterOfMass()
+        com.SetInputConnection(geom.GetOutputPort())
+        com.SetUseScalarsAsWeights(False)
+        com.Update()
+        return list(com.GetCenter())
 
     def update_mpr_opacity(self, frame: int, opacity: float):
         """Update opacity for all MPR overlay labels."""
