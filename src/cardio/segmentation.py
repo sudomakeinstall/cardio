@@ -10,6 +10,7 @@ from .orientation import (
     reset_direction,
 )
 from .property_config import vtkPropertyConfig
+from .utils import label_color
 
 
 class Segmentation(Object):
@@ -126,9 +127,7 @@ class Segmentation(Object):
                         props.get("b", 0.0),
                     )
                 else:
-                    # Default coloring based on label value
-                    color = self._get_default_color(label)
-                    color_func.AddRGBPoint(label, *color)
+                    color_func.AddRGBPoint(label, *label_color(label))
 
             mapper.SetLookupTable(color_func)
             mapper.SetScalarRange(min_label, max_label)
@@ -138,15 +137,6 @@ class Segmentation(Object):
         actor.SetMapper(mapper)
 
         return actor
-
-    @staticmethod
-    def _get_default_color(label):
-        import colorsys
-
-        golden_ratio = 0.618033988749895
-        sat, val = 0.65, 0.88
-        hue = (label * golden_ratio) % 1.0
-        return colorsys.hsv_to_rgb(hue, sat, val)
 
     def configure_actors(self):
         """Configure actor properties without adding to renderer."""
@@ -244,7 +234,7 @@ class Segmentation(Object):
                 g = self.label_properties[label].get("g", 1.0)
                 b = self.label_properties[label].get("b", 1.0)
             else:
-                r, g, b = self._get_default_color(label)
+                r, g, b = label_color(label)
             lut.SetTableValue(label, r, g, b, opacity)
 
         lut.Build()

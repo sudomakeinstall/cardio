@@ -1,5 +1,7 @@
 """Utility functions shared across cardio classes."""
 
+# System
+import colorsys
 import enum
 
 
@@ -8,6 +10,14 @@ class InterpolatorType(enum.Enum):
 
     LINEAR = "linear"
     NEAREST = "nearest"
+
+
+def label_color(
+    label: int, sat: float = 0.65, val: float = 0.88
+) -> tuple[float, float, float]:
+    golden_ratio = 0.618033988749895
+    hue = (label * golden_ratio) % 1.0
+    return colorsys.hsv_to_rgb(hue, sat, val)
 
 
 def calculate_combined_bounds(actors):
