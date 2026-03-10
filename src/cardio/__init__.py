@@ -1,4 +1,4 @@
-__version__ = "2026.3.1"
+__version__ = "2026.3.2"
 
 from . import window_level
 from .logic import Logic
