@@ -261,6 +261,12 @@ class Logic:
         self.server.controller.reset_mpr_origin = self.reset_mpr_origin
         self.server.controller.snap_to_centroid = self.snap_to_centroid
 
+        # Initialize screenshot viewport state
+        for viewport in ("vr", "axial", "coronal", "sagittal"):
+            self.server.state[f"screenshot_viewport_{viewport}"] = (
+                viewport in self.scene.screenshot_viewports
+            )
+
         # Initialize MPR state
         self.server.state.mpr_enabled = self.scene.mpr_enabled
         # Initialize active_volume_label to empty string (actual value set after UI ready)
@@ -710,11 +716,18 @@ class Logic:
         dr = self.scene.screenshot_directory / dr
 
         mpr_enabled = getattr(self.server.state, "mpr_enabled", False)
-        render_windows = {"vr": self.scene.renderWindow}
+        selected = {
+            name
+            for name in ("vr", "axial", "coronal", "sagittal")
+            if getattr(self.server.state, f"screenshot_viewport_{name}", True)
+        }
+        render_windows = {}
+        if "vr" in selected:
+            render_windows["vr"] = self.scene.renderWindow
         if mpr_enabled:
-            render_windows["axial"] = self.scene.axial_renderWindow
-            render_windows["coronal"] = self.scene.coronal_renderWindow
-            render_windows["sagittal"] = self.scene.sagittal_renderWindow
+            for name in ("axial", "coronal", "sagittal"):
+                if name in selected:
+                    render_windows[name] = getattr(self.scene, f"{name}_renderWindow")
 
         for folder in render_windows:
             (dr / folder).mkdir(parents=True, exist_ok=True)

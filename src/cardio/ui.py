@@ -959,6 +959,25 @@ class UI:
                     thumb_label=True,
                 )
 
+                vuetify.VListSubheader("Screenshot Viewports")
+                with vuetify.VRow(classes="mx-1 mb-1"):
+                    for key, label in (
+                        ("vr", "3D"),
+                        ("axial", "Axial"),
+                        ("coronal", "Coronal"),
+                        ("sagittal", "Sagittal"),
+                    ):
+                        vuetify.VCheckbox(
+                            v_model=(
+                                f"screenshot_viewport_{key}",
+                                key in self.scene.screenshot_viewports,
+                            ),
+                            label=label,
+                            hide_details=True,
+                            dense=True,
+                            classes="mx-1",
+                        )
+
                 with vuetify.VRow(justify="center", classes="my-3"):
                     vuetify.VBtn(
                         "Capture Cine",
@@ -970,6 +989,10 @@ class UI:
                         click=self.server.controller.screenshot,
                         title=f"Capture cine to {self.scene.screenshot_directory}",
                         prepend_icon="mdi-video",
+                        disabled=(
+                            "!screenshot_viewport_vr && !screenshot_viewport_axial && !screenshot_viewport_coronal && !screenshot_viewport_sagittal",
+                            False,
+                        ),
                     )
 
                 vuetify.VDivider(classes="my-2")

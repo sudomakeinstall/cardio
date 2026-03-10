@@ -153,6 +153,10 @@ class Scene(ps.BaseSettings):
     mpr_crosshair_width: float = pc.Field(
         default=1.5, description="Line width for crosshair lines"
     )
+    screenshot_viewports: list[str] = pc.Field(
+        default=["vr", "axial", "coronal", "sagittal"],
+        description="Viewports to capture in screenshots. Options: vr, axial, coronal, sagittal",
+    )
 
     # Field validators for JSON string inputs
     @pc.field_validator("meshes", mode="before")
