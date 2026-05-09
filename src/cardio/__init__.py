@@ -1,4 +1,6 @@
-__version__ = "2026.3.2"
+from importlib.metadata import version
+
+__version__ = version("cardio")
 
 from . import window_level
 from .logic import Logic

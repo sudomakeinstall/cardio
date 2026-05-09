@@ -18,8 +18,6 @@ $ cd /path/to/your/project
 $ uv init
 $ uv add cardio
 $ . ./.venv/bin/activate
-(project) cardio --version
-cardio 2026.3.2
 ```
 
 ### Developing
@@ -41,7 +39,11 @@ $ pytest -v
 Uploading:
 
 ```bash
-$ bumpver update
+$ uv version --bump major # Year
+$ uv version --bump minor # Month
+$ uv version --bump patch $ Day
+$ git tag -a $(cardio --version) -m "Release $(cardio --version)"
 $ uv build --no-sources
+$ git push origin main --follow-tags
 $ uv publish --token <pypi_api_key>
 ```

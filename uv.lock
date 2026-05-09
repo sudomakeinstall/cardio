@@ -98,23 +98,8 @@ wheels = [
 ]
 
 [[package]]
-name = "bumpver"
-version = "2025.1131"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "click" },
-    { name = "colorama" },
-    { name = "lexid" },
-    { name = "toml" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/8f/8a/cc13e816e9f0849dce423b904b06fd91b5444cba6df3200d512a702f2e95/bumpver-2025.1131.tar.gz", hash = "sha256:a35fd2d43a5f65f014035c094866bd3bd6c739606f29fd41246d6ec6e839d3f9", size = 115372, upload-time = "2025-07-02T20:36:11.982Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1d/5b/2d5ea6802495ee4506721977be522804314aa66ad629d9356e3c7e5af4a6/bumpver-2025.1131-py2.py3-none-any.whl", hash = "sha256:c02527f6ed7887afbc06c07630047b24a9f9d02d544a65639e99bf8b92aaa674", size = 65361, upload-time = "2025-07-02T20:36:10.103Z" },
-]
-
-[[package]]
 name = "cardio"
-version = "2026.3.2"
+version = "2026.5.8"
 source = { editable = "." }
 dependencies = [
     { name = "itk" },
@@ -134,7 +119,6 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
-    { name = "bumpver" },
     { name = "coverage" },
     { name = "isort" },
     { name = "pytest" },
@@ -143,7 +127,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bumpver", marker = "extra == 'dev'", specifier = ">=2025.1131" },
     { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.10.4" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=6.0.1" },
     { name = "itk", specifier = ">=5.4.4.post1" },
@@ -162,18 +145,6 @@ requires-dist = [
     { name = "vtk", specifier = ">=9.5.0" },
 ]
 provides-extras = ["dev"]
-
-[[package]]
-name = "click"
-version = "8.2.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/60/6c/8ca2efa64cf75a977a0d7fac081354553ebe483345c734fb6b6515d96bbc/click-8.2.1.tar.gz", hash = "sha256:27c491cc05d968d271d5a1db13e3b5a184636d9d930f148c50b038f0d0646202", size = 286342, upload-time = "2025-05-20T23:19:49.832Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/85/32/10bb5764d90a8eee674e9dc6f4db6a0ab47c8c4d0d83c27f7c39ac415a4d/click-8.2.1-py3-none-any.whl", hash = "sha256:61a3265b914e850b85317d0b3109c7f8cd35a670f963866005d6ef1d5175a12b", size = 102215, upload-time = "2025-05-20T23:19:47.796Z" },
-]
 
 [[package]]
 name = "colorama"
@@ -628,15 +599,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/99/dd/841e9a66c4715477ea0abc78da039832fbb09dac5c35c58dc4c41a407b8a/kiwisolver-1.4.9-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:aedff62918805fb62d43a4aa2ecd4482c380dc76cd31bd7c8878588a61bd0369", size = 2391835, upload-time = "2025-08-10T21:27:34.23Z" },
     { url = "https://files.pythonhosted.org/packages/0c/28/4b2e5c47a0da96896fdfdb006340ade064afa1e63675d01ea5ac222b6d52/kiwisolver-1.4.9-cp314-cp314t-win_amd64.whl", hash = "sha256:1fa333e8b2ce4d9660f2cda9c0e1b6bafcfb2457a9d259faa82289e73ec24891", size = 79988, upload-time = "2025-08-10T21:27:35.587Z" },
     { url = "https://files.pythonhosted.org/packages/80/be/3578e8afd18c88cdf9cb4cffde75a96d2be38c5a903f1ed0ceec061bd09e/kiwisolver-1.4.9-cp314-cp314t-win_arm64.whl", hash = "sha256:4a48a2ce79d65d363597ef7b567ce3d14d68783d2b2263d98db3d9477805ba32", size = 70260, upload-time = "2025-08-10T21:27:36.606Z" },
-]
-
-[[package]]
-name = "lexid"
-version = "2021.1006"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/60/0b/28a3f9abc75abbf1fa996eb2dd77e1e33a5d1aac62566e3f60a8ec8b8a22/lexid-2021.1006.tar.gz", hash = "sha256:509a3a4cc926d3dbf22b203b18a4c66c25e6473fb7c0e0d30374533ac28bafe5", size = 11525, upload-time = "2021-04-02T20:18:34.668Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/e3/35764404a4b7e2021be1f88f42264c2e92e0c4720273559a62461ce64a47/lexid-2021.1006-py2.py3-none-any.whl", hash = "sha256:5526bb5606fd74c7add23320da5f02805bddd7c77916f2dc1943e6bada8605ed", size = 7587, upload-time = "2021-04-02T20:18:33.129Z" },
 ]
 
 [[package]]
@@ -1291,15 +1253,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/83/d3/803453b36afefb7c2bb238361cd4ae6125a569b4db67cd9e79846ba2d68c/sympy-1.14.0.tar.gz", hash = "sha256:d3d3fe8df1e5a0b42f0e7bdf50541697dbe7d23746e894990c030e2b05e72517", size = 7793921, upload-time = "2025-04-27T18:05:01.611Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl", hash = "sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5", size = 6299353, upload-time = "2025-04-27T18:04:59.103Z" },
-]
-
-[[package]]
-name = "toml"
-version = "0.10.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/be/ba/1f744cdc819428fc6b5084ec34d9b30660f6f9daaf70eead706e3203ec3c/toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f", size = 22253, upload-time = "2020-11-01T01:40:22.204Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/44/6f/7120676b6d73228c96e17f1f794d8ab046fc910d781c8d151120c3f1569e/toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b", size = 16588, upload-time = "2020-11-01T01:40:20.672Z" },
 ]
 
 [[package]]

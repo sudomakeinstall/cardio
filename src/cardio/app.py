@@ -25,7 +25,7 @@ class CardioApp:
         )
 
         self.server.cli.add_argument(
-            "--version", action="version", version=f"cardio {__version__}"
+            "--version", action="version", version=f"{__version__}"
         )
 
         cli_settings = ps.CliSettingsSource(
