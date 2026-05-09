@@ -156,7 +156,7 @@ requires-dist = [
     { name = "tomlkit", specifier = ">=0.13.3" },
     { name = "torch", index = "https://download.pytorch.org/whl/cpu" },
     { name = "trame", specifier = ">=3.12.0" },
-    { name = "trame-client", specifier = ">=3.10.1" },
+    { name = "trame-client", specifier = ">=3.12.1" },
     { name = "trame-vtk", specifier = ">=2.11.8" },
     { name = "trame-vuetify", specifier = ">=3.2.2" },
     { name = "vtk", specifier = ">=9.5.0" },
@@ -1403,14 +1403,14 @@ wheels = [
 
 [[package]]
 name = "trame-client"
-version = "3.10.1"
+version = "3.12.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "trame-common" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/47/f7/5fb650cfba2f7838354f6f4295db50ae025d9739dd2361bbe28c0f11ff57/trame_client-3.10.1.tar.gz", hash = "sha256:2aa90575e706276e0451986a41894211adad9c39e3cb1d7a4f599b43859f05a0", size = 240431, upload-time = "2025-08-18T19:57:23.769Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/eb/69/472f6e77e549b4a3129523ae959321ad751425fd92d75cbd5d0fe427685c/trame_client-3.12.1.tar.gz", hash = "sha256:7c310bce0a1d21e978f8c5e55d9b14e07111749164046f6678c2b2edbaf7bfc1", size = 246229, upload-time = "2026-04-29T22:33:55.69Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3a/1e/8230cfa506ef6680038bc2d162ea7f95d7d6676cd6031170918cc4d183bb/trame_client-3.10.1-py3-none-any.whl", hash = "sha256:234d2f333e16deea6c6eb9a0d7874ca851bdfd3759c9c8959d1d00e1065e9eba", size = 244782, upload-time = "2025-08-18T19:57:21.755Z" },
+    { url = "https://files.pythonhosted.org/packages/ac/98/4906ab32589659039a9dc4d3c1a606fd8cacbef436c27e191e74864d5d0d/trame_client-3.12.1-py3-none-any.whl", hash = "sha256:e72306222cd5520a468b5ca28bb65d8e44fe7981ddc861b78eea13c62abbcd43", size = 250749, upload-time = "2026-04-29T22:33:53.859Z" },
 ]
 
 [[package]]
