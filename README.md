@@ -43,6 +43,7 @@ $ uv version --bump major # Year
 $ uv version --bump minor # Month
 $ uv version --bump patch $ Day
 $ git tag -a $(cardio --version) -m "Release $(cardio --version)"
+$ rm -rf dist/
 $ uv build --no-sources
 $ git push origin main --follow-tags
 $ uv publish --token <pypi_api_key>
