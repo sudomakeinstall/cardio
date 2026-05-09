@@ -23,7 +23,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 dependencies = [
-    "trame-vuetify>=3.0.2",
+    "trame-vuetify>=3.2.2",
     "trame-vtk>=2.11.8",
     "itk>=5.4.4.post1",
     "vtk>=9.5.0",

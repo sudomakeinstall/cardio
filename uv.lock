@@ -158,7 +158,7 @@ requires-dist = [
     { name = "trame", specifier = ">=3.12.0" },
     { name = "trame-client", specifier = ">=3.10.1" },
     { name = "trame-vtk", specifier = ">=2.11.8" },
-    { name = "trame-vuetify", specifier = ">=3.0.2" },
+    { name = "trame-vuetify", specifier = ">=3.2.2" },
     { name = "vtk", specifier = ">=9.5.0" },
 ]
 provides-extras = ["dev"]
@@ -1449,14 +1449,14 @@ wheels = [
 
 [[package]]
 name = "trame-vuetify"
-version = "3.0.2"
+version = "3.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "trame-client" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c1/e1/a09db9f868035b45935ef47e33ebc99e511f5c0421d0b5ac6a6c2e4ce410/trame_vuetify-3.0.2.tar.gz", hash = "sha256:b42e8773efe647443f59ad5765393bf9f6da46a7aec8dbb9b61501b9c3233af2", size = 4997231, upload-time = "2025-08-04T19:02:06.667Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d7/1a/1701aaf3450def4b17cb3580d0a340361065b1d258e156861eb83a8377f2/trame_vuetify-3.2.2.tar.gz", hash = "sha256:0e111ec5fdfed31e5c189eafb306f4f25aacd75527b3a5612bb5a4cacbb18d8b", size = 5107360, upload-time = "2026-04-28T13:22:53.684Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/80/3b60a2f4ab74e287228cedd3a94f827c74863055d4134d69dea59f803aba/trame_vuetify-3.0.2-py3-none-any.whl", hash = "sha256:9e0a5ecee57a248c78e00899458ef9d6aa8910014a2b3ac655186c1d8ed7bebd", size = 5026340, upload-time = "2025-08-04T19:02:04.748Z" },
+    { url = "https://files.pythonhosted.org/packages/ac/3a/0dbff3ce4fd9cc6076fce8ef714c33796bd25d08b3d249ca78ea458a85fd/trame_vuetify-3.2.2-py3-none-any.whl", hash = "sha256:b40ecfa30a675df4ce40d5161b9b6c040cfe5445599933c478a3359afbee91d3", size = 5134630, upload-time = "2026-04-28T13:22:51.132Z" },
 ]
 
 [[package]]
