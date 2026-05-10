@@ -99,7 +99,7 @@ wheels = [
 
 [[package]]
 name = "cardio"
-version = "2026.5.8"
+version = "2026.5.9"
 source = { editable = "." }
 dependencies = [
     { name = "itk" },
@@ -112,6 +112,7 @@ dependencies = [
     { name = "torch", version = "2.10.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
     { name = "trame" },
     { name = "trame-client" },
+    { name = "trame-server" },
     { name = "trame-vtk" },
     { name = "trame-vuetify" },
     { name = "vtk" },
@@ -140,6 +141,7 @@ requires-dist = [
     { name = "torch", index = "https://download.pytorch.org/whl/cpu" },
     { name = "trame", specifier = ">=3.12.0" },
     { name = "trame-client", specifier = ">=3.12.1" },
+    { name = "trame-server", specifier = ">=3.12.0" },
     { name = "trame-vtk", specifier = ">=2.11.8" },
     { name = "trame-vuetify", specifier = ">=3.2.2" },
     { name = "vtk", specifier = ">=9.5.0" },
@@ -1368,24 +1370,25 @@ wheels = [
 
 [[package]]
 name = "trame-common"
-version = "1.0.1"
+version = "1.2.3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/9b/81/fca0fde4ce06d6afafacfe44fc3989a7d89982a4a83c3252fe3679ecaaeb/trame_common-1.0.1.tar.gz", hash = "sha256:9d4af2d9a6d08a7405977f459931cab9d4b53ae120a80264545f679d1f9a94bc", size = 18375, upload-time = "2025-07-27T04:45:24.794Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b6/8c/f9e7bcf73d888df9df6115deb8619679444d83b9e92a26604a05f0433307/trame_common-1.2.3.tar.gz", hash = "sha256:125b60d77545d7352fb8eabc0f6e0e12070aa6ada31e992862f16a49f34b73ad", size = 19998, upload-time = "2026-05-08T17:12:33.942Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4f/9a/e77b16b3f13d87afd2c741dbee0e3affe859f0f2ac5641da8ffe5de8748f/trame_common-1.0.1-py3-none-any.whl", hash = "sha256:b8f568a6f917a511f9e24060e20b8a95860729b10307ac04d2336d6780e3a2e6", size = 21687, upload-time = "2025-07-27T04:45:23.323Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/80/957a3dae26c1b38a302a96bf49adc53399e5f04c0afdf750d4978216fe14/trame_common-1.2.3-py3-none-any.whl", hash = "sha256:85d13ac87e7e4db853278afc98d19d14972e1fc75394aac9800221be0829e5cd", size = 23482, upload-time = "2026-05-08T17:12:32.548Z" },
 ]
 
 [[package]]
 name = "trame-server"
-version = "3.6.0"
+version = "3.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "more-itertools" },
+    { name = "trame-common" },
     { name = "wslink" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0f/0e/14fc6be151e9e526c9e631ad5428aa81bb0bdad0328727eabbbee9e72eb9/trame_server-3.6.0.tar.gz", hash = "sha256:6c75dac13e8436990f9afff21528e64280f5395afa2e2ae9628e64a3404cde5e", size = 38653, upload-time = "2025-08-04T23:05:55.344Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/7d/274eb9ba101b577991a1de6bf159c07b62c7e23d8db332c30bb62ccf1b4d/trame_server-3.12.0.tar.gz", hash = "sha256:434dae4ce781d93d5009abe634cd4f6f55758f1cdcbf0eee519c7ac7304f47c6", size = 38103, upload-time = "2026-05-08T20:06:19.351Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/56/98/1ee0d91aba52204b97d196d5852aa810f154a0f893b9a4e0382dd03822bf/trame_server-3.6.0-py3-none-any.whl", hash = "sha256:01b62cbda5083309f9aceb1ba03d209fddcffd75c3b6c0004ee86bb5b95bd77f", size = 43346, upload-time = "2025-08-04T23:05:53.427Z" },
+    { url = "https://files.pythonhosted.org/packages/94/c1/b9e2ac102a6b9aa3c69839eef40248665c6b7f3ce993d553cf703ee478ca/trame_server-3.12.0-py3-none-any.whl", hash = "sha256:d01f9dbfa6c689cbc2af9473ab151cc698ccca0859e3b1d443f853f473c4c8a5", size = 44691, upload-time = "2026-05-08T20:06:18.05Z" },
 ]
 
 [[package]]
@@ -1455,15 +1458,15 @@ wheels = [
 
 [[package]]
 name = "wslink"
-version = "2.4.0"
+version = "2.5.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
     { name = "msgpack" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/88/1e/7de3247eb84c9eaa9ab7e6feb13a1fa2cf339dbff21cd98ee2f107c74fa8/wslink-2.4.0.tar.gz", hash = "sha256:038d5a4fecb18cbedab3754f9db8265c3c794ac72133e47d4b3303d50c64c758", size = 31864, upload-time = "2025-08-18T19:40:26.065Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/67/06/8340b98693fe886af59a86b69ca0eb9f8095d6dbdd7a28496d9f3a8fb33f/wslink-2.5.6.tar.gz", hash = "sha256:12f3a6135cb3a74c4f1af758942c6a4b34a51fcb700839abfb91b13064a4244c", size = 29784, upload-time = "2026-03-12T00:35:26.018Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/59/fb/5cebce5a54002fa36560ab1426ceead210da8ff5cfd0a4937ca0cfd9f13f/wslink-2.4.0-py3-none-any.whl", hash = "sha256:449ec1da5ad5f2ac6084212230ddbf65f5104cfd1d55914e278b412da10bcd27", size = 36844, upload-time = "2025-08-18T19:40:24.671Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/26/d23eb1cc5c8f084d861bbb7035fa911ecb86be51810428dd6284398d021a/wslink-2.5.6-py3-none-any.whl", hash = "sha256:89f23bad3b3522dcb78be84907487f6cf742c6b4526a666fd3e4013f5f705015", size = 37165, upload-time = "2026-03-12T00:35:24.655Z" },
 ]
 
 [[package]]

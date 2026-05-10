@@ -1472,9 +1472,13 @@ class Logic:
     def finalize_mpr_initialization(self, **kwargs):
         """Set the active volume label after UI is ready to avoid race condition."""
         if hasattr(self, "_pending_active_volume") and self._pending_active_volume:
-            self.server.state.active_volume_label = self._pending_active_volume
-            # Manually trigger sync_active_volume since state change may not fire during on_server_ready
-            self.sync_active_volume(self._pending_active_volume)
+            # Flush immediately so trame-server clears its listener-key accumulator
+            # (_listener_keys in 3.12+). Without the flush, active_volume_label
+            # remains pending past state.initial (called when the client connects),
+            # causing sync_active_volume to fire spuriously on the next unrelated
+            # state update (e.g. label selection in the snap UI).
+            with self.server.state:
+                self.server.state.active_volume_label = self._pending_active_volume
             delattr(self, "_pending_active_volume")
 
         # Apply loaded rotation data to MPR views

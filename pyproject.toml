@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "cardio"
-version = "2026.5.8"
+version = "2026.5.9"
 authors = [
     {name = "Davis Marc Vigneault", email = "davis.vigneault@gmail.com"}
 ]
@@ -35,6 +35,7 @@ dependencies = [
     "trame-client>=3.12.1",
     "roma>=1.5.6",
     "torch",
+    "trame-server>=3.12.0",
 ]
 description = "A simple web-based viewer for 3D and 4D ('cine') medical imaging data."
 keywords = ["Medical", "Imaging", "3D", "4D", "Visualization"]
