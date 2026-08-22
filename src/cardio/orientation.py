@@ -162,8 +162,48 @@ def is_axis_aligned(image) -> bool:
     return True
 
 
+def temporal_frames(image) -> list:
+    """Split a 4D ITK image into its 3D temporal frames.
+
+    A 3D image is returned unchanged as a single frame, so callers can treat
+    per-frame files and a single 4D file identically.
+    """
+    dimension = image.GetImageDimension()
+
+    if dimension == 3:
+        return [image]
+
+    if dimension != 4:
+        raise ValueError(f"Expected a 3D or 4D image, got {dimension}D")
+
+    origin = np.array(image.GetOrigin())[:3]
+    spacing = np.array(image.GetSpacing())[:3]
+    direction = itk.matrix_from_array(
+        itk.array_from_matrix(image.GetDirection())[:3, :3]
+    )
+    pixel_array = itk.array_from_image(image)
+
+    frames = []
+    for frame_array in pixel_array:
+        frame = itk.image_from_array(np.ascontiguousarray(frame_array))
+        frame.SetOrigin(origin)
+        frame.SetSpacing(spacing)
+        frame.SetDirection(direction)
+        frames.append(frame)
+
+    return frames
+
+
+def read_frames(path) -> list:
+    """Read an image file as direction-reset 3D frames, splitting 4D input."""
+    return [reset_direction(frame) for frame in temporal_frames(itk.imread(path))]
+
+
 def reset_direction(image):
     """Reset image direction to identity matrix, preserving physical extent."""
+    assert (
+        image.GetImageDimension() == 3
+    ), f"Input image must be 3D, got {image.GetImageDimension()}D"
     assert is_axis_aligned(image), "Input image must be axis-aligned"
 
     origin = np.array(image.GetOrigin())

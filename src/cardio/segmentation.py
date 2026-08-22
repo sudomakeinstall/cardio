@@ -7,7 +7,7 @@ import vtk
 
 from .object import Object
 from .orientation import (
-    reset_direction,
+    read_frames,
 )
 from .property_config import vtkPropertyConfig
 from .utils import label_color
@@ -33,63 +33,59 @@ class Segmentation(Object):
     @pc.model_validator(mode="after")
     def initialize_segmentation(self):
         """Generate VTK actors for all frames using SurfaceNets3D."""
-        for frame, path in enumerate(self.path_list):
-            logging.info(f"{self.label}: Loading segmentation frame {frame}.")
+        for path in self.path_list:
+            for image in read_frames(path):
+                logging.info(
+                    f"{self.label}: Loading segmentation frame {len(self._actors)}."
+                )
 
-            # Read and process segmentation image
-            image = itk.imread(path)
-            image = reset_direction(image)
-            vtk_image = itk.vtk_image_from_image(image)
-            self._label_images.append(vtk_image)
+                vtk_image = itk.vtk_image_from_image(image)
+                self._label_images.append(vtk_image)
 
-            # Create SurfaceNets3D filter
-            surface_nets = vtk.vtkSurfaceNets3D()
-            surface_nets.SetInputData(vtk_image)
-            max_label = int(vtk_image.GetPointData().GetScalars().GetRange()[1])
-            surface_nets.GenerateLabels(max_label, 1, max_label)
-
-            # Configure label selection if specified
-            if self.include_labels is not None:
-                surface_nets.SetOutputStyle(surface_nets.OUTPUT_STYLE_SELECTED)
-                surface_nets.InitializeSelectedLabelsList()
-                for label in self.include_labels:
-                    surface_nets.AddSelectedLabel(label)
-
-            # Execute filter
-            surface_nets.Update()
-            mesh = surface_nets.GetOutput()
-
-            # Create scalar array from boundary labels (use higher value)
-            boundary_labels = mesh.GetCellData().GetArray("BoundaryLabels")
-
-            if boundary_labels:
-                # Create scalar array using the maximum of the two boundary labels
-                scalar_array = vtk.vtkIntArray()
-                scalar_array.SetName("Labels")
-                scalar_array.SetNumberOfTuples(boundary_labels.GetNumberOfTuples())
-
-                for i in range(boundary_labels.GetNumberOfTuples()):
-                    label1 = int(boundary_labels.GetComponent(i, 0))
-                    label2 = int(boundary_labels.GetComponent(i, 1))
-                    # Use the higher label value (excluding background=0)
-                    max_label = (
-                        max(label1, label2)
-                        if max(label1, label2) > 0
-                        else min(label1, label2)
-                    )
-                    scalar_array.SetValue(i, max_label)
-
-                mesh.GetCellData().AddArray(scalar_array)
-                mesh.GetCellData().SetActiveScalars("Labels")
-
-            # Store mesh directly for centroid queries
-            self._meshes.append(mesh)
-
-            # Create single actor with scalar coloring
-            actor = self._create_segmentation_actor(mesh)
-            self._actors.append(actor)
+                mesh = self._extract_mesh(vtk_image)
+                self._meshes.append(mesh)
+                self._actors.append(self._create_segmentation_actor(mesh))
 
         return self
+
+    def _extract_mesh(self, vtk_image) -> vtk.vtkPolyData:
+        """Extract a multi-label surface mesh with per-cell label scalars."""
+        surface_nets = vtk.vtkSurfaceNets3D()
+        surface_nets.SetInputData(vtk_image)
+        max_label = int(vtk_image.GetPointData().GetScalars().GetRange()[1])
+        surface_nets.GenerateLabels(max_label, 1, max_label)
+
+        if self.include_labels is not None:
+            surface_nets.SetOutputStyle(surface_nets.OUTPUT_STYLE_SELECTED)
+            surface_nets.InitializeSelectedLabelsList()
+            for label in self.include_labels:
+                surface_nets.AddSelectedLabel(label)
+
+        surface_nets.Update()
+        mesh = surface_nets.GetOutput()
+
+        boundary_labels = mesh.GetCellData().GetArray("BoundaryLabels")
+
+        if boundary_labels:
+            scalar_array = vtk.vtkIntArray()
+            scalar_array.SetName("Labels")
+            scalar_array.SetNumberOfTuples(boundary_labels.GetNumberOfTuples())
+
+            for i in range(boundary_labels.GetNumberOfTuples()):
+                label1 = int(boundary_labels.GetComponent(i, 0))
+                label2 = int(boundary_labels.GetComponent(i, 1))
+                # Prefer the foreground label of the pair over background=0
+                cell_label = (
+                    max(label1, label2)
+                    if max(label1, label2) > 0
+                    else min(label1, label2)
+                )
+                scalar_array.SetValue(i, cell_label)
+
+            mesh.GetCellData().AddArray(scalar_array)
+            mesh.GetCellData().SetActiveScalars("Labels")
+
+        return mesh
 
     @property
     def actors(self) -> list[vtk.vtkActor]:

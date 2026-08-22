@@ -13,7 +13,9 @@ from cardio.orientation import (
     is_righthanded_axcode,
     is_valid_axcode,
     quaternion_to_rotation_matrix,
+    read_frames,
     reset_direction,
+    temporal_frames,
 )
 
 
@@ -209,6 +211,114 @@ def test_reset_direction():
     assert is_axis_aligned(reset_image)
     output_direction = itk.array_from_matrix(reset_image.GetDirection())
     np.testing.assert_array_equal(output_direction, np.eye(3))
+
+
+def make_4d_image(size=(10, 20, 30, 4), spatial_direction=np.eye(3)):
+    """Build a 4D ITK image whose voxels encode their temporal index."""
+    image = itk.Image[itk.F, 4].New()
+    image.SetRegions(itk.Size[4](list(size)))
+    image.Allocate()
+    image.SetOrigin([5.0, 10.0, 15.0, 0.0])
+    image.SetSpacing([1.0, 2.0, 3.0, 0.5])
+
+    direction = np.eye(4)
+    direction[:3, :3] = spatial_direction
+    image.SetDirection(itk.matrix_from_array(direction))
+
+    pixel_array = itk.array_view_from_image(image)
+    for frame in range(size[3]):
+        pixel_array[frame].fill(frame)
+
+    return image
+
+
+def test_temporal_frames_passes_through_3d():
+    image = itk.Image[itk.F, 3].New()
+    image.SetRegions(itk.Size[3]([10, 20, 30]))
+    image.Allocate()
+
+    frames = temporal_frames(image)
+
+    assert len(frames) == 1
+    assert frames[0] is image
+
+
+def test_temporal_frames_splits_4d():
+    image = make_4d_image(size=(10, 20, 30, 4))
+
+    frames = temporal_frames(image)
+
+    assert len(frames) == 4
+    for index, frame in enumerate(frames):
+        assert frame.GetImageDimension() == 3
+        assert list(frame.GetLargestPossibleRegion().GetSize()) == [10, 20, 30]
+        np.testing.assert_array_equal(list(frame.GetOrigin()), [5.0, 10.0, 15.0])
+        np.testing.assert_array_equal(list(frame.GetSpacing()), [1.0, 2.0, 3.0])
+        np.testing.assert_array_equal(
+            itk.array_from_image(frame), np.full((30, 20, 10), index, dtype=np.float32)
+        )
+
+
+def test_temporal_frames_preserves_spatial_direction():
+    flipped = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]], dtype=np.float64)
+    image = make_4d_image(spatial_direction=flipped)
+
+    for frame in temporal_frames(image):
+        np.testing.assert_array_equal(
+            itk.array_from_matrix(frame.GetDirection()), flipped
+        )
+
+
+def test_temporal_frames_rejects_other_dimensions():
+    image = itk.Image[itk.F, 2].New()
+    image.SetRegions(itk.Size[2]([10, 20]))
+    image.Allocate()
+
+    with pytest.raises(ValueError):
+        temporal_frames(image)
+
+
+def test_reset_direction_rejects_4d():
+    with pytest.raises(AssertionError):
+        reset_direction(make_4d_image())
+
+
+def test_read_frames_splits_4d_file(tmp_path):
+    flipped = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]], dtype=np.float64)
+    path = tmp_path / "4d.nii.gz"
+    itk.imwrite(
+        make_4d_image(size=(10, 20, 30, 4), spatial_direction=flipped), str(path)
+    )
+
+    frames = read_frames(path)
+
+    assert len(frames) == 4
+    for index, frame in enumerate(frames):
+        assert frame.GetImageDimension() == 3
+        np.testing.assert_array_equal(
+            itk.array_from_matrix(frame.GetDirection()), np.eye(3)
+        )
+        np.testing.assert_array_equal(
+            itk.array_from_image(frame), np.full((30, 20, 10), index, dtype=np.float32)
+        )
+
+
+def test_read_frames_single_frame_from_3d_file(tmp_path):
+    image = itk.Image[itk.F, 3].New()
+    image.SetRegions(itk.Size[3]([10, 20, 30]))
+    image.Allocate()
+    image.SetSpacing([1.0, 2.0, 3.0])
+    itk.array_view_from_image(image).fill(7)
+
+    path = tmp_path / "3d.nii.gz"
+    itk.imwrite(image, str(path))
+
+    frames = read_frames(path)
+
+    assert len(frames) == 1
+    np.testing.assert_array_equal(
+        itk.array_from_image(frames[0]), np.full((30, 20, 10), 7, dtype=np.float32)
+    )
 
 
 def test_axis_convention_enum():

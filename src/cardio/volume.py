@@ -11,7 +11,7 @@ from .orientation import (
     axcode_transform_matrix,
     create_vtk_reslice_matrix,
     euler_angle_to_rotation_matrix,
-    reset_direction,
+    read_frames,
 )
 from .volume_property_presets import load_volume_property_preset
 
@@ -37,20 +37,19 @@ class Volume(Object):
     @pc.model_validator(mode="after")
     def initialize_volume(self):
         """Generate VTK volume actors for all frames."""
-        for frame, path in enumerate(self.path_list):
-            logging.info(f"{self.label}: Loading frame {frame}.")
+        for path in self.path_list:
+            for image in read_frames(path):
+                logging.info(f"{self.label}: Loading frame {len(self._actors)}.")
 
-            image = itk.imread(path)
-            image = reset_direction(image)
-            image = itk.vtk_image_from_image(image)
+                image = itk.vtk_image_from_image(image)
 
-            mapper = vtk.vtkGPUVolumeRayCastMapper()
-            mapper.SetInputData(image)
+                mapper = vtk.vtkGPUVolumeRayCastMapper()
+                mapper.SetInputData(image)
 
-            actor = vtk.vtkVolume()
-            actor.SetMapper(mapper)
+                actor = vtk.vtkVolume()
+                actor.SetMapper(mapper)
 
-            self._actors.append(actor)
+                self._actors.append(actor)
 
         return self
 
