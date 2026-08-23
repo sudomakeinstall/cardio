@@ -580,6 +580,19 @@ class UI:
                             classes="mb-2",
                             prepend_icon="mdi-target",
                         )
+                        vuetify.VSwitch(
+                            v_if="!maximized_view && active_volume_label && snap_mode !== 'reset'",
+                            v_model=("snap_locked", False),
+                            label="Lock to frame",
+                            title="Re-snap automatically whenever the frame changes",
+                            disabled=(
+                                "snap_mode === 'label' ? snap_labels_a.length === 0 : snap_labels_a.length === 0 || snap_labels_b.length === 0",
+                            ),
+                            color="primary",
+                            dense=True,
+                            hide_details=True,
+                            classes="mb-2",
+                        )
 
                     # MPR Rotation controls
                     vuetify.VListSubheader(

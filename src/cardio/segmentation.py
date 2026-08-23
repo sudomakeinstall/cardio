@@ -1,4 +1,5 @@
 import logging
+import typing as ty
 
 import itk
 import numpy as np
@@ -11,6 +12,46 @@ from .orientation import (
 )
 from .property_config import vtkPropertyConfig
 from .utils import label_color
+
+_MARKER_ARRAY = "_snap_marker"
+
+
+def masked_centroid(
+    mesh: vtk.vtkPolyData, mask: ty.Sequence[bool]
+) -> list[float] | None:
+    """Center of mass of the mesh cells selected by ``mask``."""
+    if not any(mask):
+        return None
+
+    marker = vtk.vtkIntArray()
+    marker.SetName(_MARKER_ARRAY)
+    marker.SetNumberOfTuples(len(mask))
+    for i, selected in enumerate(mask):
+        marker.SetValue(i, 1 if selected else 0)
+
+    masked = vtk.vtkPolyData()
+    masked.ShallowCopy(mesh)
+    masked.GetCellData().AddArray(marker)
+    masked.GetCellData().SetActiveScalars(_MARKER_ARRAY)
+
+    thresh = vtk.vtkThreshold()
+    thresh.SetInputData(masked)
+    thresh.SetLowerThreshold(1)
+    thresh.SetUpperThreshold(1)
+    thresh.SetThresholdFunction(thresh.THRESHOLD_BETWEEN)
+    thresh.Update()
+    if thresh.GetOutput().GetNumberOfCells() == 0:
+        return None
+
+    geom = vtk.vtkGeometryFilter()
+    geom.SetInputConnection(thresh.GetOutputPort())
+    geom.Update()
+
+    com = vtk.vtkCenterOfMass()
+    com.SetInputConnection(geom.GetOutputPort())
+    com.SetUseScalarsAsWeights(False)
+    com.Update()
+    return list(com.GetCenter())
 
 
 class Segmentation(Object):
@@ -344,83 +385,42 @@ class Segmentation(Object):
         hist = acc.GetOutput().GetPointData().GetScalars()
         return [i for i in range(1, max_label + 1) if hist.GetTuple1(i) > 0]
 
-    def label_centroid(self, labels: list[int], frame: int = 0) -> list[float] | None:
-        if frame >= len(self._meshes) or not labels:
+    def _frame_mesh(self, frame: int) -> vtk.vtkPolyData | None:
+        """Mesh shown at ``frame``, wrapping as the renderer does for short series."""
+        if not self._meshes:
             return None
-        mesh = self._meshes[frame]
-        if mesh.GetNumberOfCells() == 0:
+        return self._meshes[frame % len(self._meshes)]
+
+    def label_centroid(self, labels: list[int], frame: int = 0) -> list[float] | None:
+        mesh = self._frame_mesh(frame)
+        if mesh is None or not labels:
+            return None
+        scalars = mesh.GetCellData().GetArray("Labels")
+        if not scalars:
             return None
         label_set = set(labels)
-        scalar_array = mesh.GetCellData().GetArray("Labels")
-        marker = vtk.vtkIntArray()
-        marker.SetName("_snap_marker")
-        marker.SetNumberOfTuples(scalar_array.GetNumberOfTuples())
-        for i in range(scalar_array.GetNumberOfTuples()):
-            marker.SetValue(i, 1 if int(scalar_array.GetTuple1(i)) in label_set else 0)
-        mesh_copy = vtk.vtkPolyData()
-        mesh_copy.ShallowCopy(mesh)
-        mesh_copy.GetCellData().AddArray(marker)
-        mesh_copy.GetCellData().SetActiveScalars("_snap_marker")
-        thresh = vtk.vtkThreshold()
-        thresh.SetInputData(mesh_copy)
-        thresh.SetLowerThreshold(1)
-        thresh.SetUpperThreshold(1)
-        thresh.SetThresholdFunction(thresh.THRESHOLD_BETWEEN)
-        thresh.Update()
-        if thresh.GetOutput().GetNumberOfCells() == 0:
-            return None
-        geom = vtk.vtkGeometryFilter()
-        geom.SetInputConnection(thresh.GetOutputPort())
-        geom.Update()
-        com = vtk.vtkCenterOfMass()
-        com.SetInputConnection(geom.GetOutputPort())
-        com.SetUseScalarsAsWeights(False)
-        com.Update()
-        return list(com.GetCenter())
+        mask = [
+            int(scalars.GetTuple1(i)) in label_set
+            for i in range(scalars.GetNumberOfTuples())
+        ]
+        return masked_centroid(mesh, mask)
 
     def interface_centroid(
         self, labels_a: list[int], labels_b: list[int], frame: int = 0
     ) -> list[float] | None:
-        if frame >= len(self._meshes) or not labels_a or not labels_b:
+        mesh = self._frame_mesh(frame)
+        if mesh is None or not labels_a or not labels_b:
             return None
-        mesh = self._meshes[frame]
-        boundary_labels = mesh.GetCellData().GetArray("BoundaryLabels")
-        if not boundary_labels or mesh.GetNumberOfCells() == 0:
+        boundary = mesh.GetCellData().GetArray("BoundaryLabels")
+        if not boundary:
             return None
         set_a, set_b = set(labels_a), set(labels_b)
-        marker = vtk.vtkIntArray()
-        marker.SetName("_snap_marker")
-        marker.SetNumberOfTuples(boundary_labels.GetNumberOfTuples())
-        found = False
-        for i in range(boundary_labels.GetNumberOfTuples()):
-            l0 = int(boundary_labels.GetComponent(i, 0))
-            l1 = int(boundary_labels.GetComponent(i, 1))
-            is_iface = (l0 in set_a and l1 in set_b) or (l0 in set_b and l1 in set_a)
-            marker.SetValue(i, 1 if is_iface else 0)
-            if is_iface:
-                found = True
-        if not found:
-            return None
-        mesh_copy = vtk.vtkPolyData()
-        mesh_copy.ShallowCopy(mesh)
-        mesh_copy.GetCellData().AddArray(marker)
-        mesh_copy.GetCellData().SetActiveScalars("_snap_marker")
-        thresh = vtk.vtkThreshold()
-        thresh.SetInputData(mesh_copy)
-        thresh.SetLowerThreshold(1)
-        thresh.SetUpperThreshold(1)
-        thresh.SetThresholdFunction(thresh.THRESHOLD_BETWEEN)
-        thresh.Update()
-        if thresh.GetOutput().GetNumberOfCells() == 0:
-            return None
-        geom = vtk.vtkGeometryFilter()
-        geom.SetInputConnection(thresh.GetOutputPort())
-        geom.Update()
-        com = vtk.vtkCenterOfMass()
-        com.SetInputConnection(geom.GetOutputPort())
-        com.SetUseScalarsAsWeights(False)
-        com.Update()
-        return list(com.GetCenter())
+        mask = []
+        for i in range(boundary.GetNumberOfTuples()):
+            l0 = int(boundary.GetComponent(i, 0))
+            l1 = int(boundary.GetComponent(i, 1))
+            mask.append((l0 in set_a and l1 in set_b) or (l0 in set_b and l1 in set_a))
+        return masked_centroid(mesh, mask)
 
     def update_mpr_opacity(self, frame: int, opacity: float):
         """Update opacity for all MPR overlay labels."""

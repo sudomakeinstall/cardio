@@ -66,6 +66,7 @@ class Logic:
     def __init__(self, server, scene: Scene):
         self.server = server
         self.scene = scene
+        self._lock_centroids: dict[int, list[float] | None] = {}
 
         # Playback timing state
         self._playback_start_time = None
@@ -146,6 +147,10 @@ class Logic:
 
         if self.scene.segmentations:
             self.server.state.change("snap_seg_label")(self._on_snap_seg_changed)
+            self.server.state.change("snap_mode", "snap_labels_a", "snap_labels_b")(
+                self._on_snap_selection_changed
+            )
+            self.server.state.change("snap_locked")(self._on_snap_lock_changed)
 
         # Initialize visibility state variables
         for m in self.scene.meshes:
@@ -170,6 +175,7 @@ class Logic:
                 {"title": s.label, "value": s.label} for s in self.scene.segmentations
             ]
             self.server.state.snap_no_interface = False
+            self.server.state.snap_locked = False
 
         # Initialize preset state variables
         for v in self.scene.volumes:
@@ -322,6 +328,10 @@ class Logic:
             self._on_snap_seg_changed()
 
     def update_frame(self, frame, **kwargs):
+        # Before update_mpr_frame reads mpr_origin, so the new frame is
+        # positioned on its own centroid rather than the previous frame's.
+        self.apply_frame_lock(frame)
+
         self.scene.hide_all_frames()
 
         # Show frame with server state visibility
@@ -1434,40 +1444,97 @@ class Logic:
         self.server.state.snap_labels_a = []
         self.server.state.snap_labels_b = []
         self.server.state.snap_no_interface = False
+        self._invalidate_lock_cache()
 
-    def snap_to_centroid(self, **kwargs):
+    def _snap_selection(self):
+        """Current snap selection as (segmentation, mode, labels_a, labels_b).
+
+        Returns None when the selection cannot produce a centroid.
+        """
+        state = self.server.state
+        seg_label = getattr(state, "snap_seg_label", "")
+        seg = next((s for s in self.scene.segmentations if s.label == seg_label), None)
+        if seg is None:
+            return None
+        mode = getattr(state, "snap_mode", "label")
+        labels_a = list(getattr(state, "snap_labels_a", []))
+        labels_b = list(getattr(state, "snap_labels_b", []))
+        if not labels_a or (mode == "interface" and not labels_b):
+            return None
+        return seg, mode, labels_a, labels_b
+
+    def _snap_centroid(self, frame: int) -> list[float] | None:
+        """Centroid of the current snap selection at ``frame``."""
+        selection = self._snap_selection()
+        if selection is None:
+            return None
+        seg, mode, labels_a, labels_b = selection
+        if mode == "label":
+            return seg.label_centroid(labels_a, frame)
+        return seg.interface_centroid(labels_a, labels_b, frame)
+
+    def _set_mpr_origin(self, center):
+        """Write a centroid to mpr_origin, converting out of ITK if needed."""
         from .orientation import IndexOrder
 
-        seg_label = getattr(self.server.state, "snap_seg_label", "")
-        seg = next((s for s in self.scene.segmentations if s.label == seg_label), None)
-        if not seg:
-            return
-        frame = getattr(self.server.state, "frame", 0)
-        mode = getattr(self.server.state, "snap_mode", "label")
-        labels_a = list(getattr(self.server.state, "snap_labels_a", []))
-        labels_b = list(getattr(self.server.state, "snap_labels_b", []))
+        center_list = list(center)
+        if self.scene.mpr_rotation_sequence.metadata.index_order == IndexOrder.ROMA:
+            center_list = [center_list[2], center_list[1], center_list[0]]
+        self.server.state.mpr_origin = center_list
 
-        if mode == "reset":
+    def snap_to_centroid(self, **kwargs):
+        if getattr(self.server.state, "snap_mode", "label") == "reset":
             self.reset_mpr_origin()
             return
-        elif mode == "label":
-            if not labels_a:
-                return
-            center = seg.label_centroid(labels_a, frame)
-        else:
-            if not labels_a or not labels_b:
-                return
-            center = seg.interface_centroid(labels_a, labels_b, frame)
+        if self._snap_selection() is None:
+            return
 
+        frame = getattr(self.server.state, "frame", 0)
+        center = self._snap_centroid(frame)
         if center is None:
             self.server.state.snap_no_interface = True
             return
 
         self.server.state.snap_no_interface = False
-        center_list = list(center)
-        if self.scene.mpr_rotation_sequence.metadata.index_order == IndexOrder.ROMA:
-            center_list = [center_list[2], center_list[1], center_list[0]]
-        self.server.state.mpr_origin = center_list
+        self._set_mpr_origin(center)
+
+    def _locked_centroid(self, frame: int) -> list[float] | None:
+        """Memoized per-frame centroid, so locked playback recomputes once."""
+        if frame not in self._lock_centroids:
+            self._lock_centroids[frame] = self._snap_centroid(frame)
+        return self._lock_centroids[frame]
+
+    def apply_frame_lock(self, frame: int):
+        """Re-centre on the locked centroid for ``frame``; no-op unless locked."""
+        state = self.server.state
+        if not getattr(state, "snap_locked", False):
+            return
+        if getattr(state, "snap_mode", "label") == "reset":
+            return
+        if self._snap_selection() is None:
+            return
+
+        center = self._locked_centroid(frame)
+        if center is None:
+            state.snap_no_interface = True
+            return
+
+        state.snap_no_interface = False
+        self._set_mpr_origin(center)
+
+    def _invalidate_lock_cache(self):
+        self._lock_centroids = {}
+
+    def _on_snap_selection_changed(self, **kwargs):
+        """Re-snap when the selection changes while locked."""
+        self._invalidate_lock_cache()
+        if getattr(self.server.state, "snap_locked", False):
+            self.snap_to_centroid()
+
+    def _on_snap_lock_changed(self, snap_locked=None, **kwargs):
+        self._invalidate_lock_cache()
+        if snap_locked:
+            self.snap_to_centroid()
 
     def finalize_mpr_initialization(self, **kwargs):
         """Set the active volume label after UI is ready to avoid race condition."""
