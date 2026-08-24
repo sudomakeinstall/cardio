@@ -156,12 +156,12 @@ def test_sync_visibility_follows_the_state_toggles(app):
 
     for obj in scene.renderables:
         server.state[ObjectState.of(obj).visibility] = False
-    logic.sync_visibility()
+    logic.visibility.sync_visibility()
     assert all(obj.frame_actor(0).GetVisibility() == 0 for obj in scene.renderables)
 
     for obj in scene.renderables:
         server.state[ObjectState.of(obj).visibility] = True
-    logic.sync_visibility()
+    logic.visibility.sync_visibility()
     assert all(obj.frame_actor(0).GetVisibility() == 1 for obj in scene.renderables)
 
 
@@ -175,7 +175,7 @@ def test_sync_clipping_applies_bounds_to_every_type(app):
         for key, low in zip(keys.clip_bounds, (0, 2, 4)):
             server.state[key] = [bounds[low], bounds[low + 1]]
 
-    logic.sync_clipping()
+    logic.clipping.sync_clipping()
 
     for obj in scene.renderables:
         assert obj.actors[0].GetMapper().GetClippingPlanes() is not None
@@ -187,7 +187,7 @@ def test_sync_clipping_applies_bounds_to_every_type(app):
 def test_rotation_state_starts_in_step_across_all_three_representations(app):
     server, scene, logic, _ = app
 
-    sequence = logic.rotation_sequence()
+    sequence = logic.rotations.rotation_sequence()
     assert sequence.metadata.angle_units.value == server.state.angle_units
     assert sequence.metadata.index_order.value == server.state.index_order
     assert scene.mpr_rotation_sequence.metadata.index_order == (
@@ -198,12 +198,12 @@ def test_rotation_state_starts_in_step_across_all_three_representations(app):
 def test_adding_and_removing_rotations_round_trips(app):
     server, _, logic, _ = app
 
-    logic.add_mpr_rotation("X")
-    logic.add_mpr_rotation("Y")
+    logic.rotations.add_mpr_rotation("X")
+    logic.rotations.add_mpr_rotation("Y")
     steps = server.state.mpr_rotation_data["angles_list"]
     assert [s["axis"] for s in steps] == ["X", "Y"]
 
-    logic.remove_mpr_rotation(0)
+    logic.rotations.remove_mpr_rotation(0)
     steps = server.state.mpr_rotation_data["angles_list"]
     assert [s["axis"] for s in steps] == ["Y"]
 
@@ -211,14 +211,14 @@ def test_adding_and_removing_rotations_round_trips(app):
 def test_reset_rotation_angle_zeroes_only_that_step(app):
     server, _, logic, _ = app
 
-    logic.add_mpr_rotation("X")
-    logic.add_mpr_rotation("Y")
+    logic.rotations.add_mpr_rotation("X")
+    logic.rotations.add_mpr_rotation("Y")
     data = server.state.mpr_rotation_data
     data["angles_list"][0]["angle"] = 42.0
     data["angles_list"][1]["angle"] = 17.0
     server.state.mpr_rotation_data = data
 
-    logic.reset_rotation_angle(0)
+    logic.rotations.reset_rotation_angle(0)
 
     steps = server.state.mpr_rotation_data["angles_list"]
     assert steps[0]["angle"] == 0.0
@@ -227,19 +227,19 @@ def test_reset_rotation_angle_zeroes_only_that_step(app):
 
 def test_out_of_range_edits_are_ignored(app):
     server, _, logic, _ = app
-    logic.add_mpr_rotation("X")
+    logic.rotations.add_mpr_rotation("X")
 
-    logic.remove_mpr_rotation(9)
-    logic.reset_rotation_angle(-3)
+    logic.rotations.remove_mpr_rotation(9)
+    logic.rotations.reset_rotation_angle(-3)
 
     assert len(server.state.mpr_rotation_data["angles_list"]) == 1
 
 
 def test_reset_mpr_rotations_restores_the_model_defaults(app):
     server, _, logic, _ = app
-    logic.add_mpr_rotation("X")
+    logic.rotations.add_mpr_rotation("X")
 
-    logic.reset_mpr_rotations()
+    logic.rotations.reset_mpr_rotations()
 
     assert server.state.mpr_rotation_data["angles_list"] == []
     # the mirrors follow the model rather than a hard-coded literal
@@ -249,19 +249,21 @@ def test_reset_mpr_rotations_restores_the_model_defaults(app):
 
 def test_switching_units_keeps_the_mirror_variable_in_step(app):
     server, _, logic, _ = app
-    logic.add_mpr_rotation("X")
+    logic.rotations.add_mpr_rotation("X")
 
-    logic.sync_angle_units("degrees")
+    logic.rotations.sync_angle_units("degrees")
 
     assert server.state.angle_units == "degrees"
-    assert logic.rotation_sequence().metadata.angle_units == AngleUnits.DEGREES
+    assert (
+        logic.rotations.rotation_sequence().metadata.angle_units == AngleUnits.DEGREES
+    )
 
 
 def test_switching_index_order_also_exchanges_the_origin(app):
     server, _, logic, _ = app
     server.state.mpr_origin = [1.0, 2.0, 3.0]
 
-    logic.sync_index_order("roma")
+    logic.rotations.sync_index_order("roma")
 
     assert server.state.index_order == "roma"
     assert server.state.mpr_origin == [3.0, 2.0, 1.0]
@@ -271,4 +273,4 @@ def test_an_unrecognised_index_order_is_rejected(app):
     _, _, logic, _ = app
 
     with pytest.raises(ValueError, match="Unrecognized index order"):
-        logic.sync_index_order("nonsense")
+        logic.rotations.sync_index_order("nonsense")
