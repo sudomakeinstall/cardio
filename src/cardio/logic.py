@@ -4,6 +4,8 @@ import datetime as dt
 import numpy as np
 from trame.app import asynchronous
 
+from .convention import Convention, exchange_point, exchange_step
+from .orientation import cumulative_rotation_matrix
 from .scene import Scene
 from .screenshot import Screenshot
 
@@ -11,59 +13,24 @@ ALIGN_STEP_NAME = "Interface plane"
 
 
 class Logic:
+    def _active_volume(self):
+        """The volume the MPR views are showing, or None if there isn't one."""
+        label = getattr(self.server.state, "active_volume_label", "")
+        return next((v for v in self.scene.volumes if v.label == label), None)
+
+    @property
+    def convention(self) -> Convention:
+        """The index order and angle units the MPR state is currently written in."""
+        return Convention.from_metadata(self.scene.mpr_rotation_sequence.metadata)
+
     def _get_visible_rotation_data(self):
-        """Get rotation sequence and angles for visible rotations only.
-
-        Returns data in ITK convention, as required by VTK.
-        Converts from current convention if necessary.
-        """
-        from .orientation import IndexOrder
-
+        """Rotation sequence and angles for the visible steps, in ITK for VTK."""
         rotation_data = getattr(
             self.server.state, "mpr_rotation_data", {"angles_list": []}
         )
-        angles_list = rotation_data.get("angles_list", [])
-
-        # Build rotation_sequence (list of {"axis": ...}) for visible rotations
-        rotation_sequence = []
-        rotation_angles = {}
-
-        visible_index = 0
-        for rotation in angles_list:
-            if rotation.get("visible", True):
-                if rotation.get("quaternion") is not None:
-                    rotation_sequence.append({"quaternion": rotation["quaternion"]})
-                    rotation_angles[visible_index] = 0
-                else:
-                    rotation_sequence.append({"axis": rotation["axis"]})
-                    rotation_angles[visible_index] = rotation["angle"]
-                visible_index += 1
-
-        # CRITICAL: VTK always needs rotations in ITK convention
-        # Convert from current convention to ITK if necessary
-        current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
-        if current_convention == IndexOrder.ROMA:
-            # Convert ROMA to ITK: X→Z, Y→Y, Z→X, angle→-angle
-            # For quaternion steps [x, y, z, w] in Roma (X=S, Y=P, Z=L):
-            # ITK quaternion = [-z, -y, -x, w] (axis permutation + handedness flip)
-            converted_sequence = []
-            converted_angles = {}
-            for idx, rot in enumerate(rotation_sequence):
-                if rot.get("quaternion") is not None:
-                    q = rot["quaternion"]
-                    converted_sequence.append(
-                        {"quaternion": [-q[2], -q[1], -q[0], q[3]]}
-                    )
-                    converted_angles[idx] = 0
-                else:
-                    converted_sequence.append(
-                        {"axis": {"X": "Z", "Y": "Y", "Z": "X"}[rot["axis"]]}
-                    )
-                    converted_angles[idx] = -rotation_angles[idx]
-            rotation_sequence = converted_sequence
-            rotation_angles = converted_angles
-
-        return rotation_sequence, rotation_angles
+        return self.convention.visible_sequence_to_itk(
+            rotation_data.get("angles_list", [])
+        )
 
     def __init__(self, server, scene: Scene):
         self.server = server
@@ -373,12 +340,7 @@ class Logic:
         if not active_volume_label:
             return
 
-        # Find the active volume
-        active_volume = None
-        for volume in self.scene.volumes:
-            if volume.label == active_volume_label:
-                active_volume = volume
-                break
+        active_volume = self._active_volume()
 
         if not active_volume:
             return
@@ -388,14 +350,11 @@ class Logic:
 
         # CRITICAL: Sync slice positions IMMEDIATELY after creation
         # This ensures actors have correct origin before being added to renderers
-        from .orientation import IndexOrder
 
         origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
         rotation_sequence, rotation_angles = self._get_visible_rotation_data()
 
-        current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
-        if current_convention == IndexOrder.ROMA:
-            origin = [origin[2], origin[1], origin[0]]
+        origin = self.convention.point_to_itk(origin)
 
         active_volume.update_slice_positions(
             frame,
@@ -415,52 +374,13 @@ class Logic:
                     self.scene.mpr_rotation_sequence.metadata.angle_units,
                 )
 
-        # Get crosshair visibility state
-        crosshairs_visible = getattr(self.server.state, "mpr_crosshairs_enabled", True)
-        crosshairs = active_volume.crosshair_actors
-
-        # Update each MPR renderer with the new frame's actors
-        if self.scene.axial_renderWindow:
-            axial_renderer = (
-                self.scene.axial_renderWindow.GetRenderers().GetFirstRenderer()
+        views = self.scene.mpr_views
+        if views is not None:
+            views.show(
+                mpr_actors,
+                active_volume.crosshair_actors,
+                getattr(self.server.state, "mpr_crosshairs_enabled", True),
             )
-            if axial_renderer:
-                axial_renderer.RemoveAllViewProps()
-                axial_renderer.AddActor(mpr_actors["axial"]["actor"])
-                mpr_actors["axial"]["actor"].SetVisibility(True)
-                # Re-add crosshairs
-                if crosshairs and "axial" in crosshairs:
-                    for line_data in crosshairs["axial"].values():
-                        axial_renderer.AddActor2D(line_data["actor"])
-                        line_data["actor"].SetVisibility(crosshairs_visible)
-
-        if self.scene.coronal_renderWindow:
-            coronal_renderer = (
-                self.scene.coronal_renderWindow.GetRenderers().GetFirstRenderer()
-            )
-            if coronal_renderer:
-                coronal_renderer.RemoveAllViewProps()
-                coronal_renderer.AddActor(mpr_actors["coronal"]["actor"])
-                mpr_actors["coronal"]["actor"].SetVisibility(True)
-                # Re-add crosshairs
-                if crosshairs and "coronal" in crosshairs:
-                    for line_data in crosshairs["coronal"].values():
-                        coronal_renderer.AddActor2D(line_data["actor"])
-                        line_data["actor"].SetVisibility(crosshairs_visible)
-
-        if self.scene.sagittal_renderWindow:
-            sagittal_renderer = (
-                self.scene.sagittal_renderWindow.GetRenderers().GetFirstRenderer()
-            )
-            if sagittal_renderer:
-                sagittal_renderer.RemoveAllViewProps()
-                sagittal_renderer.AddActor(mpr_actors["sagittal"]["actor"])
-                mpr_actors["sagittal"]["actor"].SetVisibility(True)
-                # Re-add crosshairs
-                if crosshairs and "sagittal" in crosshairs:
-                    for line_data in crosshairs["sagittal"].values():
-                        sagittal_renderer.AddActor2D(line_data["actor"])
-                        line_data["actor"].SetVisibility(crosshairs_visible)
 
         # Add segmentation overlays
         self._add_segmentation_overlays_to_mpr(frame)
@@ -745,7 +665,7 @@ class Logic:
         if mpr_enabled:
             for name in ("axial", "coronal", "sagittal"):
                 if name in selected:
-                    render_windows[name] = getattr(self.scene, f"{name}_renderWindow")
+                    render_windows[name] = self.scene.mpr_views[name]
 
         for folder in render_windows:
             (dr / folder).mkdir(parents=True, exist_ok=True)
@@ -906,27 +826,12 @@ class Logic:
             getattr(self.server.state, "mpr_rotation_data", {})
         )
 
-        # Convert every step; the conversion is its own inverse, so the same
-        # mapping serves both ITK<->ROMA directions.
-        if rotation_data.get("angles_list"):
-            for rotation in rotation_data["angles_list"]:
-                quaternion = rotation.get("quaternion")
-                if quaternion is not None:
-                    # Matches the conversion _get_visible_rotation_data applies
-                    # on read; without it the stored value would keep its numbers
-                    # while changing meaning.
-                    rotation["quaternion"] = [
-                        -quaternion[2],
-                        -quaternion[1],
-                        -quaternion[0],
-                        quaternion[3],
-                    ]
-                    continue
-
-                current_axis = rotation.get("axis")
-                current_angle = rotation.get("angle", 0)
-                rotation["axis"] = {"X": "Z", "Y": "Y", "Z": "X"}[current_axis]
-                rotation["angle"] = -current_angle
+        # Re-express every step in the new order. The exchange is its own
+        # inverse, so one mapping serves both ITK<->ROMA directions -- and it
+        # always applies here, since the two conventions are known to differ.
+        rotation_data["angles_list"] = [
+            exchange_step(step) for step in rotation_data.get("angles_list") or []
+        ]
 
         # Update nested metadata
         rotation_data["metadata"]["index_order"] = index_order
@@ -934,10 +839,9 @@ class Logic:
         # Update state (triggers re-render)
         self.server.state.mpr_rotation_data = rotation_data
 
-        # Transform mpr_origin: swap X and Z (indices 0 and 2)
         mpr_origin = getattr(self.server.state, "mpr_origin", None)
         if mpr_origin is not None and len(mpr_origin) == 3:
-            self.server.state.mpr_origin = [mpr_origin[2], mpr_origin[1], mpr_origin[0]]
+            self.server.state.mpr_origin = exchange_point(mpr_origin)
 
         # Update scene
         self.scene.mpr_rotation_sequence.metadata.index_order = new_convention
@@ -997,16 +901,6 @@ class Logic:
                 setattr(self.server.state, f"clip_y_{s.label}", [bounds[2], bounds[3]])
                 setattr(self.server.state, f"clip_z_{s.label}", [bounds[4], bounds[5]])
 
-    def sync_mpr_mode(self, mpr_enabled, **kwargs):
-        """Handle MPR mode toggle."""
-        if (
-            mpr_enabled
-            and self.scene.volumes
-            and not self.server.state.active_volume_label
-        ):
-            # Auto-select first volume when MPR is enabled and no volume is selected
-            self.server.state.active_volume_label = self.scene.volumes[0].label
-
     def sync_active_volume(self, active_volume_label, **kwargs):
         """Handle active volume selection for MPR."""
 
@@ -1025,8 +919,6 @@ class Logic:
 
         # Initialize origin to volume center (in LPS coordinates)
         try:
-            from .orientation import IndexOrder
-
             current_frame = getattr(self.server.state, "frame", 0)
             volume_actor = active_volume.actors[current_frame]
             image_data = volume_actor.GetMapper().GetInput()
@@ -1035,16 +927,8 @@ class Logic:
             # Set origin to volume center if it's at default [0,0,0]
             current_origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
             if current_origin == [0.0, 0.0, 0.0]:
-                # VTK returns center in ITK convention (X=L, Y=P, Z=S)
-                # Transform to current convention if needed
-                center_list = list(center)
-                if (
-                    self.scene.mpr_rotation_sequence.metadata.index_order
-                    == IndexOrder.ROMA
-                ):
-                    # Convert ITK -> Roma: swap X and Z
-                    center_list = [center_list[2], center_list[1], center_list[0]]
-                self.server.state.mpr_origin = center_list
+                # VTK reports the centre in ITK; state holds the user's order
+                self.server.state.mpr_origin = self.convention.point_from_itk(center)
         except (RuntimeError, IndexError) as e:
             print(f"Error: Cannot get center for volume '{active_volume_label}': {e}")
             return
@@ -1060,48 +944,10 @@ class Logic:
         )
         crosshairs_visible = getattr(self.server.state, "mpr_crosshairs_enabled", True)
 
-        # Add MPR actors to their respective renderers
-        if self.scene.axial_renderWindow:
-            axial_renderer = (
-                self.scene.axial_renderWindow.GetRenderers().GetFirstRenderer()
-            )
-            if axial_renderer:
-                axial_renderer.RemoveAllViewProps()  # Clear existing actors
-                axial_renderer.AddActor(mpr_actors["axial"]["actor"])
-                mpr_actors["axial"]["actor"].SetVisibility(True)
-                # Add 2D crosshair overlay actors
-                for line_data in crosshairs["axial"].values():
-                    axial_renderer.AddActor2D(line_data["actor"])
-                    line_data["actor"].SetVisibility(crosshairs_visible)
-                axial_renderer.ResetCamera()
-
-        if self.scene.coronal_renderWindow:
-            coronal_renderer = (
-                self.scene.coronal_renderWindow.GetRenderers().GetFirstRenderer()
-            )
-            if coronal_renderer:
-                coronal_renderer.RemoveAllViewProps()
-                coronal_renderer.AddActor(mpr_actors["coronal"]["actor"])
-                mpr_actors["coronal"]["actor"].SetVisibility(True)
-                # Add 2D crosshair overlay actors
-                for line_data in crosshairs["coronal"].values():
-                    coronal_renderer.AddActor2D(line_data["actor"])
-                    line_data["actor"].SetVisibility(crosshairs_visible)
-                coronal_renderer.ResetCamera()
-
-        if self.scene.sagittal_renderWindow:
-            sagittal_renderer = (
-                self.scene.sagittal_renderWindow.GetRenderers().GetFirstRenderer()
-            )
-            if sagittal_renderer:
-                sagittal_renderer.RemoveAllViewProps()
-                sagittal_renderer.AddActor(mpr_actors["sagittal"]["actor"])
-                mpr_actors["sagittal"]["actor"].SetVisibility(True)
-                # Add 2D crosshair overlay actors
-                for line_data in crosshairs["sagittal"].values():
-                    sagittal_renderer.AddActor2D(line_data["actor"])
-                    line_data["actor"].SetVisibility(crosshairs_visible)
-                sagittal_renderer.ResetCamera()
+        # A new volume gets the cameras refit; frame changes deliberately do not
+        views = self.scene.mpr_views
+        if views is not None:
+            views.show(mpr_actors, crosshairs, crosshairs_visible, reset_camera=True)
 
         # Add segmentation overlays
         self._add_segmentation_overlays_to_mpr(current_frame)
@@ -1116,7 +962,6 @@ class Logic:
 
     def update_slice_positions(self, **kwargs):
         """Update MPR slice positions when sliders change."""
-        from .orientation import IndexOrder
 
         if not getattr(self.server.state, "mpr_enabled", False):
             return
@@ -1125,12 +970,7 @@ class Logic:
         if not active_volume_label:
             return
 
-        # Find the active volume
-        active_volume = None
-        for volume in self.scene.volumes:
-            if volume.label == active_volume_label:
-                active_volume = volume
-                break
+        active_volume = self._active_volume()
 
         if not active_volume:
             return
@@ -1139,11 +979,7 @@ class Logic:
         origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
         rotation_sequence, rotation_angles = self._get_visible_rotation_data()
 
-        # VTK needs origin in ITK convention - convert if necessary
-        current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
-        if current_convention == IndexOrder.ROMA:
-            # Convert Roma to ITK: swap X and Z
-            origin = [origin[2], origin[1], origin[0]]
+        origin = self.convention.point_to_itk(origin)
 
         # CRITICAL FIX: Update ALL cached frames, not just current frame
         # This ensures all frames use the same global origin when switching
@@ -1180,12 +1016,7 @@ class Logic:
         if not active_volume_label:
             return
 
-        # Find the active volume
-        active_volume = None
-        for volume in self.scene.volumes:
-            if volume.label == active_volume_label:
-                active_volume = volume
-                break
+        active_volume = self._active_volume()
 
         if not active_volume:
             return
@@ -1234,7 +1065,6 @@ class Logic:
 
     def update_mpr_rotation(self, **kwargs):
         """Update MPR views when rotation changes."""
-        from .orientation import IndexOrder
 
         if self.server.state.rotations_saved_at:
             self.server.state.rotations_stale = True
@@ -1246,12 +1076,7 @@ class Logic:
         if not active_volume_label:
             return
 
-        # Find the active volume
-        active_volume = None
-        for volume in self.scene.volumes:
-            if volume.label == active_volume_label:
-                active_volume = volume
-                break
+        active_volume = self._active_volume()
 
         if not active_volume:
             return
@@ -1262,11 +1087,7 @@ class Logic:
 
         rotation_sequence, rotation_angles = self._get_visible_rotation_data()
 
-        # VTK needs origin in ITK convention - convert if necessary
-        current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
-        if current_convention == IndexOrder.ROMA:
-            # Convert Roma to ITK: swap X and Z
-            origin = [origin[2], origin[1], origin[0]]
+        origin = self.convention.point_to_itk(origin)
 
         # Update slice positions with rotation
         active_volume.update_slice_positions(
@@ -1314,17 +1135,10 @@ class Logic:
         normal = base_normals[orientation]
         up = base_ups[orientation]
 
-        active_volume = next(
-            (
-                v
-                for v in self.scene.volumes
-                if v.label == getattr(self.server.state, "active_volume_label", "")
-            ),
-            None,
-        )
+        active_volume = self._active_volume()
         if active_volume is not None:
             rotation_sequence, rotation_angles = self._get_visible_rotation_data()
-            rotation = active_volume._build_cumulative_rotation(
+            rotation = cumulative_rotation_matrix(
                 rotation_sequence,
                 rotation_angles,
                 self.scene.mpr_rotation_sequence.metadata.angle_units,
@@ -1355,12 +1169,7 @@ class Logic:
         if not active_volume_label:
             return
 
-        # Find the active volume
-        active_volume = None
-        for volume in self.scene.volumes:
-            if volume.label == active_volume_label:
-                active_volume = volume
-                break
+        active_volume = self._active_volume()
 
         if not active_volume:
             return
@@ -1433,20 +1242,15 @@ class Logic:
         self.server.state.index_order = "itk"
 
     def reset_mpr_origin(self):
-        from .orientation import IndexOrder
-
         active_volume_label = getattr(self.server.state, "active_volume_label", "")
-        active_volume = next(
-            (v for v in self.scene.volumes if v.label == active_volume_label), None
-        )
+        active_volume = self._active_volume()
         if not active_volume:
             return
         current_frame = getattr(self.server.state, "frame", 0)
         image_data = active_volume.actors[current_frame].GetMapper().GetInput()
-        center_list = list(image_data.GetCenter())
-        if self.scene.mpr_rotation_sequence.metadata.index_order == IndexOrder.ROMA:
-            center_list = [center_list[2], center_list[1], center_list[0]]
-        self.server.state.mpr_origin = center_list
+        self.server.state.mpr_origin = self.convention.point_from_itk(
+            image_data.GetCenter()
+        )
 
     def _on_snap_seg_changed(self, snap_seg_label=None, **kwargs):
         label = snap_seg_label or getattr(self.server.state, "snap_seg_label", "")
@@ -1493,12 +1297,7 @@ class Logic:
 
     def _set_mpr_origin(self, center):
         """Write a centroid to mpr_origin, converting out of ITK if needed."""
-        from .orientation import IndexOrder
-
-        center_list = list(center)
-        if self.scene.mpr_rotation_sequence.metadata.index_order == IndexOrder.ROMA:
-            center_list = [center_list[2], center_list[1], center_list[0]]
-        self.server.state.mpr_origin = center_list
+        self.server.state.mpr_origin = self.convention.point_from_itk(center)
 
     def snap_to_centroid(self, **kwargs):
         if getattr(self.server.state, "snap_mode", "label") == "reset":
@@ -1610,7 +1409,6 @@ class Logic:
         import copy
 
         from .orientation import (
-            IndexOrder,
             axcode_transform_matrix,
             rotation_matrix_to_quaternion,
         )
@@ -1624,13 +1422,7 @@ class Logic:
         target = axes @ axcode_transform_matrix("LPS", "LAS").T
         quaternion = rotation_matrix_to_quaternion(target)
 
-        if self.scene.mpr_rotation_sequence.metadata.index_order == IndexOrder.ROMA:
-            quaternion = [
-                -quaternion[2],
-                -quaternion[1],
-                -quaternion[0],
-                quaternion[3],
-            ]
+        quaternion = self.convention.quaternion_from_itk(quaternion)
 
         current_data = copy.deepcopy(
             getattr(state, "mpr_rotation_data", {"angles_list": []})
@@ -1690,26 +1482,20 @@ class Logic:
         self.update_mpr_rotation()
 
     def _add_segmentation_overlays_to_mpr(self, frame: int):
-        """Add segmentation overlays to MPR renderers."""
-        from .orientation import IndexOrder
-
+        """Pose and add the enabled segmentation overlays on top of the views."""
+        views = self.scene.mpr_views
         opacity = self.server.state.mpr_segmentation_opacity
-        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+        origin = self.convention.point_to_itk(
+            getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+        )
         rotation_sequence, rotation_angles = self._get_visible_rotation_data()
 
-        current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
-        if current_convention == IndexOrder.ROMA:
-            origin = [origin[2], origin[1], origin[0]]
-
         for seg in self.scene.segmentations:
-            overlay_enabled = self.server.state[f"mpr_segmentation_overlay_{seg.label}"]
-            if not overlay_enabled:
+            if not self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
                 continue
 
-            seg_mpr_actors = seg.get_mpr_actors_for_frame(frame)
+            overlay = seg.get_mpr_actors_for_frame(frame)
             seg.update_mpr_opacity(frame, opacity)
-
-            # Apply current transformation immediately to ensure sync
             seg.update_slice_positions(
                 frame,
                 origin,
@@ -1718,112 +1504,31 @@ class Logic:
                 self.scene.mpr_rotation_sequence.metadata.angle_units,
             )
 
-            if self.scene.axial_renderWindow:
-                renderer = (
-                    self.scene.axial_renderWindow.GetRenderers().GetFirstRenderer()
-                )
-                renderer.AddActor(seg_mpr_actors["axial"]["actor"])
-                seg_mpr_actors["axial"]["actor"].SetVisibility(True)
-
-            if self.scene.coronal_renderWindow:
-                renderer = (
-                    self.scene.coronal_renderWindow.GetRenderers().GetFirstRenderer()
-                )
-                renderer.AddActor(seg_mpr_actors["coronal"]["actor"])
-                seg_mpr_actors["coronal"]["actor"].SetVisibility(True)
-
-            if self.scene.sagittal_renderWindow:
-                renderer = (
-                    self.scene.sagittal_renderWindow.GetRenderers().GetFirstRenderer()
-                )
-                renderer.AddActor(seg_mpr_actors["sagittal"]["actor"])
-                seg_mpr_actors["sagittal"]["actor"].SetVisibility(True)
+            if views is not None:
+                views.add_overlay(overlay)
 
     def sync_segmentation_overlays(self, **kwargs):
         """Toggle segmentation overlay visibility on MPR views."""
         if not self.server.state.mpr_enabled:
             return
 
+        views = self.scene.mpr_views
+        if views is None:
+            return
+
         current_frame = self.server.state.frame
+        active_volume = self._active_volume()
 
-        for rw in [
-            self.scene.axial_renderWindow,
-            self.scene.coronal_renderWindow,
-            self.scene.sagittal_renderWindow,
-        ]:
-            if rw:
-                rw.GetRenderers().GetFirstRenderer().RemoveAllViewProps()
-
-        active_volume = next(
-            (
-                v
-                for v in self.scene.volumes
-                if v.label == self.server.state.active_volume_label
-            ),
-            None,
-        )
+        views.clear()
         if active_volume:
-            volume_mpr_actors = active_volume.get_mpr_actors_for_frame(current_frame)
-            crosshairs = active_volume.crosshair_actors
-            crosshairs_visible = getattr(
-                self.server.state, "mpr_crosshairs_enabled", True
+            views.set_image(active_volume.get_mpr_actors_for_frame(current_frame))
+            views.add_crosshairs(
+                active_volume.crosshair_actors,
+                getattr(self.server.state, "mpr_crosshairs_enabled", True),
             )
 
-            if self.scene.axial_renderWindow:
-                renderer = (
-                    self.scene.axial_renderWindow.GetRenderers().GetFirstRenderer()
-                )
-                renderer.AddActor(volume_mpr_actors["axial"]["actor"])
-                volume_mpr_actors["axial"]["actor"].SetVisibility(True)
-                if crosshairs and "axial" in crosshairs:
-                    for line_data in crosshairs["axial"].values():
-                        renderer.AddActor2D(line_data["actor"])
-                        line_data["actor"].SetVisibility(crosshairs_visible)
-
-            if self.scene.coronal_renderWindow:
-                renderer = (
-                    self.scene.coronal_renderWindow.GetRenderers().GetFirstRenderer()
-                )
-                renderer.AddActor(volume_mpr_actors["coronal"]["actor"])
-                volume_mpr_actors["coronal"]["actor"].SetVisibility(True)
-                if crosshairs and "coronal" in crosshairs:
-                    for line_data in crosshairs["coronal"].values():
-                        renderer.AddActor2D(line_data["actor"])
-                        line_data["actor"].SetVisibility(crosshairs_visible)
-
-            if self.scene.sagittal_renderWindow:
-                renderer = (
-                    self.scene.sagittal_renderWindow.GetRenderers().GetFirstRenderer()
-                )
-                renderer.AddActor(volume_mpr_actors["sagittal"]["actor"])
-                volume_mpr_actors["sagittal"]["actor"].SetVisibility(True)
-                if crosshairs and "sagittal" in crosshairs:
-                    for line_data in crosshairs["sagittal"].values():
-                        renderer.AddActor2D(line_data["actor"])
-                        line_data["actor"].SetVisibility(crosshairs_visible)
-
+        # Poses the overlays as it adds them, so no second pass is needed here
         self._add_segmentation_overlays_to_mpr(current_frame)
-
-        # Apply current transformation state to segmentation overlays
-        if active_volume:
-            from .orientation import IndexOrder
-
-            origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
-            rotation_sequence, rotation_angles = self._get_visible_rotation_data()
-
-            current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
-            if current_convention == IndexOrder.ROMA:
-                origin = [origin[2], origin[1], origin[0]]
-
-            for seg in self.scene.segmentations:
-                if self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
-                    seg.update_slice_positions(
-                        current_frame,
-                        origin,
-                        rotation_sequence,
-                        rotation_angles,
-                        self.scene.mpr_rotation_sequence.metadata.angle_units,
-                    )
 
         self.server.controller.view_update()
 

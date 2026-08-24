@@ -8,12 +8,8 @@ from trame.widgets import vtk as vtk_widgets
 from trame.widgets import vuetify3 as vuetify
 
 from . import __version__
-from .orientation import (
-    AngleUnits,
-    EulerAxis,
-    IndexOrder,
-    euler_angle_to_rotation_matrix,
-)
+from .convention import Convention
+from .orientation import cumulative_rotation_matrix
 from .scene import Scene
 from .volume_property_presets import list_volume_property_presets
 from .window_level import presets
@@ -148,7 +144,11 @@ class UI:
             ]
 
     def _get_scroll_vector(self, view_name):
-        """Get the current normal vector for a view after rotation."""
+        """The out-of-plane direction of a view, in the user's index order.
+
+        Composed in ITK -- the only order the rotation math is defined in -- then
+        handed back in the convention ``mpr_origin`` is stored in.
+        """
         base_normals = {
             "axial": np.array([0.0, 0.0, 1.0]),
             "sagittal": np.array([1.0, 0.0, 0.0]),
@@ -158,37 +158,16 @@ class UI:
         if view_name not in base_normals:
             return np.array([0.0, 0.0, 1.0])
 
-        current_convention = self.scene.mpr_rotation_sequence.metadata.index_order
-        if current_convention == IndexOrder.ROMA:
-            base_normals = {k: v[::-1] for k, v in base_normals.items()}
-
-        # Build cumulative rotation from visible rotations
+        convention = Convention.from_metadata(self.scene.mpr_rotation_sequence.metadata)
         rotation_data = getattr(
             self.server.state, "mpr_rotation_data", {"angles_list": []}
         )
-        angles_list = rotation_data.get("angles_list", [])
-        cumulative_rotation = np.eye(3)
+        sequence, angles = convention.visible_sequence_to_itk(
+            rotation_data.get("angles_list", [])
+        )
+        rotation = cumulative_rotation_matrix(sequence, angles, convention.angle_units)
 
-        # Get current angle units
-        angle_units_str = getattr(self.server.state, "angle_units", "degrees")
-        angle_units = AngleUnits(angle_units_str)
-
-        for rotation in angles_list:
-            if rotation.get("visible", True):
-                if rotation.get("quaternion") is not None:
-                    from .orientation import quaternion_to_rotation_matrix
-
-                    rotation_matrix = quaternion_to_rotation_matrix(
-                        rotation["quaternion"]
-                    )
-                else:
-                    angle = rotation.get("angle", 0)
-                    rotation_matrix = euler_angle_to_rotation_matrix(
-                        EulerAxis(rotation["axis"]), angle, angle_units
-                    )
-                cumulative_rotation = cumulative_rotation @ rotation_matrix
-
-        return cumulative_rotation @ base_normals[view_name]
+        return np.array(convention.point_from_itk(rotation @ base_normals[view_name]))
 
     def _handle_slice_scroll(self, view_name, base_slice_delta):
         """Handle slice scrolling for a specific view using rotated scroll vectors."""
@@ -304,7 +283,7 @@ class UI:
                         ):
                             # Axial view
                             axial_view = vtk_widgets.VtkRemoteView(
-                                self.scene.axial_renderWindow,
+                                self.scene.mpr_views["axial"],
                                 style="height: 100%; width: 100%;",
                                 interactor_events=("event_types", self.handled_events),
                                 **self.event_listeners_for_view("axial"),
@@ -329,7 +308,7 @@ class UI:
                         ):
                             # Coronal view
                             coronal_view = vtk_widgets.VtkRemoteView(
-                                self.scene.coronal_renderWindow,
+                                self.scene.mpr_views["coronal"],
                                 style="height: 100%; width: 100%;",
                                 interactor_events=("event_types", self.handled_events),
                                 **self.event_listeners_for_view("coronal"),
@@ -340,7 +319,7 @@ class UI:
                         ):
                             # Sagittal view
                             sagittal_view = vtk_widgets.VtkRemoteView(
-                                self.scene.sagittal_renderWindow,
+                                self.scene.mpr_views["sagittal"],
                                 style="height: 100%; width: 100%;",
                                 interactor_events=("event_types", self.handled_events),
                                 **self.event_listeners_for_view("sagittal"),
@@ -371,7 +350,7 @@ class UI:
                     classes="pa-0 fill-height",
                 ):
                     axial_maximized_view = vtk_widgets.VtkRemoteView(
-                        self.scene.axial_renderWindow,
+                        self.scene.mpr_views["axial"],
                         interactor_events=("event_types", self.handled_events),
                         **self.event_listeners_for_view("axial"),
                         interactive_ratio=1,
@@ -384,7 +363,7 @@ class UI:
                     classes="pa-0 fill-height",
                 ):
                     coronal_maximized_view = vtk_widgets.VtkRemoteView(
-                        self.scene.coronal_renderWindow,
+                        self.scene.mpr_views["coronal"],
                         interactor_events=("event_types", self.handled_events),
                         **self.event_listeners_for_view("coronal"),
                         interactive_ratio=1,
@@ -397,7 +376,7 @@ class UI:
                     classes="pa-0 fill-height",
                 ):
                     sagittal_maximized_view = vtk_widgets.VtkRemoteView(
-                        self.scene.sagittal_renderWindow,
+                        self.scene.mpr_views["sagittal"],
                         interactor_events=("event_types", self.handled_events),
                         **self.event_listeners_for_view("sagittal"),
                         interactive_ratio=1,

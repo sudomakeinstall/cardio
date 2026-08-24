@@ -8,6 +8,7 @@ import pydantic_settings as ps
 import vtk
 
 from .mesh import Mesh
+from .mpr_views import MPRViews
 from .rotation import RotationSequence
 from .segmentation import Segmentation
 from .types import RGBColor
@@ -94,7 +95,6 @@ class Scene(ps.BaseSettings):
         default="%Y-%m-%d-%H-%M-%S",
         description="Timestamp format for serialized data subdirectories",
     )
-    rotation_factor: float = 3.0
     background: Background = pc.Field(
         default_factory=Background,
         description='Background colors. CLI usage: \'{"light": [0.8, 0.9, 1.0], "dark": [0.1, 0.1, 0.2]}\'',
@@ -134,9 +134,6 @@ class Scene(ps.BaseSettings):
     max_mpr_rotations: int = pc.Field(
         default=20,
         description="Maximum number of MPR rotations supported",
-    )
-    coordinate_system: str = pc.Field(
-        default="LPS", description="Coordinate system orientation (e.g., LPS, RAS, LAS)"
     )
     mpr_crosshairs_enabled: bool = pc.Field(
         default=True, description="Show crosshair lines indicating slice intersections"
@@ -208,10 +205,8 @@ class Scene(ps.BaseSettings):
         default_factory=vtk.vtkRenderWindowInteractor
     )
 
-    # MPR render windows
-    _axial_renderWindow: vtk.vtkRenderWindow = pc.PrivateAttr(default=None)
-    _coronal_renderWindow: vtk.vtkRenderWindow = pc.PrivateAttr(default=None)
-    _sagittal_renderWindow: vtk.vtkRenderWindow = pc.PrivateAttr(default=None)
+    # Built lazily: the MPR windows only exist once the quad view is laid out
+    _mpr_views: MPRViews = pc.PrivateAttr(default=None)
 
     @property
     def renderer(self) -> vtk.vtkRenderer:
@@ -226,16 +221,9 @@ class Scene(ps.BaseSettings):
         return self._renderWindowInteractor
 
     @property
-    def axial_renderWindow(self) -> vtk.vtkRenderWindow:
-        return self._axial_renderWindow
-
-    @property
-    def coronal_renderWindow(self) -> vtk.vtkRenderWindow:
-        return self._coronal_renderWindow
-
-    @property
-    def sagittal_renderWindow(self) -> vtk.vtkRenderWindow:
-        return self._sagittal_renderWindow
+    def mpr_views(self) -> MPRViews | None:
+        """The three MPR render windows, or None before the quad view is built."""
+        return self._mpr_views
 
     @pc.model_validator(mode="after")
     def setup_scene(self):
@@ -360,42 +348,8 @@ class Scene(ps.BaseSettings):
 
     def setup_mpr_render_windows(self):
         """Initialize MPR render windows when MPR mode is enabled."""
-        if self._axial_renderWindow is None:
-            # Create axial render window
-            self._axial_renderWindow = vtk.vtkRenderWindow()
-            axial_renderer = vtk.vtkRenderer()
-            axial_renderer.SetBackground(0.0, 0.0, 0.0)  # Black background
-            self._axial_renderWindow.AddRenderer(axial_renderer)
-            self._axial_renderWindow.SetOffScreenRendering(True)
-
-            # Create and set interactor for axial
-            axial_interactor = vtk.vtkRenderWindowInteractor()
-            axial_interactor.SetInteractorStyle(vtk.vtkInteractorStyle())
-            self._axial_renderWindow.SetInteractor(axial_interactor)
-
-            # Create coronal render window
-            self._coronal_renderWindow = vtk.vtkRenderWindow()
-            coronal_renderer = vtk.vtkRenderer()
-            coronal_renderer.SetBackground(0.0, 0.0, 0.0)  # Black background
-            self._coronal_renderWindow.AddRenderer(coronal_renderer)
-            self._coronal_renderWindow.SetOffScreenRendering(True)
-
-            # Create and set interactor for coronal
-            coronal_interactor = vtk.vtkRenderWindowInteractor()
-            coronal_interactor.SetInteractorStyle(vtk.vtkInteractorStyle())
-            self._coronal_renderWindow.SetInteractor(coronal_interactor)
-
-            # Create sagittal render window
-            self._sagittal_renderWindow = vtk.vtkRenderWindow()
-            sagittal_renderer = vtk.vtkRenderer()
-            sagittal_renderer.SetBackground(0.0, 0.0, 0.0)  # Black background
-            self._sagittal_renderWindow.AddRenderer(sagittal_renderer)
-            self._sagittal_renderWindow.SetOffScreenRendering(True)
-
-            # Create and set interactor for sagittal
-            sagittal_interactor = vtk.vtkRenderWindowInteractor()
-            sagittal_interactor.SetInteractorStyle(vtk.vtkInteractorStyle())
-            self._sagittal_renderWindow.SetInteractor(sagittal_interactor)
+        if self._mpr_views is None:
+            self._mpr_views = MPRViews()
 
     def hide_all_frames(self):
         for a in self.renderer.GetActors():

@@ -1,7 +1,6 @@
 current_frame = 0
 screenshot_directory = "./data/screenshots"
 screenshot_subdirectory_format = "%Y-%m-%d-%H-%M-%S"
-rotation_factor = 3
 
 [background]
 light = [1.0, 1.0, 1.0]

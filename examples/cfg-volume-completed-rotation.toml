@@ -1,5 +1,4 @@
 current_frame = 0
-rotation_factor = 3
 serialization_directory = "./data"
 #mpr_rotation_file = "./examples/rotation-completed-itk-radians.toml"
 #mpr_rotation_file = "./examples/rotation-completed-itk-degrees.toml"
