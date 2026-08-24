@@ -479,3 +479,78 @@ def test_rotation_sequence_mpr_origin_round_trip_roma():
     assert np.isclose(restored.mpr_origin[0], 30.0)
     assert np.isclose(restored.mpr_origin[1], 20.0)
     assert np.isclose(restored.mpr_origin[2], 10.0)
+
+
+# --- convention and unit conversion on the model -----------------------------
+
+
+def test_with_units_converts_euler_angles_and_leaves_quaternions():
+    seq = RotationSequence(
+        metadata=RotationMetadata(angle_units=AngleUnits.DEGREES),
+        angles_list=[
+            RotationStep(axis="X", angle=180.0),
+            RotationStep(quaternion=[0.0, 0.0, 0.0, 1.0]),
+        ],
+    )
+
+    converted = seq.with_units(AngleUnits.RADIANS)
+
+    assert converted.metadata.angle_units == AngleUnits.RADIANS
+    assert converted.angles_list[0].angle == pytest.approx(np.pi)
+    assert converted.angles_list[1].quaternion == [0.0, 0.0, 0.0, 1.0]
+    # the original is untouched
+    assert seq.angles_list[0].angle == 180.0
+
+
+def test_with_units_is_a_no_op_for_the_same_units():
+    seq = RotationSequence(metadata=RotationMetadata(angle_units=AngleUnits.RADIANS))
+    assert seq.with_units(AngleUnits.RADIANS) is seq
+
+
+def test_with_units_round_trips():
+    seq = RotationSequence(
+        metadata=RotationMetadata(angle_units=AngleUnits.DEGREES),
+        angles_list=[RotationStep(axis="Y", angle=37.5)],
+    )
+
+    restored = seq.with_units(AngleUnits.RADIANS).with_units(AngleUnits.DEGREES)
+
+    assert restored.angles_list[0].angle == pytest.approx(37.5)
+    assert restored.metadata.angle_units == AngleUnits.DEGREES
+
+
+def test_with_index_order_exchanges_steps_and_origin():
+    seq = RotationSequence(
+        metadata=RotationMetadata(index_order=IndexOrder.ITK),
+        angles_list=[
+            RotationStep(axis="X", angle=30.0),
+            RotationStep(quaternion=[0.1, 0.2, 0.3, 0.9]),
+        ],
+        mpr_origin=[1.0, 2.0, 3.0],
+    )
+
+    converted = seq.with_index_order(IndexOrder.ROMA)
+
+    assert converted.metadata.index_order == IndexOrder.ROMA
+    assert converted.angles_list[0].axis == "Z"
+    assert converted.angles_list[0].angle == -30.0
+    assert converted.angles_list[1].quaternion == pytest.approx([-0.3, -0.2, -0.1, 0.9])
+    assert converted.mpr_origin == [3.0, 2.0, 1.0]
+
+
+def test_with_index_order_round_trips():
+    seq = RotationSequence(
+        angles_list=[
+            RotationStep(axis="X", angle=30.0),
+            RotationStep(quaternion=[0.1, 0.2, 0.3, 0.9]),
+        ],
+        mpr_origin=[1.0, 2.0, 3.0],
+    )
+
+    restored = seq.with_index_order(IndexOrder.ROMA).with_index_order(IndexOrder.ITK)
+
+    assert restored.angles_list[0].axis == "X"
+    assert restored.angles_list[0].angle == pytest.approx(30.0)
+    assert restored.angles_list[1].quaternion == pytest.approx([0.1, 0.2, 0.3, 0.9])
+    assert restored.mpr_origin == [1.0, 2.0, 3.0]
+    assert restored.metadata.index_order == IndexOrder.ITK

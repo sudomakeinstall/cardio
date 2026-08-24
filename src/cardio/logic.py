@@ -4,8 +4,9 @@ import datetime as dt
 import numpy as np
 from trame.app import asynchronous
 
-from .convention import Convention, exchange_point, exchange_step
-from .orientation import cumulative_rotation_matrix
+from .convention import Convention, exchange_point
+from .orientation import AngleUnits, IndexOrder, cumulative_rotation_matrix
+from .rotation import RotationSequence, RotationStep
 from .scene import Scene
 from .screenshot import Screenshot
 from .state import ObjectState
@@ -14,6 +15,35 @@ ALIGN_STEP_NAME = "Interface plane"
 
 
 class Logic:
+    def rotation_sequence(self) -> RotationSequence:
+        """The rotation state as its model, validated on the way in.
+
+        The steps come from trame state, which is what the UI edits. Metadata
+        falls back to the scene's, so a state payload that predates a metadata
+        write cannot silently reset the convention to the model defaults.
+        """
+        data = dict(getattr(self.server.state, "mpr_rotation_data", None) or {})
+        data.setdefault("metadata", self.scene.mpr_rotation_sequence.metadata)
+        data.setdefault("angles_list", [])
+        return RotationSequence(**data)
+
+    def _publish_rotation_sequence(self, sequence: RotationSequence):
+        """The only place rotation state is written back.
+
+        Keeps the scene's metadata and the UI's mirror variables in step with
+        the sequence, so the three representations cannot drift.
+        """
+        self.scene.mpr_rotation_sequence = sequence
+        self.server.state.mpr_rotation_data = sequence.model_dump(mode="json")
+        self.server.state.angle_units = sequence.metadata.angle_units.value
+        self.server.state.index_order = sequence.metadata.index_order.value
+
+    def _edit_rotation_steps(self, edit):
+        """Apply ``edit`` to the list of steps and publish the result."""
+        sequence = self.rotation_sequence()
+        sequence.angles_list = edit(list(sequence.angles_list))
+        self._publish_rotation_sequence(sequence)
+
     def _active_volume(self):
         """The volume the MPR views are showing, or None if there isn't one."""
         label = getattr(self.server.state, "active_volume_label", "")
@@ -210,18 +240,7 @@ class Logic:
         self.server.state.mpr_level = self.scene.mpr_level
         self.server.state.mpr_window_level_preset = self.scene.mpr_window_level_preset
 
-        # Initialize rotation data from RotationSequence (includes metadata)
-        self.server.state.mpr_rotation_data = (
-            self.scene.mpr_rotation_sequence.model_dump(mode="json")
-        )
-
-        # Keep mirror variables for UI binding convenience
-        self.server.state.angle_units = self.server.state.mpr_rotation_data["metadata"][
-            "angle_units"
-        ]
-        self.server.state.index_order = self.server.state.mpr_rotation_data["metadata"][
-            "index_order"
-        ]
+        self._publish_rotation_sequence(self.scene.mpr_rotation_sequence)
 
         # Initialize MPR presets data
         try:
@@ -563,8 +582,6 @@ class Logic:
     @asynchronous.task
     async def save_rotation_angles(self):
         """Save current rotation angles to TOML file."""
-        from .rotation import RotationSequence
-
         timestamp = dt.datetime.now()
         timestamp_str = timestamp.strftime(self.scene.timestamp_format)
         active_volume_label = getattr(self.server.state, "active_volume_label", "")
@@ -576,10 +593,7 @@ class Logic:
         save_dir = self.scene.rotations_directory / active_volume_label
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        rotation_data = getattr(self.server.state, "mpr_rotation_data", {})
-
-        # Create RotationSequence directly from full data structure
-        rotation_seq = RotationSequence(**rotation_data)
+        rotation_seq = self.rotation_sequence()
 
         # Update only timestamp and volume_label (rest already in metadata)
         rotation_seq.metadata.timestamp = timestamp.isoformat()
@@ -616,102 +630,39 @@ class Logic:
         self.server.controller.view_update()
 
     def sync_angle_units(self, angle_units, **kwargs):
-        """Sync angle units selection - updates the scene configuration."""
-        import copy
-
-        import numpy as np
-
-        from .orientation import AngleUnits
-
-        # Get current units before changing
-        old_units = self.scene.mpr_rotation_sequence.metadata.angle_units
-
-        # Update based on UI selection
-        new_units = None
-        if angle_units == "degrees":
-            new_units = AngleUnits.DEGREES
-        elif angle_units == "radians":
-            new_units = AngleUnits.RADIANS
-
-        if new_units is None or old_units == new_units:
+        """Re-express the stored angles when the user switches units."""
+        try:
+            units = AngleUnits(angle_units)
+        except ValueError:
             return
 
-        # Get current rotation data (now includes metadata)
-        rotation_data = copy.deepcopy(
-            getattr(self.server.state, "mpr_rotation_data", {})
-        )
+        sequence = self.rotation_sequence()
+        if units == sequence.metadata.angle_units:
+            return
 
-        # Convert all existing rotation angles (skip quaternion steps)
-        if rotation_data.get("angles_list"):
-            for rotation in rotation_data["angles_list"]:
-                if rotation.get("quaternion") is not None:
-                    continue
-                current_angle = rotation.get("angle", 0)
-
-                # Convert based on old -> new units
-                if old_units == AngleUnits.DEGREES and new_units == AngleUnits.RADIANS:
-                    rotation["angle"] = np.radians(current_angle)
-                elif (
-                    old_units == AngleUnits.RADIANS and new_units == AngleUnits.DEGREES
-                ):
-                    rotation["angle"] = np.degrees(current_angle)
-
-        # Update nested metadata
-        rotation_data["metadata"]["angle_units"] = angle_units
-
-        # Update state (triggers re-render)
-        self.server.state.mpr_rotation_data = rotation_data
-
-        # Update scene
-        self.scene.mpr_rotation_sequence.metadata.angle_units = new_units
+        self._publish_rotation_sequence(sequence.with_units(units))
 
     def sync_index_order(self, index_order, **kwargs):
-        """Sync index order selection - converts existing rotations and updates scene."""
-        import copy
-
-        from .orientation import IndexOrder
-
-        old_convention = self.scene.mpr_rotation_sequence.metadata.index_order
-
-        # Convert string input to enum
-        if isinstance(index_order, str):
-            match index_order.lower():
-                case "itk":
-                    new_convention = IndexOrder.ITK
-                case "roma":
-                    new_convention = IndexOrder.ROMA
-                case _:
-                    raise ValueError(f"Unrecognized index order: {index_order}")
+        """Re-express the stored rotations and origin when the order switches."""
+        if isinstance(index_order, IndexOrder):
+            order = index_order
         else:
-            new_convention = index_order
+            try:
+                order = IndexOrder(str(index_order).lower())
+            except ValueError as error:
+                raise ValueError(f"Unrecognized index order: {index_order}") from error
 
-        if old_convention == new_convention:
+        sequence = self.rotation_sequence()
+        if order == sequence.metadata.index_order:
             return
 
-        # Get current rotation data (now includes metadata)
-        rotation_data = copy.deepcopy(
-            getattr(self.server.state, "mpr_rotation_data", {})
-        )
+        self._publish_rotation_sequence(sequence.with_index_order(order))
 
-        # Re-express every step in the new order. The exchange is its own
-        # inverse, so one mapping serves both ITK<->ROMA directions -- and it
-        # always applies here, since the two conventions are known to differ.
-        rotation_data["angles_list"] = [
-            exchange_step(step) for step in rotation_data.get("angles_list") or []
-        ]
-
-        # Update nested metadata
-        rotation_data["metadata"]["index_order"] = index_order
-
-        # Update state (triggers re-render)
-        self.server.state.mpr_rotation_data = rotation_data
-
+        # mpr_origin lives in state rather than in the sequence, so it is
+        # exchanged here rather than by with_index_order.
         mpr_origin = getattr(self.server.state, "mpr_origin", None)
         if mpr_origin is not None and len(mpr_origin) == 3:
             self.server.state.mpr_origin = exchange_point(mpr_origin)
-
-        # Update scene
-        self.scene.mpr_rotation_sequence.metadata.index_order = new_convention
 
     def _initialize_clipping_state(self):
         """Seed the clip panels and range sliders from each object's bounds."""
@@ -1009,67 +960,36 @@ class Logic:
         self.server.controller.view_update()
 
     def add_mpr_rotation(self, axis):
-        """Add a new rotation to the MPR rotation sequence."""
-        import copy
+        """Append a new Euler rotation about ``axis``."""
 
-        current_data = copy.deepcopy(
-            getattr(self.server.state, "mpr_rotation_data", {"angles_list": []})
-        )
-        angles_list = current_data["angles_list"]
-        new_index = len(angles_list)
+        def append(steps):
+            return [*steps, RotationStep(axis=axis, angle=0)]
 
-        angles_list.append(
-            {
-                "axis": axis,
-                "angle": 0,
-                "visible": True,
-                "name": "",
-                "name_editable": True,
-                "deletable": True,
-            }
-        )
-
-        self.server.state.mpr_rotation_data = current_data
+        self._edit_rotation_steps(append)
 
     def remove_mpr_rotation(self, index):
-        """Remove a rotation at given index."""
-        import copy
+        """Remove the rotation at ``index``."""
 
-        current_data = copy.deepcopy(
-            getattr(self.server.state, "mpr_rotation_data", {"angles_list": []})
-        )
-        angles_list = current_data["angles_list"]
+        def without(steps):
+            if 0 <= index < len(steps):
+                steps.pop(index)
+            return steps
 
-        if 0 <= index < len(angles_list):
-            angles_list.pop(index)
-            current_data["angles_list"] = angles_list
-            self.server.state.mpr_rotation_data = current_data
+        self._edit_rotation_steps(without)
 
     def reset_rotation_angle(self, index):
-        """Reset the angle of a rotation at given index to zero."""
-        import copy
+        """Zero the angle of the rotation at ``index``."""
 
-        current_data = copy.deepcopy(
-            getattr(self.server.state, "mpr_rotation_data", {"angles_list": []})
-        )
-        angles_list = current_data["angles_list"]
+        def zeroed(steps):
+            if 0 <= index < len(steps):
+                steps[index].angle = 0.0
+            return steps
 
-        if 0 <= index < len(angles_list):
-            angles_list[index]["angle"] = 0
-            current_data["angles_list"] = angles_list
-            self.server.state.mpr_rotation_data = current_data
+        self._edit_rotation_steps(zeroed)
 
     def reset_mpr_rotations(self):
-        """Reset all MPR rotations."""
-        from .rotation import RotationSequence
-
-        # Create fresh RotationSequence and serialize
-        new_rotation_seq = RotationSequence()
-        self.server.state.mpr_rotation_data = new_rotation_seq.model_dump(mode="json")
-
-        # Update mirror variables
-        self.server.state.angle_units = "radians"
-        self.server.state.index_order = "itk"
+        """Drop every rotation, back to a default sequence."""
+        self._publish_rotation_sequence(RotationSequence())
 
     def reset_mpr_origin(self):
         active_volume_label = getattr(self.server.state, "active_volume_label", "")
@@ -1236,7 +1156,6 @@ class Logic:
         are applied on top of it and keep their meaning relative to the plane: a
         Z rotation spins within it, X and Y tilt out of it.
         """
-        import copy
 
         from .orientation import (
             axcode_transform_matrix,
@@ -1254,28 +1173,20 @@ class Logic:
 
         quaternion = self.convention.quaternion_from_itk(quaternion)
 
-        current_data = copy.deepcopy(
-            getattr(state, "mpr_rotation_data", {"angles_list": []})
-        )
-        angles_list = [
-            step
-            for step in current_data["angles_list"]
-            if step.get("name") != ALIGN_STEP_NAME
-        ]
-        angles_list.insert(
-            0,
-            {
-                "axis": None,
-                "angle": None,
-                "quaternion": quaternion,
-                "visible": True,
-                "name": ALIGN_STEP_NAME,
-                "name_editable": False,
-                "deletable": True,
-            },
-        )
-        current_data["angles_list"] = angles_list
-        state.mpr_rotation_data = current_data
+        def with_alignment(steps):
+            kept = [step for step in steps if step.name != ALIGN_STEP_NAME]
+            return [
+                RotationStep(
+                    quaternion=quaternion,
+                    visible=True,
+                    name=ALIGN_STEP_NAME,
+                    name_editable=False,
+                    deletable=True,
+                ),
+                *kept,
+            ]
+
+        self._edit_rotation_steps(with_alignment)
 
     def align_to_interface(self, **kwargs):
         """Rotate the MPR views into the dominant plane of the selected interface."""

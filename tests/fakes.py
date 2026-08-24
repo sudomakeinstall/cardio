@@ -1,6 +1,7 @@
 """Lightweight stand-ins for the trame server and Scene used by Logic."""
 
 from cardio.orientation import AngleUnits, IndexOrder
+from cardio.rotation import RotationMetadata, RotationSequence
 
 
 class FakeState(dict):
@@ -26,7 +27,6 @@ class FakeScene:
         angle_units=AngleUnits.DEGREES,
     ):
         self.segmentations = segmentations
-        metadata = type(
-            "Meta", (), {"index_order": index_order, "angle_units": angle_units}
-        )()
-        self.mpr_rotation_sequence = type("Seq", (), {"metadata": metadata})()
+        self.mpr_rotation_sequence = RotationSequence(
+            metadata=RotationMetadata(index_order=index_order, angle_units=angle_units)
+        )

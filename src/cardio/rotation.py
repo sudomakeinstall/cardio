@@ -9,6 +9,12 @@ import pydantic as pc
 import tomlkit as tk
 
 # Internal
+from .convention import (
+    exchange_angle,
+    exchange_axis,
+    exchange_point,
+    exchange_quaternion,
+)
 from .orientation import (
     AngleUnits,
     EulerAxis,
@@ -95,6 +101,47 @@ class RotationSequence(pc.BaseModel):
         if not isinstance(v, list) or len(v) != 3:
             raise ValueError("mpr_origin must be a 3-element list [x, y, z]")
         return [float(x) for x in v]
+
+    def with_units(self, units: AngleUnits) -> "RotationSequence":
+        """This sequence with its Euler angles re-expressed in ``units``.
+
+        Quaternion steps carry no angle, so they are left alone.
+        """
+        if units == self.metadata.angle_units:
+            return self
+
+        converted = self.model_copy(deep=True)
+        for step in converted.angles_list:
+            if step.quaternion is not None:
+                continue
+            match units:
+                case AngleUnits.RADIANS:
+                    step.angle = float(np.radians(step.angle))
+                case AngleUnits.DEGREES:
+                    step.angle = float(np.degrees(step.angle))
+        converted.metadata.angle_units = units
+        return converted
+
+    def with_index_order(self, index_order: IndexOrder) -> "RotationSequence":
+        """This sequence re-expressed in ``index_order``.
+
+        The origin moves with the steps: all three are stored in whichever order
+        the metadata names, so they have to change together or the stored
+        numbers would keep their values while changing meaning.
+        """
+        if index_order == self.metadata.index_order:
+            return self
+
+        converted = self.model_copy(deep=True)
+        for step in converted.angles_list:
+            if step.quaternion is not None:
+                step.quaternion = exchange_quaternion(step.quaternion)
+            else:
+                step.axis = exchange_axis(step.axis)
+                step.angle = exchange_angle(step.angle)
+        converted.mpr_origin = exchange_point(converted.mpr_origin)
+        converted.metadata.index_order = index_order
+        return converted
 
     def to_toml(self) -> str:
         """Serialize to TOML using stored serialization preferences."""
