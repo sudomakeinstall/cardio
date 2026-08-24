@@ -270,9 +270,9 @@ def read_frames(path) -> list:
 
 def reset_direction(image):
     """Reset image direction to identity matrix, preserving physical extent."""
-    assert image.GetImageDimension() == 3, (
-        f"Input image must be 3D, got {image.GetImageDimension()}D"
-    )
+    assert (
+        image.GetImageDimension() == 3
+    ), f"Input image must be 3D, got {image.GetImageDimension()}D"
     assert is_axis_aligned(image), "Input image must be axis-aligned"
 
     origin = np.array(image.GetOrigin())

@@ -497,7 +497,6 @@ class UI:
                         item_title="text",
                         item_value="value",
                         title="Select which volume to use for MPR",
-                        dense=True,
                         hide_details=True,
                     )
 
@@ -517,7 +516,6 @@ class UI:
                             item_title="title",
                             item_value="value",
                             label="Segmentation",
-                            dense=True,
                             hide_details=True,
                             classes="mb-2",
                         )
@@ -525,14 +523,11 @@ class UI:
                             v_if="!maximized_view && active_volume_label",
                             v_model=("snap_mode", "label"),
                             mandatory=True,
-                            dense=True,
                             classes="mb-2",
                         ):
-                            vuetify.VBtn(value="label", text="Label", small=True)
-                            vuetify.VBtn(
-                                value="interface", text="Interface", small=True
-                            )
-                            vuetify.VBtn(value="reset", text="Reset", small=True)
+                            vuetify.VBtn(value="label", text="Label")
+                            vuetify.VBtn(value="interface", text="Interface")
+                            vuetify.VBtn(value="reset", text="Reset")
                         vuetify.VSelect(
                             v_if="!maximized_view && active_volume_label && snap_mode !== 'reset'",
                             v_model=("snap_labels_a", []),
@@ -542,7 +537,6 @@ class UI:
                             label=("snap_mode === 'interface' ? 'Group A' : 'Labels'",),
                             multiple=True,
                             chips=True,
-                            dense=True,
                             hide_details=True,
                             classes="mb-2",
                         )
@@ -555,7 +549,6 @@ class UI:
                             label="Group B",
                             multiple=True,
                             chips=True,
-                            dense=True,
                             hide_details=True,
                             classes="mb-2",
                         )
@@ -563,7 +556,6 @@ class UI:
                             "No interface found between selected groups.",
                             v_if="snap_no_interface",
                             type="warning",
-                            dense=True,
                             classes="mb-2",
                             variant="tonal",
                         )
@@ -579,9 +571,6 @@ class UI:
                                     disabled=(
                                         "snap_mode === 'reset' ? false : snap_mode === 'label' ? snap_labels_a.length === 0 : snap_labels_a.length === 0 || snap_labels_b.length === 0",
                                     ),
-                                    small=True,
-                                    dense=True,
-                                    outlined=True,
                                     block=True,
                                     prepend_icon="mdi-target",
                                 )
@@ -612,9 +601,6 @@ class UI:
                                         "snap_labels_a.length === 0 || snap_labels_b.length === 0",
                                     ),
                                     title="Rotate the MPR views into the plane of the interface",
-                                    small=True,
-                                    dense=True,
-                                    outlined=True,
                                     block=True,
                                     prepend_icon="mdi-axis-arrow",
                                 )
@@ -636,7 +622,6 @@ class UI:
                             "not be meaningful.",
                             v_if=f"interface_flatness > {NONPLANAR_FLATNESS}",
                             type="warning",
-                            dense=True,
                             classes="mb-2",
                             variant="tonal",
                         )
@@ -656,27 +641,18 @@ class UI:
                             vuetify.VBtn(
                                 "X",
                                 click=self.server.controller.add_x_rotation,
-                                small=True,
-                                dense=True,
-                                outlined=True,
                                 color="primary",
                             )
                         with vuetify.VCol(cols="4"):
                             vuetify.VBtn(
                                 "Y",
                                 click=self.server.controller.add_y_rotation,
-                                small=True,
-                                dense=True,
-                                outlined=True,
                                 color="primary",
                             )
                         with vuetify.VCol(cols="4"):
                             vuetify.VBtn(
                                 "Z",
                                 click=self.server.controller.add_z_rotation,
-                                small=True,
-                                dense=True,
-                                outlined=True,
                                 color="primary",
                             )
 
@@ -695,7 +671,6 @@ class UI:
                                                 f"mpr_rotation_data.angles_list[{i}].name",
                                             ),
                                             placeholder="Name",
-                                            dense=True,
                                             hide_details=True,
                                             readonly=(
                                                 f"!mpr_rotation_data.angles_list[{i}].name_editable",
@@ -723,7 +698,6 @@ class UI:
                                             step=(
                                                 "angle_units === 'radians' ? 0.01 : 1",
                                             ),
-                                            dense=True,
                                             hide_details=True,
                                             thumb_label=True,
                                         )
@@ -738,7 +712,6 @@ class UI:
                                                 f"mpr_rotation_data.angles_list[{i}].axis",
                                             ),
                                             items=(["X", "Y", "Z"],),
-                                            dense=True,
                                             hide_details=True,
                                             label="Axis",
                                         )
@@ -751,7 +724,6 @@ class UI:
                                             true_icon="mdi-eye",
                                             false_icon="mdi-eye-off",
                                             hide_details=True,
-                                            dense=True,
                                             title="Toggle this rotation",
                                         )
                                     vuetify.VSpacer()
@@ -763,8 +735,6 @@ class UI:
                                                 self.server.controller.reset_rotation_angle,
                                                 i,
                                             ),
-                                            small=True,
-                                            dense=True,
                                             title="Reset angle to zero",
                                         )
                                     vuetify.VSpacer()
@@ -775,8 +745,6 @@ class UI:
                                                 self.server.controller.remove_rotation_event,
                                                 i,
                                             ),
-                                            small=True,
-                                            dense=True,
                                             color="error",
                                             title="Remove this rotation",
                                             disabled=(
@@ -799,9 +767,7 @@ class UI:
                                 items=("angle_units_items", []),
                                 item_title="text",
                                 item_value="value",
-                                dense=True,
                                 hide_details=True,
-                                outlined=True,
                             )
 
                     # Axis convention selector
@@ -818,9 +784,7 @@ class UI:
                                 items=("index_order_items", []),
                                 item_title="text",
                                 item_value="value",
-                                dense=True,
                                 hide_details=True,
-                                outlined=True,
                             )
 
                     # Fix Camera selector
@@ -837,9 +801,7 @@ class UI:
                                 items=("camera_lock_items", []),
                                 item_title="title",
                                 item_value="value",
-                                dense=True,
                                 hide_details=True,
-                                outlined=True,
                             )
 
                     # Save rotations button
@@ -847,9 +809,6 @@ class UI:
                         "Save Rotations",
                         v_if="!maximized_view && active_volume_label && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > 0",
                         click=self.server.controller.save_rotation_angles,
-                        small=True,
-                        dense=True,
-                        outlined=True,
                         color="success",
                         block=True,
                         classes="mb-2",
@@ -882,9 +841,6 @@ class UI:
                         "Delete All Rotations",
                         v_if="!maximized_view && active_volume_label && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > 0",
                         click=self.server.controller.reset_rotations,
-                        small=True,
-                        dense=True,
-                        outlined=True,
                         color="error",
                         block=True,
                         classes="mb-2",
@@ -909,7 +865,6 @@ class UI:
                         max=1.0,
                         step=0.05,
                         hide_details=True,
-                        dense=True,
                         thumb_label=True,
                     )
 
@@ -919,14 +874,13 @@ class UI:
                             v_model=(f"mpr_segmentation_overlay_{seg.label}", False),
                             label=f"{seg.label}",
                             hide_details=True,
-                            dense=True,
                         )
 
                     vuetify.VDivider(classes="my-2")
 
                 vuetify.VListSubheader("Playback Controls")
 
-                with vuetify.VToolbar(dense=True, flat=True):
+                with vuetify.VToolbar(flat=True):
                     # NOTE: Previous/Next controls should be VBtn components, but we use
                     # VCheckbox for consistent sizing/spacing with the other controls.
                     # This may be easier to fix in Vuetify 3.
@@ -990,7 +944,6 @@ class UI:
                     max=self.scene.nframes - 1,
                     step=1,
                     hide_details=False,
-                    dense=True,
                     style="max-width: 300px",
                     ticks=True,
                     thumb_label=True,
@@ -1004,7 +957,6 @@ class UI:
                     max=120,
                     step=1,
                     hide_details=False,
-                    dense=True,
                     style="max-width: 300px",
                     ticks=True,
                     thumb_label=True,
@@ -1018,7 +970,6 @@ class UI:
                     max=360,
                     step=1,
                     hide_details=False,
-                    dense=True,
                     style="max-width: 300px",
                     ticks=True,
                     thumb_label=True,
@@ -1039,16 +990,12 @@ class UI:
                             ),
                             label=label,
                             hide_details=True,
-                            dense=True,
                             classes="mx-1",
                         )
 
                 with vuetify.VRow(justify="center", classes="my-3"):
                     vuetify.VBtn(
                         "Capture Cine",
-                        small=True,
-                        dense=True,
-                        outlined=True,
                         color="info",
                         block=True,
                         click=self.server.controller.screenshot,
@@ -1071,7 +1018,6 @@ class UI:
                     max=_clip_far,
                     step=_clip_far / 100,
                     hide_details=True,
-                    dense=True,
                     thumb_label=True,
                 )
 
@@ -1086,7 +1032,6 @@ class UI:
                             off_icon="mdi-eye-off",
                             classes="mx-1",
                             hide_details=True,
-                            dense=True,
                             label=m.label,
                         )
                         if m.clipping_enabled:
@@ -1099,7 +1044,6 @@ class UI:
                                 off_icon="mdi-content-cut",
                                 classes="mx-1 ml-4",
                                 hide_details=True,
-                                dense=True,
                                 label="Clip",
                             )
 
@@ -1111,7 +1055,6 @@ class UI:
                                     multiple=True,
                                     flat=True,
                                     classes="ml-4",
-                                    dense=True,
                                     style="max-width: 270px;",
                                 ):
                                     with vuetify.VExpansionPanel():
@@ -1128,7 +1071,6 @@ class UI:
                                                 max=bounds[1],
                                                 step=(bounds[1] - bounds[0]) / 100,
                                                 hide_details=True,
-                                                dense=True,
                                                 thumb_label=False,
                                             )
                                             # Y bounds
@@ -1142,7 +1084,6 @@ class UI:
                                                 max=bounds[3],
                                                 step=(bounds[3] - bounds[2]) / 100,
                                                 hide_details=True,
-                                                dense=True,
                                                 thumb_label=False,
                                             )
                                             # Z bounds
@@ -1156,7 +1097,6 @@ class UI:
                                                 max=bounds[5],
                                                 step=(bounds[5] - bounds[4]) / 100,
                                                 hide_details=True,
-                                                dense=True,
                                                 thumb_label=False,
                                             )
 
@@ -1169,7 +1109,6 @@ class UI:
                             off_icon="mdi-eye-off",
                             classes="mx-1",
                             hide_details=True,
-                            dense=True,
                             label=v.label,
                         )
 
@@ -1180,7 +1119,6 @@ class UI:
                             v_model=f"preset_panel_{v.label}",
                             flat=True,
                             classes="ml-4",
-                            dense=True,
                             style="max-width: 270px;",
                         ):
                             with vuetify.VExpansionPanel():
@@ -1188,7 +1126,6 @@ class UI:
                                 with vuetify.VExpansionPanelText():
                                     with vuetify.VRadioGroup(
                                         v_model=f"volume_preset_{v.label}",
-                                        dense=True,
                                     ):
                                         for (
                                             preset_key,
@@ -1209,7 +1146,6 @@ class UI:
                                 off_icon="mdi-cube-off-outline",
                                 classes="mx-1 ml-4",
                                 hide_details=True,
-                                dense=True,
                                 label=f"{v.label} Clipping",
                             )
 
@@ -1221,7 +1157,6 @@ class UI:
                                     multiple=True,
                                     flat=True,
                                     classes="ml-4",
-                                    dense=True,
                                     style="max-width: 270px;",
                                 ):
                                     with vuetify.VExpansionPanel():
@@ -1238,7 +1173,6 @@ class UI:
                                                 max=bounds[1],
                                                 step=(bounds[1] - bounds[0]) / 100,
                                                 hide_details=True,
-                                                dense=True,
                                                 thumb_label=False,
                                             )
                                             # Y bounds
@@ -1252,7 +1186,6 @@ class UI:
                                                 max=bounds[3],
                                                 step=(bounds[3] - bounds[2]) / 100,
                                                 hide_details=True,
-                                                dense=True,
                                                 thumb_label=False,
                                             )
                                             # Z bounds
@@ -1266,7 +1199,6 @@ class UI:
                                                 max=bounds[5],
                                                 step=(bounds[5] - bounds[4]) / 100,
                                                 hide_details=True,
-                                                dense=True,
                                                 thumb_label=False,
                                             )
 
@@ -1279,7 +1211,6 @@ class UI:
                             off_icon="mdi-eye-off",
                             classes="mx-1",
                             hide_details=True,
-                            dense=True,
                             label=s.label,
                         )
 
@@ -1293,7 +1224,6 @@ class UI:
                                 off_icon="mdi-content-cut",
                                 classes="mx-1 ml-4",
                                 hide_details=True,
-                                dense=True,
                                 label="Clip",
                             )
 
@@ -1305,7 +1235,6 @@ class UI:
                                     multiple=True,
                                     flat=True,
                                     classes="ml-4",
-                                    dense=True,
                                     style="max-width: 270px;",
                                 ):
                                     with vuetify.VExpansionPanel():
@@ -1322,7 +1251,6 @@ class UI:
                                                 max=bounds[1],
                                                 step=(bounds[1] - bounds[0]) / 100,
                                                 hide_details=True,
-                                                dense=True,
                                                 thumb_label=False,
                                             )
                                             # Y bounds
@@ -1336,7 +1264,6 @@ class UI:
                                                 max=bounds[3],
                                                 step=(bounds[3] - bounds[2]) / 100,
                                                 hide_details=True,
-                                                dense=True,
                                                 thumb_label=False,
                                             )
                                             # Z bounds
@@ -1350,7 +1277,6 @@ class UI:
                                                 max=bounds[5],
                                                 step=(bounds[5] - bounds[4]) / 100,
                                                 hide_details=True,
-                                                dense=True,
                                                 thumb_label=False,
                                             )
 
