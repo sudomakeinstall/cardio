@@ -6,6 +6,7 @@ from trame.ui.vuetify3 import SinglePageWithDrawerLayout
 # Internal
 from .. import __version__
 from ..scene import Scene
+from ..state import DEFAULT_THEME_MODE
 from .help import help_dialog
 from .interaction import Interaction
 from .layout import toolbar, viewports
@@ -48,7 +49,7 @@ class UI:
         self.server.state.trame__title = f"cardio v{__version__}"
 
         with SinglePageWithDrawerLayout(
-            self.server, theme=("theme_mode", "dark")
+            self.server, theme=("theme_mode", DEFAULT_THEME_MODE)
         ) as layout:
             layout.icon.click = self.server.controller.view_reset_camera
             layout.title.set_text(f"cardio v{__version__}")

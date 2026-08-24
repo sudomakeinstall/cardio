@@ -8,6 +8,10 @@ Spelling each key in one place makes that impossible.
 # System
 import dataclasses as dc
 
+THEME_DARK = "dark"
+THEME_LIGHT = "light"
+DEFAULT_THEME_MODE = THEME_DARK
+
 
 @dc.dataclass(frozen=True)
 class ObjectState:

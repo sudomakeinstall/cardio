@@ -20,7 +20,7 @@ from cardio.logic import Logic
 from cardio.orientation import AngleUnits
 from cardio.rotation import RotationMetadata
 from cardio.scene import Scene
-from cardio.state import ObjectState
+from cardio.state import DEFAULT_THEME_MODE, THEME_LIGHT, ObjectState
 from cardio.ui import UI
 
 _server_names = itertools.count()
@@ -274,3 +274,20 @@ def test_an_unrecognised_index_order_is_rejected(app):
 
     with pytest.raises(ValueError, match="Unrecognized index order"):
         logic.rotations.sync_index_order("nonsense")
+
+
+def test_the_renderer_starts_in_the_default_theme(app):
+    server, scene, logic, _ = app
+
+    assert server.state.theme_mode == DEFAULT_THEME_MODE
+    assert scene.renderer.GetBackground() == pytest.approx(
+        logic.visibility.background_color(DEFAULT_THEME_MODE)
+    )
+
+
+def test_toggling_the_theme_repaints_the_background(app):
+    _, scene, logic, _ = app
+
+    logic.visibility.sync_background_color(THEME_LIGHT)
+
+    assert scene.renderer.GetBackground() == pytest.approx(scene.background.light)

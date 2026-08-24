@@ -1,7 +1,7 @@
 """Per-object visibility, transfer function presets and the background."""
 
 # Internal
-from ..state import ObjectState
+from ..state import DEFAULT_THEME_MODE, THEME_DARK, ObjectState
 from ..volume_property_presets import load_volume_property_preset
 from .base import Controller
 
@@ -11,7 +11,9 @@ class VisibilityController(Controller):
 
     def register(self):
         state = self.server.state
+        state.setdefault("theme_mode", DEFAULT_THEME_MODE)
         state.change("theme_mode")(self.sync_background_color)
+        self.apply_background_color(state.theme_mode)
 
         for obj in self.scene.renderables:
             state[ObjectState.of(obj).visibility] = obj.visible
@@ -47,16 +49,18 @@ class VisibilityController(Controller):
 
         self.server.controller.view_update()
 
+    def background_color(self, theme_mode) -> tuple[float, float, float]:
+        background = self.scene.background
+        return background.dark if theme_mode == THEME_DARK else background.light
+
+    def apply_background_color(self, theme_mode):
+        """Set the VR renderer background for a theme, without a re-render.
+
+        Called at registration, before any view exists to update.
+        """
+        self.scene.renderer.SetBackground(*self.background_color(theme_mode))
+
     def sync_background_color(self, theme_mode, **kwargs):
         """Sync VTK renderer background with dark mode."""
-        if theme_mode == "dark":
-            # Dark mode: use dark background from config
-            self.scene.renderer.SetBackground(
-                *self.scene.background.dark,
-            )
-        else:
-            # Light mode: use light background from config
-            self.scene.renderer.SetBackground(
-                *self.scene.background.light,
-            )
+        self.apply_background_color(theme_mode)
         self.server.controller.view_update()
