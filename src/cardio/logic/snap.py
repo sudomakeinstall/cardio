@@ -45,6 +45,7 @@ class SnapController(Controller):
 
         self.server.controller.snap_to_centroid = self.snap_to_centroid
         self.server.controller.align_to_interface = self.align_to_interface
+        self.server.controller.swap_snap_groups = self.swap_groups
 
     def register_initial_labels(self):
         """Populate the label pickers, once a segmentation is selected."""
@@ -227,6 +228,30 @@ class SnapController(Controller):
             ]
 
         self.app.rotations.edit_steps(with_alignment)
+
+    def swap_groups(self, **kwargs):
+        """Exchange the two label groups, reversing the interface normal.
+
+        Only the selection changes; the views move when the user aligns, the
+        same as any other edit to the groups. The exception is an orientation
+        lock, which is a standing request to follow the interface.
+
+        The cache is dropped here rather than left to the selection listener,
+        which only fires once this returns: the stale anchor would otherwise
+        flip the recomputed normal straight back.
+        """
+        state = self.server.state
+        if getattr(state, "snap_mode", "label") != "interface":
+            return
+
+        state.snap_labels_a, state.snap_labels_b = (
+            list(getattr(state, "snap_labels_b", [])),
+            list(getattr(state, "snap_labels_a", [])),
+        )
+        self._invalidate_lock_cache()
+
+        if getattr(state, "snap_orientation_locked", False):
+            self.align_to_interface()
 
     def align_to_interface(self, **kwargs):
         """Rotate the MPR views into the dominant plane of the selected interface."""

@@ -269,6 +269,104 @@ def test_align_ignored_without_both_groups(tmp_path):
     assert logic.server.state.mpr_rotation_data["angles_list"] == []
 
 
+def locked_logic(tmp_path, kind="oblique3d") -> FakeApp:
+    """Aligned and orientation-locked, so the view follows the interface."""
+    logic = make_logic(make_segmentation(tmp_path, kind))
+    logic.server.state.snap_orientation_locked = True
+    logic.snap.align_to_interface()
+    return logic
+
+
+def test_swap_exchanges_the_two_groups(tmp_path):
+    logic = make_logic(make_segmentation(tmp_path, "oblique3d"))
+    logic.snap.swap_groups()
+    assert logic.server.state.snap_labels_a == [2]
+    assert logic.server.state.snap_labels_b == [1]
+
+
+def test_swap_leaves_an_unlocked_view_alone(tmp_path):
+    """Swapping is an edit to the selection, not a command to move the views."""
+    logic = make_logic(make_segmentation(tmp_path, "oblique3d"))
+    logic.snap.align_to_interface()
+    before = axial_normal(logic)
+
+    logic.snap.swap_groups()
+    assert axial_normal(logic) == pytest.approx(before, abs=1e-9)
+
+
+def test_align_after_a_swap_flips_the_axial_normal(tmp_path):
+    """The flip lands on the next align, viewing the interface from behind."""
+    logic = make_logic(make_segmentation(tmp_path, "oblique3d"))
+    logic.snap.align_to_interface()
+    before = axial_normal(logic)
+
+    logic.snap.swap_groups()
+    logic.snap.align_to_interface()
+    assert axial_normal(logic) == pytest.approx(-before, abs=1e-6)
+
+
+def test_swap_does_not_align_a_view_that_was_not_aligned(tmp_path):
+    logic = make_logic(make_segmentation(tmp_path, "oblique3d"))
+    logic.snap.swap_groups()
+    assert logic.server.state.mpr_rotation_data["angles_list"] == []
+
+
+def test_swap_flips_a_locked_view_immediately(tmp_path):
+    logic = locked_logic(tmp_path)
+    before = axial_normal(logic)
+
+    logic.snap.swap_groups()
+    assert axial_normal(logic) == pytest.approx(-before, abs=1e-6)
+
+
+def test_swap_leaves_the_origin_where_it_was(tmp_path):
+    """The interface centroid is symmetric in A and B; only orientation flips."""
+    logic = locked_logic(tmp_path)
+    origin = list(logic.server.state.mpr_origin)
+
+    logic.snap.swap_groups()
+    assert logic.server.state.mpr_origin == pytest.approx(origin)
+
+
+def test_swap_does_not_stack_alignment_steps(tmp_path):
+    logic = locked_logic(tmp_path)
+    logic.snap.swap_groups()
+    logic.snap.swap_groups()
+
+    steps = logic.server.state.mpr_rotation_data["angles_list"]
+    assert [s["name"] for s in steps] == [ALIGN_STEP_NAME]
+
+
+def test_swap_round_trips(tmp_path):
+    logic = locked_logic(tmp_path)
+    before = axial_normal(logic)
+
+    logic.snap.swap_groups()
+    logic.snap.swap_groups()
+    assert logic.server.state.snap_labels_a == [1]
+    assert axial_normal(logic) == pytest.approx(before, abs=1e-6)
+
+
+def test_swap_keeps_user_rotations(tmp_path):
+    logic = make_logic(make_segmentation(tmp_path, "oblique3d"))
+    logic.server.state.snap_orientation_locked = True
+    logic.server.state.mpr_rotation_data = {"angles_list": [user_rotation("X", 37.0)]}
+    logic.snap.align_to_interface()
+
+    logic.snap.swap_groups()
+    steps = logic.server.state.mpr_rotation_data["angles_list"]
+    assert [s["name"] for s in steps] == [ALIGN_STEP_NAME, "user"]
+
+
+def test_swap_ignored_outside_interface_mode(tmp_path):
+    logic = make_logic(make_segmentation(tmp_path, "oblique3d"))
+    logic.server.state.snap_mode = "label"
+
+    logic.snap.swap_groups()
+    assert logic.server.state.snap_labels_a == [1]
+    assert logic.server.state.snap_labels_b == [2]
+
+
 def test_orientation_lock_tracks_a_tilting_interface(tmp_path):
     """The view follows the plane frame to frame, unlike a one-shot align."""
     seg = tilting_segmentation(tmp_path)

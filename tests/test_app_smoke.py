@@ -123,6 +123,7 @@ def test_controller_entry_points_the_ui_binds_all_exist(app):
         "reset_mpr_origin",
         "snap_to_centroid",
         "align_to_interface",
+        "swap_snap_groups",
         "view_update",
         "view_reset_camera",
     ):

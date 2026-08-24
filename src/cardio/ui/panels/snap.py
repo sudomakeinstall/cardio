@@ -52,30 +52,48 @@ def snap_panel(server, scene):
             vuetify.VBtn(value="label", text="Label")
             vuetify.VBtn(value="interface", text="Interface")
             vuetify.VBtn(value="reset", text="Reset")
-        vuetify.VSelect(
-            v_if="!maximized_view && active_volume_label && snap_mode !== 'reset'",
-            v_model=("snap_labels_a", []),
-            items=("snap_available_labels", []),
-            item_title="title",
-            item_value="value",
-            label=("snap_mode === 'interface' ? 'Group A' : 'Labels'",),
-            multiple=True,
-            chips=True,
-            hide_details=True,
-            classes="mb-2",
-        )
-        vuetify.VSelect(
-            v_if="!maximized_view && active_volume_label && snap_mode === 'interface'",
-            v_model=("snap_labels_b", []),
-            items=("snap_available_labels", []),
-            item_title="title",
-            item_value="value",
-            label="Group B",
-            multiple=True,
-            chips=True,
-            hide_details=True,
-            classes="mb-2",
-        )
+        with vuetify.VRow(
+            v_if=f"{MPR_ACTIVE} && snap_mode !== 'reset'",
+            no_gutters=True,
+            classes="mb-2 align-center",
+        ):
+            with vuetify.VCol():
+                vuetify.VSelect(
+                    v_model=("snap_labels_a", []),
+                    items=("snap_available_labels", []),
+                    item_title="title",
+                    item_value="value",
+                    label=("snap_mode === 'interface' ? 'Group A' : 'Labels'",),
+                    multiple=True,
+                    chips=True,
+                    hide_details=True,
+                    density="compact",
+                )
+            with vuetify.VCol(
+                v_if="snap_mode === 'interface'", cols="auto", classes="px-1"
+            ):
+                vuetify.VBtn(
+                    click=server.controller.swap_snap_groups,
+                    icon="mdi-swap-horizontal",
+                    disabled=(
+                        "snap_labels_a.length === 0 || snap_labels_b.length === 0",
+                    ),
+                    title="Swap Group A and Group B, viewing the interface from the other side",
+                    variant="text",
+                    density="compact",
+                )
+            with vuetify.VCol(v_if="snap_mode === 'interface'"):
+                vuetify.VSelect(
+                    v_model=("snap_labels_b", []),
+                    items=("snap_available_labels", []),
+                    item_title="title",
+                    item_value="value",
+                    label="Group B",
+                    multiple=True,
+                    chips=True,
+                    hide_details=True,
+                    density="compact",
+                )
         vuetify.VAlert(
             "No interface found between selected groups.",
             v_if="snap_no_interface",
@@ -90,7 +108,7 @@ def snap_panel(server, scene):
         ):
             with vuetify.VCol():
                 vuetify.VBtn(
-                    "Snap",
+                    "Center",
                     click=server.controller.snap_to_centroid,
                     disabled=(
                         "snap_mode === 'reset' ? false : snap_mode === 'label' ? snap_labels_a.length === 0 : snap_labels_a.length === 0 || snap_labels_b.length === 0",
@@ -119,7 +137,7 @@ def snap_panel(server, scene):
         ):
             with vuetify.VCol():
                 vuetify.VBtn(
-                    "Align to Interface",
+                    "Align",
                     click=server.controller.align_to_interface,
                     disabled=(
                         "snap_labels_a.length === 0 || snap_labels_b.length === 0",
