@@ -14,6 +14,7 @@ hanging the suite.
 import asyncio
 
 # Internal
+from cardio.image_quality import DEFAULT_PLAYBACK_QUALITY
 from cardio.logic import playback as playback_module
 from cardio.logic.playback import PlaybackController
 
@@ -192,9 +193,13 @@ class RecordingMPR:
 
 
 class FakeServer:
+    """``protocol`` is None until a client connects, as on a real server."""
+
     def __init__(self, state, controller):
+        self.name = "playback-harness"
         self.state = state
         self.controller = controller
+        self.protocol = None
 
 
 class PlaybackApp:
@@ -208,6 +213,7 @@ class PlaybackApp:
             "rotating": False,
             "bpm": 60,
             "bpr": 3,
+            "playback_quality": DEFAULT_PLAYBACK_QUALITY,
         }
         state_values.update(overrides)
 

@@ -3,6 +3,9 @@
 # Third Party
 from trame.widgets import vuetify3 as vuetify
 
+# Internal
+from ...image_quality import DEFAULT_PLAYBACK_QUALITY
+
 
 def playback_panel(server, scene):
     """Transport controls and the phase, speed and cycles sliders."""
@@ -97,6 +100,19 @@ def playback_panel(server, scene):
         min=1,
         max=360,
         step=1,
+        hide_details=False,
+        style="max-width: 300px",
+        ticks=True,
+        thumb_label=True,
+    )
+
+    vuetify.VSlider(
+        v_model=("playback_quality", DEFAULT_PLAYBACK_QUALITY),
+        hint="Playback Quality",
+        persistent_hint=True,
+        min=10,
+        max=100,
+        step=5,
         hide_details=False,
         style="max-width: 300px",
         ticks=True,

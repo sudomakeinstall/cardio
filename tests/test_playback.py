@@ -13,6 +13,8 @@ import asyncio
 import pytest
 
 # Internal
+from cardio.image_quality import DEFAULT_PLAYBACK_QUALITY, FULL_QUALITY
+from cardio.logic import playback as playback_module
 from tests.playback_harness import (
     CHECK_INTERVAL,
     Clock,
@@ -372,3 +374,66 @@ def test_scrubbing_does_not_swallow_the_camera_rotation(clock, monkeypatch):
         return rendered_by_the_loop
 
     assert asyncio.run(scenario()) >= 1
+
+
+# --- playback quality --------------------------------------------------------
+
+
+@pytest.fixture
+def quality(monkeypatch) -> list:
+    """Record what quality playback asks for, in order."""
+    applied = []
+    monkeypatch.setattr(
+        playback_module,
+        "set_image_quality",
+        lambda server, scene, value, **kwargs: applied.append(value),
+    )
+    return applied
+
+
+def test_playing_drops_the_quality_and_pausing_restores_it(clock, monkeypatch, quality):
+    async def scenario():
+        install_shims(monkeypatch, clock, budget=5000)
+        app = PlaybackApp(clock, nframes=10, playback_quality=40)
+        task = play(app)
+        await pump(lambda: len(app.renders) >= 3)
+        pause(app)
+        await drain(task)
+
+    asyncio.run(scenario())
+    assert quality == [40, FULL_QUALITY]
+
+
+def test_the_slider_takes_effect_mid_playback(clock, monkeypatch, quality):
+    async def scenario():
+        install_shims(monkeypatch, clock, budget=5000)
+        app = PlaybackApp(clock, nframes=10, playback_quality=40)
+        task = play(app)
+        await pump(lambda: len(app.renders) >= 2)
+
+        app.state.playback_quality = 25
+        app.state.flush()
+
+        pause(app)
+        await drain(task)
+
+    asyncio.run(scenario())
+    assert quality == [40, 25, FULL_QUALITY]
+
+
+def test_moving_the_slider_while_paused_changes_nothing(clock, quality):
+    """A paused view stays at full quality, whatever the slider says."""
+    app = PlaybackApp(clock, nframes=10)
+
+    app.state.playback_quality = 25
+    app.state.flush()
+
+    assert quality == []
+
+
+def test_reset_restores_the_default_quality(clock, quality):
+    app = PlaybackApp(clock, nframes=10, playback_quality=25)
+
+    app.playback.reset_all()
+
+    assert app.state.playback_quality == DEFAULT_PLAYBACK_QUALITY

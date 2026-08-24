@@ -8,6 +8,11 @@ import time
 from trame.app import asynchronous
 
 # Internal
+from ..image_quality import (
+    DEFAULT_PLAYBACK_QUALITY,
+    FULL_QUALITY,
+    set_image_quality,
+)
 from ..state import ObjectState
 from .base import Controller
 
@@ -27,6 +32,7 @@ class PlaybackController(Controller):
         state = self.server.state
         state.change("frame")(self.update_frame)
         state.change("playing")(self._handle_playing_change)
+        state.change("playback_quality")(self.sync_playback_quality)
 
         controller = self.server.controller
         controller.increment_frame = self.increment_frame
@@ -61,9 +67,19 @@ class PlaybackController(Controller):
 
         # Start new playback task if playing
         if playing:
+            set_image_quality(
+                self.server, self.scene, self.server.state.playback_quality
+            )
             self._playback_task = asynchronous.create_task(
                 self._play_loop(playing, **kwargs)
             )
+        else:
+            set_image_quality(self.server, self.scene, FULL_QUALITY)
+
+    def sync_playback_quality(self, playback_quality, playing=False, **kwargs):
+        """Apply a quality change that lands mid-playback straight away."""
+        if playing:
+            set_image_quality(self.server, self.scene, playback_quality)
 
     def _calculate_target_frame(self, elapsed_seconds, bpm, nframes):
         """Calculate target frame based on elapsed time.
@@ -205,6 +221,7 @@ class PlaybackController(Controller):
         self.server.state.rotating = False
         self.server.state.bpm = 60
         self.server.state.bpr = 5
+        self.server.state.playback_quality = DEFAULT_PLAYBACK_QUALITY
         self.server.controller.view_update()
 
     @asynchronous.task
