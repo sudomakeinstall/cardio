@@ -134,18 +134,27 @@ class PlaybackController(Controller):
 
                     try:
                         with self.server.state as state:
-                            # Update frame if incrementing
+                            # Writing the frame renders through the update_frame
+                            # listener this block's flush fires, and only that
+                            # render sees the new actors. A write that changes
+                            # nothing fires nothing -- but then the views are
+                            # already showing the frame. Rotation is the one
+                            # thing with no listener to render it.
+                            renders_on_flush = (
+                                incrementing
+                                and frame_changed
+                                and state.frame != target_frame
+                            )
+
                             if incrementing and frame_changed:
                                 state.frame = target_frame
                                 self._last_target_frame = target_frame
 
-                            # Rotate camera if rotating
                             if rotating:
                                 deg = 360 / (nframes * bpr)
                                 self.scene.renderer.GetActiveCamera().Azimuth(deg)
-
-                            # Synchronous blocking render
-                            self.server.controller.view_update()
+                                if not renders_on_flush:
+                                    self.server.controller.view_update()
 
                         # Track render duration for adaptive timing
                         self._last_render_duration = time.perf_counter() - render_start
