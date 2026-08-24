@@ -5,9 +5,11 @@ import itk
 import numpy as np
 import pydantic as pc
 import vtk
+import vtk.util.numpy_support as vtk_np
 
 from .object import Object
 from .orientation import (
+    minimal_rotation,
     read_frames,
 )
 from .property_config import vtkPropertyConfig
@@ -16,10 +18,10 @@ from .utils import label_color
 _MARKER_ARRAY = "_snap_marker"
 
 
-def masked_centroid(
+def masked_surface(
     mesh: vtk.vtkPolyData, mask: ty.Sequence[bool]
-) -> list[float] | None:
-    """Center of mass of the mesh cells selected by ``mask``."""
+) -> vtk.vtkPolyData | None:
+    """Sub-surface of the mesh cells selected by ``mask``."""
     if not any(mask):
         return None
 
@@ -46,12 +48,85 @@ def masked_centroid(
     geom = vtk.vtkGeometryFilter()
     geom.SetInputConnection(thresh.GetOutputPort())
     geom.Update()
+    return geom.GetOutput()
+
+
+def masked_centroid(
+    mesh: vtk.vtkPolyData, mask: ty.Sequence[bool]
+) -> list[float] | None:
+    """Center of mass of the mesh cells selected by ``mask``."""
+    surface = masked_surface(mesh, mask)
+    if surface is None:
+        return None
 
     com = vtk.vtkCenterOfMass()
-    com.SetInputConnection(geom.GetOutputPort())
+    com.SetInputData(surface)
     com.SetUseScalarsAsWeights(False)
     com.Update()
     return list(com.GetCenter())
+
+
+def surface_points(surface: vtk.vtkPolyData) -> np.ndarray:
+    """Point coordinates of a surface as an (N, 3) array.
+
+    Widened to float64: VTK stores points as float32, which is not enough
+    precision for the rotation and quaternion math downstream.
+    """
+    return vtk_np.vtk_to_numpy(surface.GetPoints().GetData()).astype(np.float64)
+
+
+def principal_axes(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """PCA of a point cloud.
+
+    Returns (centroid, axes, extents). The columns of ``axes`` are the two
+    in-plane directions ordered by decreasing spread, then the plane normal.
+    ``extents`` holds the corresponding singular values.
+    """
+    centroid = points.mean(axis=0)
+    _, extents, basis = np.linalg.svd(points - centroid, full_matrices=True)
+    return centroid, basis.T, extents
+
+
+# LPS reference directions for the in-plane axes. Anterior reproduces the
+# unrotated axial view; superior takes over when the normal is near anterior.
+_IN_PLANE_REFERENCE = np.array([0.0, -1.0, 0.0])
+_IN_PLANE_FALLBACK = np.array([0.0, 0.0, 1.0])
+_REFERENCE_PARALLEL = 0.9
+
+
+def plane_basis(normal: np.ndarray, anchor: np.ndarray | None = None) -> np.ndarray:
+    """View basis for a plane with the given normal.
+
+    The in-plane axes are never taken from PCA: the first two principal axes of
+    a near-circular interface are interchangeable and their signs are arbitrary,
+    so deriving them from the data makes the in-plane rotation jump between
+    frames.
+
+    Without an ``anchor`` the in-plane axes come from a fixed anatomical
+    reference. Given an ``anchor`` basis, they are carried onto the new normal
+    by the smallest rotation between the two normals, which is continuous in the
+    normal and so keeps the view from spinning as the plane moves.
+
+    Columns are (view x, view y, normal). The basis is left-handed to match the
+    LPS to LAS axial transform, so the derived rotation stays proper.
+    """
+    normal = np.asarray(normal, dtype=np.float64)
+    normal = normal / np.linalg.norm(normal)
+
+    if anchor is not None:
+        basis = minimal_rotation(anchor[:, 2], normal) @ anchor
+        view_y = basis[:, 1] - (basis[:, 1] @ normal) * normal
+        view_y = view_y / np.linalg.norm(view_y)
+        return np.column_stack([np.cross(normal, view_y), view_y, normal])
+
+    reference = _IN_PLANE_REFERENCE
+    if abs(reference @ normal) > _REFERENCE_PARALLEL:
+        reference = _IN_PLANE_FALLBACK
+
+    view_y = reference - (reference @ normal) * normal
+    view_y = view_y / np.linalg.norm(view_y)
+    view_x = np.cross(normal, view_y)
+    return np.column_stack([view_x, view_y, normal])
 
 
 class Segmentation(Object):
@@ -391,26 +466,21 @@ class Segmentation(Object):
             return None
         return self._meshes[frame % len(self._meshes)]
 
-    def label_centroid(self, labels: list[int], frame: int = 0) -> list[float] | None:
-        mesh = self._frame_mesh(frame)
-        if mesh is None or not labels:
-            return None
+    def _label_mask(self, mesh, labels: list[int]) -> list[bool] | None:
+        """Cells whose label is in ``labels``."""
         scalars = mesh.GetCellData().GetArray("Labels")
         if not scalars:
             return None
         label_set = set(labels)
-        mask = [
+        return [
             int(scalars.GetTuple1(i)) in label_set
             for i in range(scalars.GetNumberOfTuples())
         ]
-        return masked_centroid(mesh, mask)
 
-    def interface_centroid(
-        self, labels_a: list[int], labels_b: list[int], frame: int = 0
-    ) -> list[float] | None:
-        mesh = self._frame_mesh(frame)
-        if mesh is None or not labels_a or not labels_b:
-            return None
+    def _interface_mask(
+        self, mesh, labels_a: list[int], labels_b: list[int]
+    ) -> list[bool] | None:
+        """Cells separating a label in ``labels_a`` from one in ``labels_b``."""
         boundary = mesh.GetCellData().GetArray("BoundaryLabels")
         if not boundary:
             return None
@@ -420,7 +490,102 @@ class Segmentation(Object):
             l0 = int(boundary.GetComponent(i, 0))
             l1 = int(boundary.GetComponent(i, 1))
             mask.append((l0 in set_a and l1 in set_b) or (l0 in set_b and l1 in set_a))
+        return mask
+
+    def label_centroid(self, labels: list[int], frame: int = 0) -> list[float] | None:
+        mesh = self._frame_mesh(frame)
+        if mesh is None or not labels:
+            return None
+        mask = self._label_mask(mesh, labels)
+        if mask is None:
+            return None
         return masked_centroid(mesh, mask)
+
+    def interface_centroid(
+        self, labels_a: list[int], labels_b: list[int], frame: int = 0
+    ) -> list[float] | None:
+        mesh = self._frame_mesh(frame)
+        if mesh is None or not labels_a or not labels_b:
+            return None
+        mask = self._interface_mask(mesh, labels_a, labels_b)
+        if mask is None:
+            return None
+        return masked_centroid(mesh, mask)
+
+    def interface_plane(
+        self,
+        labels_a: list[int],
+        labels_b: list[int],
+        frame: int = 0,
+        anchor: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, float] | None:
+        """Dominant plane of the A/B interface.
+
+        Returns (centroid, axes, flatness) where the columns of ``axes`` are the
+        two in-plane directions and the plane normal, oriented from group A
+        toward group B. ``flatness`` is the out-of-plane spread relative to the
+        smaller in-plane spread: 0 is perfectly planar.
+
+        ``anchor`` is a previously computed basis; passing the same one across
+        a series of frames keeps the in-plane rotation continuous.
+        """
+        mesh = self._frame_mesh(frame)
+        if mesh is None or not labels_a or not labels_b:
+            return None
+        mask = self._interface_mask(mesh, labels_a, labels_b)
+        if mask is None:
+            return None
+        surface = masked_surface(mesh, mask)
+        if surface is None or surface.GetNumberOfPoints() < 3:
+            return None
+
+        centroid, axes, extents = principal_axes(surface_points(surface))
+        if extents[1] <= 0:
+            return None
+
+        normal = self._normal_sign(axes[:, 2], labels_a, labels_b, frame, anchor)
+        return centroid, plane_basis(normal, anchor), float(extents[2] / extents[1])
+
+    def _normal_sign(
+        self,
+        normal: np.ndarray,
+        labels_a: list[int],
+        labels_b: list[int],
+        frame: int,
+        anchor: np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Resolve the arbitrary sign PCA returns for the plane normal.
+
+        With an ``anchor`` the sign is taken from it, which keeps the normal
+        consistent across a series and avoids re-deciding from geometry that may
+        be marginal on any given frame. It also skips the two centroid passes
+        ``_orient_normal`` needs.
+
+        Without one -- the frame that establishes the anchor -- the sign is
+        decided geometrically, from group A toward group B.
+        """
+        if anchor is not None:
+            return -normal if normal @ anchor[:, 2] < 0 else normal
+        return self._orient_normal(normal, labels_a, labels_b, frame)
+
+    def _orient_normal(
+        self, normal: np.ndarray, labels_a: list[int], labels_b: list[int], frame: int
+    ) -> np.ndarray:
+        """Point the plane normal from group A toward group B.
+
+        This compares whole-group centroids, so it assumes group B lies on the
+        far side of the interface. That does not hold when a group is
+        disconnected or wraps around the other, in which case the two centroids
+        can fall on the same side and the sign becomes marginal -- which is why
+        it is used only to establish the anchor, not on every frame.
+        """
+        centroid_a = self.label_centroid(labels_a, frame)
+        centroid_b = self.label_centroid(labels_b, frame)
+        if centroid_a is not None and centroid_b is not None:
+            direction = np.asarray(centroid_b) - np.asarray(centroid_a)
+            if normal @ direction < 0:
+                return -normal
+        return normal
 
     def update_mpr_opacity(self, frame: int, opacity: float):
         """Update opacity for all MPR overlay labels."""

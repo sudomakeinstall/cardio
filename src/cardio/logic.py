@@ -7,6 +7,8 @@ from trame.app import asynchronous
 from .scene import Scene
 from .screenshot import Screenshot
 
+ALIGN_STEP_NAME = "Interface plane"
+
 
 class Logic:
     def _get_visible_rotation_data(self):
@@ -66,7 +68,7 @@ class Logic:
     def __init__(self, server, scene: Scene):
         self.server = server
         self.scene = scene
-        self._lock_centroids: dict[int, list[float] | None] = {}
+        self._invalidate_lock_cache()
 
         # Playback timing state
         self._playback_start_time = None
@@ -151,6 +153,9 @@ class Logic:
                 self._on_snap_selection_changed
             )
             self.server.state.change("snap_locked")(self._on_snap_lock_changed)
+            self.server.state.change("snap_orientation_locked")(
+                self._on_snap_orientation_lock_changed
+            )
 
         # Initialize visibility state variables
         for m in self.scene.meshes:
@@ -176,6 +181,8 @@ class Logic:
             ]
             self.server.state.snap_no_interface = False
             self.server.state.snap_locked = False
+            self.server.state.interface_flatness = 0.0
+            self.server.state.snap_orientation_locked = False
 
         # Initialize preset state variables
         for v in self.scene.volumes:
@@ -266,6 +273,7 @@ class Logic:
         self.server.controller.reset_rotations = self.reset_mpr_rotations
         self.server.controller.reset_mpr_origin = self.reset_mpr_origin
         self.server.controller.snap_to_centroid = self.snap_to_centroid
+        self.server.controller.align_to_interface = self.align_to_interface
 
         # Initialize screenshot viewport state
         for viewport in ("vr", "axial", "coronal", "sagittal"):
@@ -898,15 +906,25 @@ class Logic:
             getattr(self.server.state, "mpr_rotation_data", {})
         )
 
-        # Convert rotation axes and angles (skip quaternion steps)
+        # Convert every step; the conversion is its own inverse, so the same
+        # mapping serves both ITK<->ROMA directions.
         if rotation_data.get("angles_list"):
             for rotation in rotation_data["angles_list"]:
-                if rotation.get("quaternion") is not None:
+                quaternion = rotation.get("quaternion")
+                if quaternion is not None:
+                    # Matches the conversion _get_visible_rotation_data applies
+                    # on read; without it the stored value would keep its numbers
+                    # while changing meaning.
+                    rotation["quaternion"] = [
+                        -quaternion[2],
+                        -quaternion[1],
+                        -quaternion[0],
+                        quaternion[3],
+                    ]
                     continue
+
                 current_axis = rotation.get("axis")
                 current_angle = rotation.get("angle", 0)
-
-                # Conversion is the same for both ITK<->ROMA directions
                 rotation["axis"] = {"X": "Z", "Y": "Y", "Z": "X"}[current_axis]
                 rotation["angle"] = -current_angle
 
@@ -1505,25 +1523,48 @@ class Logic:
         return self._lock_centroids[frame]
 
     def apply_frame_lock(self, frame: int):
-        """Re-centre on the locked centroid for ``frame``; no-op unless locked."""
+        """Re-apply the locked position and orientation for ``frame``.
+
+        Position and orientation lock independently; this is a no-op unless at
+        least one is enabled.
+        """
         state = self.server.state
-        if not getattr(state, "snap_locked", False):
+        mode = getattr(state, "snap_mode", "label")
+        if mode == "reset":
             return
-        if getattr(state, "snap_mode", "label") == "reset":
+
+        lock_position = getattr(state, "snap_locked", False)
+        lock_orientation = (
+            getattr(state, "snap_orientation_locked", False) and mode == "interface"
+        )
+        if not (lock_position or lock_orientation):
             return
         if self._snap_selection() is None:
             return
 
-        center = self._locked_centroid(frame)
-        if center is None:
-            state.snap_no_interface = True
-            return
+        missing = False
 
-        state.snap_no_interface = False
-        self._set_mpr_origin(center)
+        if lock_position:
+            center = self._locked_centroid(frame)
+            if center is None:
+                missing = True
+            else:
+                self._set_mpr_origin(center)
+
+        if lock_orientation:
+            plane = self._interface_plane(frame)
+            if plane is None:
+                missing = True
+            else:
+                self._apply_alignment(plane)
+
+        state.snap_no_interface = missing
 
     def _invalidate_lock_cache(self):
-        self._lock_centroids = {}
+        """Drop the memoized per-frame centroids and interface planes."""
+        self._lock_centroids: dict[int, list[float] | None] = {}
+        self._lock_planes: dict[int, tuple | None] = {}
+        self._align_reference = None
 
     def _on_snap_selection_changed(self, **kwargs):
         """Re-snap when the selection changes while locked."""
@@ -1535,6 +1576,103 @@ class Logic:
         self._invalidate_lock_cache()
         if snap_locked:
             self.snap_to_centroid()
+
+    def _on_snap_orientation_lock_changed(self, snap_orientation_locked=None, **kwargs):
+        self._invalidate_lock_cache()
+        if snap_orientation_locked:
+            self.align_to_interface()
+
+    def _interface_plane(self, frame: int):
+        """Memoized dominant plane of the selected interface at ``frame``."""
+        if frame not in self._lock_planes:
+            selection = self._snap_selection()
+            if selection is None:
+                self._lock_planes[frame] = None
+            else:
+                seg, _, labels_a, labels_b = selection
+                plane = seg.interface_plane(
+                    labels_a, labels_b, frame, anchor=self._align_reference
+                )
+                # Carry the first plane's basis onto later frames, so the view
+                # does not spin as the normal moves.
+                if plane is not None and self._align_reference is None:
+                    self._align_reference = plane[1]
+                self._lock_planes[frame] = plane
+        return self._lock_planes[frame]
+
+    def _apply_alignment(self, plane):
+        """Replace the alignment step so the views are based on ``plane``.
+
+        The step goes first in the sequence, so any rotations the user has added
+        are applied on top of it and keep their meaning relative to the plane: a
+        Z rotation spins within it, X and Y tilt out of it.
+        """
+        import copy
+
+        from .orientation import (
+            IndexOrder,
+            axcode_transform_matrix,
+            rotation_matrix_to_quaternion,
+        )
+
+        state = self.server.state
+        _, axes, flatness = plane
+        state.interface_flatness = flatness
+
+        # The reslice matrix is cumulative @ view_transform, so the rotation that
+        # puts the axial view in the interface plane satisfies R @ T_axial = axes.
+        target = axes @ axcode_transform_matrix("LPS", "LAS").T
+        quaternion = rotation_matrix_to_quaternion(target)
+
+        if self.scene.mpr_rotation_sequence.metadata.index_order == IndexOrder.ROMA:
+            quaternion = [
+                -quaternion[2],
+                -quaternion[1],
+                -quaternion[0],
+                quaternion[3],
+            ]
+
+        current_data = copy.deepcopy(
+            getattr(state, "mpr_rotation_data", {"angles_list": []})
+        )
+        angles_list = [
+            step
+            for step in current_data["angles_list"]
+            if step.get("name") != ALIGN_STEP_NAME
+        ]
+        angles_list.insert(
+            0,
+            {
+                "axis": None,
+                "angle": None,
+                "quaternion": quaternion,
+                "visible": True,
+                "name": ALIGN_STEP_NAME,
+                "name_editable": False,
+                "deletable": True,
+            },
+        )
+        current_data["angles_list"] = angles_list
+        state.mpr_rotation_data = current_data
+
+    def align_to_interface(self, **kwargs):
+        """Rotate the MPR views into the dominant plane of the selected interface."""
+        state = self.server.state
+        if getattr(state, "snap_mode", "label") != "interface":
+            return
+        if self._snap_selection() is None:
+            return
+
+        frame = getattr(state, "frame", 0)
+        plane = self._interface_plane(frame)
+        if plane is None:
+            state.snap_no_interface = True
+            state.interface_flatness = 0.0
+            return
+
+        state.snap_no_interface = False
+        self._apply_alignment(plane)
+        self._set_mpr_origin(self._snap_centroid(frame) or plane[0])
 
     def finalize_mpr_initialization(self, **kwargs):
         """Set the active volume label after UI is ready to avoid race condition."""

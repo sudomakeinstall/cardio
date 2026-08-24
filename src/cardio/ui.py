@@ -19,6 +19,8 @@ from .scene import Scene
 from .volume_property_presets import list_volume_property_presets
 from .window_level import presets
 
+NONPLANAR_FLATNESS = 0.25
+
 
 class UI:
     @property
@@ -566,32 +568,78 @@ class UI:
                             classes="mb-2",
                             variant="tonal",
                         )
-                        vuetify.VBtn(
-                            "Snap",
+                        with vuetify.VRow(
                             v_if="!maximized_view && active_volume_label",
-                            click=self.server.controller.snap_to_centroid,
-                            disabled=(
-                                "snap_mode === 'reset' ? false : snap_mode === 'label' ? snap_labels_a.length === 0 : snap_labels_a.length === 0 || snap_labels_b.length === 0",
-                            ),
-                            small=True,
+                            no_gutters=True,
+                            classes="mb-2 align-center",
+                        ):
+                            with vuetify.VCol():
+                                vuetify.VBtn(
+                                    "Snap",
+                                    click=self.server.controller.snap_to_centroid,
+                                    disabled=(
+                                        "snap_mode === 'reset' ? false : snap_mode === 'label' ? snap_labels_a.length === 0 : snap_labels_a.length === 0 || snap_labels_b.length === 0",
+                                    ),
+                                    small=True,
+                                    dense=True,
+                                    outlined=True,
+                                    block=True,
+                                    prepend_icon="mdi-target",
+                                )
+                            with vuetify.VCol(cols="auto", classes="ps-1"):
+                                vuetify.VCheckbox(
+                                    v_if="snap_mode !== 'reset'",
+                                    v_model=("snap_locked", False),
+                                    true_icon="mdi-lock",
+                                    false_icon="mdi-lock-open-variant",
+                                    color="primary",
+                                    disabled=(
+                                        "snap_mode === 'label' ? snap_labels_a.length === 0 : snap_labels_a.length === 0 || snap_labels_b.length === 0",
+                                    ),
+                                    title="Re-snap automatically whenever the frame changes",
+                                    density="compact",
+                                    hide_details=True,
+                                )
+                        with vuetify.VRow(
+                            v_if="!maximized_view && active_volume_label && snap_mode === 'interface'",
+                            no_gutters=True,
+                            classes="mb-2 align-center",
+                        ):
+                            with vuetify.VCol():
+                                vuetify.VBtn(
+                                    "Align to Interface",
+                                    click=self.server.controller.align_to_interface,
+                                    disabled=(
+                                        "snap_labels_a.length === 0 || snap_labels_b.length === 0",
+                                    ),
+                                    title="Rotate the MPR views into the plane of the interface",
+                                    small=True,
+                                    dense=True,
+                                    outlined=True,
+                                    block=True,
+                                    prepend_icon="mdi-axis-arrow",
+                                )
+                            with vuetify.VCol(cols="auto", classes="ps-1"):
+                                vuetify.VCheckbox(
+                                    v_model=("snap_orientation_locked", False),
+                                    true_icon="mdi-lock",
+                                    false_icon="mdi-lock-open-variant",
+                                    color="primary",
+                                    disabled=(
+                                        "snap_labels_a.length === 0 || snap_labels_b.length === 0",
+                                    ),
+                                    title="Re-align to the interface plane whenever the frame changes",
+                                    density="compact",
+                                    hide_details=True,
+                                )
+                        vuetify.VAlert(
+                            "Interface is not clearly planar; the fitted plane may "
+                            "not be meaningful.",
+                            v_if=f"interface_flatness > {NONPLANAR_FLATNESS}",
+                            type="warning",
                             dense=True,
-                            outlined=True,
-                            block=True,
                             classes="mb-2",
-                            prepend_icon="mdi-target",
-                        )
-                        vuetify.VSwitch(
-                            v_if="!maximized_view && active_volume_label && snap_mode !== 'reset'",
-                            v_model=("snap_locked", False),
-                            label="Lock to frame",
-                            title="Re-snap automatically whenever the frame changes",
-                            disabled=(
-                                "snap_mode === 'label' ? snap_labels_a.length === 0 : snap_labels_a.length === 0 || snap_labels_b.length === 0",
-                            ),
-                            color="primary",
-                            dense=True,
-                            hide_details=True,
-                            classes="mb-2",
+                            variant="tonal",
                         )
 
                     # MPR Rotation controls
@@ -658,7 +706,10 @@ class UI:
                                             keyup="$event.stopPropagation(); $event.stopImmediatePropagation();",
                                             keypress="$event.stopPropagation(); $event.stopImmediatePropagation();",
                                         )
-                                with vuetify.VRow(no_gutters=True):
+                                with vuetify.VRow(
+                                    no_gutters=True,
+                                    v_if=f"!mpr_rotation_data.angles_list[{i}].quaternion",
+                                ):
                                     with vuetify.VCol(cols="12"):
                                         vuetify.VSlider(
                                             v_model=(
@@ -683,6 +734,7 @@ class UI:
                                     vuetify.VSpacer()
                                     with vuetify.VCol(cols="4"):
                                         vuetify.VSelect(
+                                            v_if=f"!mpr_rotation_data.angles_list[{i}].quaternion",
                                             v_model=(
                                                 f"mpr_rotation_data.angles_list[{i}].axis",
                                             ),
@@ -707,6 +759,7 @@ class UI:
                                     with vuetify.VCol(cols="auto"):
                                         vuetify.VBtn(
                                             icon="mdi-restore",
+                                            v_if=f"!mpr_rotation_data.angles_list[{i}].quaternion",
                                             click=ft.partial(
                                                 self.server.controller.reset_rotation_angle,
                                                 i,

@@ -12,6 +12,7 @@ from cardio.orientation import (
     is_axis_aligned,
     is_righthanded_axcode,
     is_valid_axcode,
+    minimal_rotation,
     quaternion_to_rotation_matrix,
     read_frames,
     reset_direction,
@@ -438,3 +439,33 @@ def test_quaternion_to_rotation_matrix_is_rotation():
     mat = quaternion_to_rotation_matrix(q)
     assert np.allclose(mat @ mat.T, np.eye(3), atol=1e-6)
     assert np.isclose(np.linalg.det(mat), 1.0, atol=1e-6)
+
+
+def test_minimal_rotation_identity():
+    axis = np.array([0.0, 0.0, 1.0])
+    assert minimal_rotation(axis, axis) == pytest.approx(np.eye(3), abs=1e-12)
+
+
+def test_minimal_rotation_maps_source_onto_target():
+    source = np.array([1.0, 0.0, 0.0])
+    target = np.array([0.0, 1.0, 1.0]) / np.sqrt(2)
+    rotation = minimal_rotation(source, target)
+    assert rotation @ source == pytest.approx(target, abs=1e-12)
+    assert rotation.T @ rotation == pytest.approx(np.eye(3), abs=1e-12)
+    assert np.linalg.det(rotation) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_minimal_rotation_handles_opposed_vectors():
+    source = np.array([0.0, 0.0, 1.0])
+    rotation = minimal_rotation(source, -source)
+    assert rotation @ source == pytest.approx(-source, abs=1e-12)
+    assert np.linalg.det(rotation) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_minimal_rotation_is_the_smallest_one():
+    """No rotation angle smaller than the angle between the vectors."""
+    source = np.array([1.0, 0.0, 0.0])
+    target = np.array([0.0, 0.0, 1.0])
+    rotation = minimal_rotation(source, target)
+    angle = np.degrees(np.arccos((np.trace(rotation) - 1.0) / 2.0))
+    assert angle == pytest.approx(90.0, abs=1e-9)

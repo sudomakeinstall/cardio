@@ -7,30 +7,10 @@ import pytest
 from cardio.logic import Logic
 from cardio.orientation import IndexOrder
 from cardio.segmentation import Segmentation
+from tests.fakes import FakeScene, FakeState
 
 BLOCK_CENTER = 4.5
 INTERFACE_X = 4.5
-
-
-class FakeState(dict):
-    """Stand-in for trame's state: attribute access over a plain dict."""
-
-    def __getattr__(self, name):
-        try:
-            return self[name]
-        except KeyError as exc:
-            raise AttributeError(name) from exc
-
-    def __setattr__(self, name, value):
-        self[name] = value
-
-
-class FakeScene:
-    def __init__(self, segmentations, index_order=IndexOrder.ITK):
-        self.segmentations = segmentations
-        self.mpr_rotation_sequence = type(
-            "Seq", (), {"metadata": type("Meta", (), {"index_order": index_order})()}
-        )()
 
 
 def shifting_label_array(offset: int) -> np.ndarray:
@@ -70,7 +50,7 @@ def logic(moving_segmentation) -> Logic:
         frame=0,
         mpr_origin=[0.0, 0.0, 0.0],
     )
-    obj._lock_centroids = {}
+    obj._invalidate_lock_cache()
     return obj
 
 
@@ -189,7 +169,7 @@ def test_roma_index_order_swaps_axes(moving_segmentation):
         frame=0,
         mpr_origin=[0.0, 0.0, 0.0],
     )
-    obj._lock_centroids = {}
+    obj._invalidate_lock_cache()
 
     itk_centroid = obj._snap_centroid(0)
     obj.apply_frame_lock(0)

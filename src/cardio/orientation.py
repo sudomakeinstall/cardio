@@ -133,6 +133,75 @@ def quaternion_to_rotation_matrix(q: list[float]) -> np.ndarray:
     return roma.unitquat_to_rotmat(tensor).numpy()
 
 
+def cumulative_rotation_matrix(
+    rotation_sequence, rotation_angles=None, units: AngleUnits = AngleUnits.DEGREES
+) -> np.ndarray:
+    """Compose a rotation sequence into a single 3x3 matrix.
+
+    Steps may be dicts or RotationStep objects, and are applied in order.
+    """
+    cumulative = np.eye(3)
+    for i, step in enumerate(rotation_sequence or []):
+        quat = step.get("quaternion") if isinstance(step, dict) else step.quaternion
+        if quat is not None:
+            rotation_matrix = quaternion_to_rotation_matrix(quat)
+        else:
+            axis = step.get("axis") if isinstance(step, dict) else step.axis
+            angle = rotation_angles.get(i, 0) if rotation_angles else 0
+            rotation_matrix = euler_angle_to_rotation_matrix(
+                EulerAxis(axis), angle, units
+            )
+        cumulative = cumulative @ rotation_matrix
+    return cumulative
+
+
+def minimal_rotation(source: np.ndarray, target: np.ndarray) -> np.ndarray:
+    """Smallest rotation carrying unit vector ``source`` onto ``target``.
+
+    Undefined for exactly opposed vectors; an arbitrary perpendicular axis is
+    used in that case.
+    """
+    source = np.asarray(source, dtype=np.float64)
+    target = np.asarray(target, dtype=np.float64)
+    source = source / np.linalg.norm(source)
+    target = target / np.linalg.norm(target)
+
+    axis = np.cross(source, target)
+    cosine = float(source @ target)
+    sine = float(np.linalg.norm(axis))
+
+    if sine < 1e-12:
+        if cosine > 0:
+            return np.eye(3)
+        perpendicular = np.array([1.0, 0.0, 0.0])
+        if abs(source @ perpendicular) > 0.9:
+            perpendicular = np.array([0.0, 1.0, 0.0])
+        axis = np.cross(source, perpendicular)
+        axis = axis / np.linalg.norm(axis)
+        cross = np.array(
+            [
+                [0.0, -axis[2], axis[1]],
+                [axis[2], 0.0, -axis[0]],
+                [-axis[1], axis[0], 0.0],
+            ]
+        )
+        return np.eye(3) + 2.0 * cross @ cross
+
+    cross = np.array(
+        [[0.0, -axis[2], axis[1]], [axis[2], 0.0, -axis[0]], [-axis[1], axis[0], 0.0]]
+    )
+    return np.eye(3) + cross + cross @ cross * ((1.0 - cosine) / (sine**2))
+
+
+def rotation_matrix_to_quaternion(matrix: np.ndarray) -> list[float]:
+    """Convert a 3x3 rotation matrix to a quaternion [x, y, z, w]."""
+    import roma
+    import torch as t
+
+    quat = roma.rotmat_to_unitquat(t.tensor(np.asarray(matrix), dtype=t.float64))
+    return [float(v) for v in quat]
+
+
 def is_axis_aligned(image) -> bool:
     """Check if ITK image orientation is axis-aligned.
 
