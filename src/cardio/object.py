@@ -2,6 +2,7 @@ import functools
 import logging
 import pathlib as pl
 import re
+import typing as ty
 
 import pydantic as pc
 import vtk
@@ -13,6 +14,9 @@ class Object(pc.BaseModel):
     """Base class for renderable objects with validated configuration."""
 
     model_config = pc.ConfigDict(arbitrary_types_allowed=True, frozen=True)
+
+    # Names this object's per-type state keys; see state.ObjectState
+    kind: ty.ClassVar[str] = "object"
 
     label: str = pc.Field(description="Object identifier (only [a-zA-Z0-9_] allowed)")
     directory: pl.Path = pc.Field(description="Directory containing object files")
@@ -73,6 +77,17 @@ class Object(pc.BaseModel):
                 raise ValueError(f"File does not exist: {path}")
 
         return self
+
+    def frame_actor(self, frame: int):
+        """The actor shown at ``frame``, wrapping for series shorter than the scene."""
+        if not self.actors:
+            return None
+        return self.actors[frame % len(self.actors)]
+
+    def add_to_renderer(self, renderer):
+        """Add every frame's actor to a renderer."""
+        for actor in self.actors:
+            renderer.AddActor(actor)
 
     def path_for_frame(self, frame: int) -> pl.Path:
         if self.pattern is None:

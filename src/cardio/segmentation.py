@@ -134,6 +134,8 @@ def plane_basis(normal: np.ndarray, anchor: np.ndarray | None = None) -> np.ndar
 class Segmentation(Object):
     """Segmentation object with multi-label mesh extraction using SurfaceNets."""
 
+    kind: ty.ClassVar[str] = "segmentation"
+
     pattern: str = pc.Field(
         default="{frame}.nii.gz",
         description="Filename pattern with $frame placeholder",

@@ -8,6 +8,7 @@ from .convention import Convention, exchange_point, exchange_step
 from .orientation import cumulative_rotation_matrix
 from .scene import Scene
 from .screenshot import Screenshot
+from .state import ObjectState
 
 ALIGN_STEP_NAME = "Interface plane"
 
@@ -110,7 +111,7 @@ class Logic:
             self.update_segmentation_opacity
         )
         for s in self.scene.segmentations:
-            self.server.state.change(f"mpr_segmentation_overlay_{s.label}")(
+            self.server.state.change(ObjectState.of(s).mpr_overlay)(
                 self.sync_segmentation_overlays
             )
 
@@ -124,17 +125,12 @@ class Logic:
                 self._on_snap_orientation_lock_changed
             )
 
-        # Initialize visibility state variables
-        for m in self.scene.meshes:
-            self.server.state[f"mesh_visibility_{m.label}"] = m.visible
-        for v in self.scene.volumes:
-            self.server.state[f"volume_visibility_{v.label}"] = v.visible
-        for s in self.scene.segmentations:
-            self.server.state[f"segmentation_visibility_{s.label}"] = s.visible
+        for obj in self.scene.renderables:
+            self.server.state[ObjectState.of(obj).visibility] = obj.visible
 
         # Initialize MPR overlay state variables
         for s in self.scene.segmentations:
-            self.server.state[f"mpr_segmentation_overlay_{s.label}"] = False
+            self.server.state[ObjectState.of(s).mpr_overlay] = False
         self.server.state.mpr_segmentation_opacity = 0.7
 
         if self.scene.segmentations:
@@ -151,75 +147,26 @@ class Logic:
             self.server.state.interface_flatness = 0.0
             self.server.state.snap_orientation_locked = False
 
-        # Initialize preset state variables
-        for v in self.scene.volumes:
-            self.server.state[f"volume_preset_{v.label}"] = v.transfer_function_preset
+        for obj in self.scene.renderables:
+            self.server.state[ObjectState.of(obj).clipping] = obj.clipping_enabled
 
-        # Initialize clipping state variables
-        for m in self.scene.meshes:
-            self.server.state[f"mesh_clipping_{m.label}"] = m.clipping_enabled
-        for v in self.scene.volumes:
-            self.server.state[f"volume_clipping_{v.label}"] = v.clipping_enabled
-        for s in self.scene.segmentations:
-            self.server.state[f"segmentation_clipping_{s.label}"] = s.clipping_enabled
-        self.server.state.change(
-            *[f"mesh_visibility_{m.label}" for m in self.scene.meshes]
-        )(self.sync_mesh_visibility)
-        self.server.state.change(
-            *[f"volume_visibility_{v.label}" for v in self.scene.volumes]
-        )(self.sync_volume_visibility)
-        self.server.state.change(
-            *[f"segmentation_visibility_{s.label}" for s in self.scene.segmentations]
-        )(self.sync_segmentation_visibility)
-        self.server.state.change(
-            *[f"volume_preset_{v.label}" for v in self.scene.volumes]
-        )(self.sync_volume_presets)
+        visibility_keys = [
+            ObjectState.of(obj).visibility for obj in self.scene.renderables
+        ]
+        if visibility_keys:
+            self.server.state.change(*visibility_keys)(self.sync_visibility)
 
-        # Set up mesh clipping controls
-        mesh_clipping_controls = []
-        for m in self.scene.meshes:
-            mesh_clipping_controls.extend(
-                [
-                    f"mesh_clipping_{m.label}",
-                    f"clip_x_{m.label}",
-                    f"clip_y_{m.label}",
-                    f"clip_z_{m.label}",
-                ]
-            )
-        if mesh_clipping_controls:
-            self.server.state.change(*mesh_clipping_controls)(self.sync_mesh_clipping)
+        preset_keys = [ObjectState.of(v).preset for v in self.scene.volumes]
+        if preset_keys:
+            self.server.state.change(*preset_keys)(self.sync_volume_presets)
 
-        # Set up volume clipping controls
-        volume_clipping_controls = []
-        for v in self.scene.volumes:
-            volume_clipping_controls.extend(
-                [
-                    f"volume_clipping_{v.label}",
-                    f"clip_x_{v.label}",
-                    f"clip_y_{v.label}",
-                    f"clip_z_{v.label}",
-                ]
-            )
-        if volume_clipping_controls:
-            self.server.state.change(*volume_clipping_controls)(
-                self.sync_volume_clipping
-            )
-
-        # Set up segmentation clipping controls
-        segmentation_clipping_controls = []
-        for s in self.scene.segmentations:
-            segmentation_clipping_controls.extend(
-                [
-                    f"segmentation_clipping_{s.label}",
-                    f"clip_x_{s.label}",
-                    f"clip_y_{s.label}",
-                    f"clip_z_{s.label}",
-                ]
-            )
-        if segmentation_clipping_controls:
-            self.server.state.change(*segmentation_clipping_controls)(
-                self.sync_segmentation_clipping
-            )
+        clipping_keys = [
+            key
+            for obj in self.scene.renderables
+            for key in ObjectState.of(obj).clip_controls
+        ]
+        if clipping_keys:
+            self.server.state.change(*clipping_keys)(self.sync_clipping)
 
         self.server.controller.increment_frame = self.increment_frame
         self.server.controller.decrement_frame = self.decrement_frame
@@ -309,21 +256,9 @@ class Logic:
 
         self.scene.hide_all_frames()
 
-        # Show frame with server state visibility
-        for mesh in self.scene.meshes:
-            visible = self.server.state[f"mesh_visibility_{mesh.label}"]
-            if visible:
-                mesh.actors[frame % len(mesh.actors)].SetVisibility(True)
-
-        for volume in self.scene.volumes:
-            visible = self.server.state[f"volume_visibility_{volume.label}"]
-            if visible:
-                volume.actors[frame % len(volume.actors)].SetVisibility(True)
-
-        for segmentation in self.scene.segmentations:
-            visible = self.server.state[f"segmentation_visibility_{segmentation.label}"]
-            if visible:
-                actor = segmentation.actors[frame % len(segmentation.actors)]
+        for obj in self.scene.renderables:
+            actor = obj.frame_actor(frame)
+            if actor is not None and self.server.state[ObjectState.of(obj).visibility]:
                 actor.SetVisibility(True)
 
         # Update MPR views if MPR is enabled
@@ -365,7 +300,7 @@ class Logic:
         )
 
         for seg in self.scene.segmentations:
-            if self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
+            if self.server.state[ObjectState.of(seg).mpr_overlay]:
                 seg.update_slice_positions(
                     frame,
                     origin,
@@ -522,23 +457,13 @@ class Logic:
             self._last_target_frame = None
             self._is_rendering = False
 
-    def sync_mesh_visibility(self, **kwargs):
-        for m in self.scene.meshes:
-            visible = self.server.state[f"mesh_visibility_{m.label}"]
-            m.actors[self.server.state.frame % len(m.actors)].SetVisibility(visible)
-        self.server.controller.view_update()
-
-    def sync_volume_visibility(self, **kwargs):
-        for v in self.scene.volumes:
-            visible = self.server.state[f"volume_visibility_{v.label}"]
-            v.actors[self.server.state.frame % len(v.actors)].SetVisibility(visible)
-        self.server.controller.view_update()
-
-    def sync_segmentation_visibility(self, **kwargs):
-        for s in self.scene.segmentations:
-            visible = self.server.state[f"segmentation_visibility_{s.label}"]
-            actor = s.actors[self.server.state.frame % len(s.actors)]
-            actor.SetVisibility(visible)
+    def sync_visibility(self, **kwargs):
+        """Show or hide each object's current frame, per its visibility toggle."""
+        frame = self.server.state.frame
+        for obj in self.scene.renderables:
+            actor = obj.frame_actor(frame)
+            if actor is not None:
+                actor.SetVisibility(self.server.state[ObjectState.of(obj).visibility])
         self.server.controller.view_update()
 
     def sync_volume_presets(self, **kwargs):
@@ -546,7 +471,7 @@ class Logic:
         from .volume_property_presets import load_volume_property_preset
 
         for v in self.scene.volumes:
-            preset_name = self.server.state[f"volume_preset_{v.label}"]
+            preset_name = self.server.state[ObjectState.of(v).preset]
             preset = load_volume_property_preset(preset_name)
 
             # Apply preset to all actors
@@ -555,81 +480,23 @@ class Logic:
 
         self.server.controller.view_update()
 
-    def sync_mesh_clipping(self, **kwargs):
-        """Update mesh clipping based on UI controls."""
-        for m in self.scene.meshes:
-            # Toggle clipping on/off
-            clipping_enabled = self.server.state[f"mesh_clipping_{m.label}"]
-            m.toggle_clipping(clipping_enabled)
+    def sync_clipping(self, **kwargs):
+        """Apply each object's clipping toggle and bounds from the UI controls."""
+        for obj in self.scene.renderables:
+            keys = ObjectState.of(obj)
+            enabled = self.server.state[keys.clipping]
+            obj.toggle_clipping(enabled)
 
-            # Update clipping bounds from sliders
-            if clipping_enabled and hasattr(self.server.state, f"clip_x_{m.label}"):
-                x_bounds = getattr(self.server.state, f"clip_x_{m.label}")
-                y_bounds = getattr(self.server.state, f"clip_y_{m.label}")
-                z_bounds = getattr(self.server.state, f"clip_z_{m.label}")
+            if not enabled:
+                continue
 
-                bounds = [
-                    x_bounds[0],
-                    x_bounds[1],  # x_min, x_max
-                    y_bounds[0],
-                    y_bounds[1],  # y_min, y_max
-                    z_bounds[0],
-                    z_bounds[1],  # z_min, z_max
-                ]
+            ranges = [getattr(self.server.state, key, None) for key in keys.clip_bounds]
+            if not all(ranges):
+                continue
 
-                m.update_clipping_bounds(bounds)
-
-        self.server.controller.view_update()
-
-    def sync_volume_clipping(self, **kwargs):
-        """Update volume clipping based on UI controls."""
-        for v in self.scene.volumes:
-            # Toggle clipping on/off
-            clipping_enabled = self.server.state[f"volume_clipping_{v.label}"]
-            v.toggle_clipping(clipping_enabled)
-
-            # Update clipping bounds if enabled
-            if clipping_enabled:
-                x_range = self.server.state[f"clip_x_{v.label}"]
-                y_range = self.server.state[f"clip_y_{v.label}"]
-                z_range = self.server.state[f"clip_z_{v.label}"]
-
-                if x_range and y_range and z_range:
-                    bounds = [
-                        x_range[0],
-                        x_range[1],
-                        y_range[0],
-                        y_range[1],
-                        z_range[0],
-                        z_range[1],
-                    ]
-                    v.update_clipping_bounds(bounds)
-
-        self.server.controller.view_update()
-
-    def sync_segmentation_clipping(self, **kwargs):
-        """Update segmentation clipping based on UI controls."""
-        for s in self.scene.segmentations:
-            # Toggle clipping on/off
-            clipping_enabled = self.server.state[f"segmentation_clipping_{s.label}"]
-            s.toggle_clipping(clipping_enabled)
-
-            # Update clipping bounds if enabled
-            if clipping_enabled:
-                x_range = self.server.state[f"clip_x_{s.label}"]
-                y_range = self.server.state[f"clip_y_{s.label}"]
-                z_range = self.server.state[f"clip_z_{s.label}"]
-
-                if x_range and y_range and z_range:
-                    bounds = [
-                        x_range[0],
-                        x_range[1],
-                        y_range[0],
-                        y_range[1],
-                        z_range[0],
-                        z_range[1],
-                    ]
-                    s.update_clipping_bounds(bounds)
+            obj.update_clipping_bounds(
+                [bound for axis in ranges for bound in (axis[0], axis[1])]
+            )
 
         self.server.controller.view_update()
 
@@ -847,59 +714,22 @@ class Logic:
         self.scene.mpr_rotation_sequence.metadata.index_order = new_convention
 
     def _initialize_clipping_state(self):
-        """Initialize clipping state variables for all objects."""
-        # Initialize mesh clipping state
-        for m in self.scene.meshes:
-            # Initialize panel state
-            setattr(self.server.state, f"clip_panel_{m.label}", [])
+        """Seed the clip panels and range sliders from each object's bounds."""
+        for obj in self.scene.renderables:
+            keys = ObjectState.of(obj)
+            self.server.state[keys.clip_panel] = []
 
-            # Initialize range sliders with mesh bounds if available
-            if m.actors:
-                bounds = m.combined_bounds
-                setattr(self.server.state, f"clip_x_{m.label}", [bounds[0], bounds[1]])
-                setattr(self.server.state, f"clip_y_{m.label}", [bounds[2], bounds[3]])
-                setattr(self.server.state, f"clip_z_{m.label}", [bounds[4], bounds[5]])
+            if not obj.actors:
+                continue
 
-        # Initialize volume clipping state
-        for v in self.scene.volumes:
-            preset_key = getattr(v, "transfer_function_preset", "cardiac")
-            setattr(self.server.state, f"volume_preset_{v.label}", preset_key)
+            bounds = obj.combined_bounds
+            for key, low in zip(keys.clip_bounds, (0, 2, 4)):
+                self.server.state[key] = [bounds[low], bounds[low + 1]]
 
-            # Initialize preset panel state (collapsed by default)
-            setattr(self.server.state, f"preset_panel_{v.label}", [])
-            if hasattr(v, "clipping_enabled"):
-                # Initialize clipping checkbox state
-                setattr(
-                    self.server.state, f"volume_clipping_{v.label}", v.clipping_enabled
-                )
-
-                # Initialize panel state
-                setattr(self.server.state, f"clip_panel_{v.label}", [])
-
-                # Initialize range sliders with volume bounds if available
-                if v.actors:
-                    bounds = v.combined_bounds
-                    setattr(
-                        self.server.state, f"clip_x_{v.label}", [bounds[0], bounds[1]]
-                    )
-                    setattr(
-                        self.server.state, f"clip_y_{v.label}", [bounds[2], bounds[3]]
-                    )
-                    setattr(
-                        self.server.state, f"clip_z_{v.label}", [bounds[4], bounds[5]]
-                    )
-
-        # Initialize segmentation clipping state
-        for s in self.scene.segmentations:
-            # Initialize panel state
-            setattr(self.server.state, f"clip_panel_{s.label}", [])
-
-            # Initialize range sliders with segmentation bounds if available
-            if s.actors:
-                bounds = s.combined_bounds
-                setattr(self.server.state, f"clip_x_{s.label}", [bounds[0], bounds[1]])
-                setattr(self.server.state, f"clip_y_{s.label}", [bounds[2], bounds[3]])
-                setattr(self.server.state, f"clip_z_{s.label}", [bounds[4], bounds[5]])
+        for volume in self.scene.volumes:
+            keys = ObjectState.of(volume)
+            self.server.state[keys.preset] = volume.transfer_function_preset
+            self.server.state[keys.preset_panel] = []
 
     def sync_active_volume(self, active_volume_label, **kwargs):
         """Handle active volume selection for MPR."""
@@ -994,7 +824,7 @@ class Logic:
 
         # Update segmentation overlay positions for all cached frames
         for seg in self.scene.segmentations:
-            if self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
+            if self.server.state[ObjectState.of(seg).mpr_overlay]:
                 for frame in seg._mpr_actors.keys():
                     seg.update_slice_positions(
                         frame,
@@ -1100,7 +930,7 @@ class Logic:
 
         # Update segmentation overlay positions
         for seg in self.scene.segmentations:
-            if self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
+            if self.server.state[ObjectState.of(seg).mpr_overlay]:
                 seg.update_slice_positions(
                     current_frame,
                     origin,
@@ -1491,7 +1321,7 @@ class Logic:
         rotation_sequence, rotation_angles = self._get_visible_rotation_data()
 
         for seg in self.scene.segmentations:
-            if not self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
+            if not self.server.state[ObjectState.of(seg).mpr_overlay]:
                 continue
 
             overlay = seg.get_mpr_actors_for_frame(frame)
@@ -1541,7 +1371,7 @@ class Logic:
         opacity = self.server.state.mpr_segmentation_opacity
 
         for seg in self.scene.segmentations:
-            if self.server.state[f"mpr_segmentation_overlay_{seg.label}"]:
+            if self.server.state[ObjectState.of(seg).mpr_overlay]:
                 seg.update_mpr_opacity(current_frame, opacity)
 
         self.server.controller.view_update()

@@ -1,5 +1,6 @@
 import enum
 import logging
+import typing as ty
 
 import pydantic as pc
 import vtk
@@ -44,6 +45,8 @@ def calculate_squeez(current_area: float, ref_area: float) -> float:
 
 class Mesh(Object):
     """Mesh object with subdivision support."""
+
+    kind: ty.ClassVar[str] = "mesh"
 
     pattern: str = pc.Field(
         default="{frame}.obj", description="Filename pattern with $frame placeholder"

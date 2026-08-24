@@ -1,4 +1,5 @@
 import logging
+import typing as ty
 
 import itk
 import pydantic as pc
@@ -12,6 +13,8 @@ from .volume_property_presets import load_volume_property_preset
 
 class Volume(Object):
     """Volume object with transfer functions and clipping support."""
+
+    kind: ty.ClassVar[str] = "volume"
 
     pattern: str = pc.Field(
         default="{frame}.nii.gz",
@@ -53,6 +56,11 @@ class Volume(Object):
     def preset(self):
         """Load preset based on transfer_function_preset."""
         return load_volume_property_preset(self.transfer_function_preset)
+
+    def add_to_renderer(self, renderer):
+        """Volumes go through AddVolume rather than AddActor."""
+        for actor in self._actors:
+            renderer.AddVolume(actor)
 
     def configure_actors(self):
         """Configure volume properties without adding to renderer."""

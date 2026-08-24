@@ -242,13 +242,8 @@ class Scene(ps.BaseSettings):
         self._renderWindowInteractor.SetRenderWindow(self._renderWindow)
         self._renderWindowInteractor.GetInteractorStyle().SetCurrentStyleToTrackballCamera()
 
-        # Configure all objects
-        for mesh in self.meshes:
-            mesh.configure_actors()
-        for volume in self.volumes:
-            volume.configure_actors()
-        for segmentation in self.segmentations:
-            segmentation.configure_actors()
+        for obj in self.renderables:
+            obj.configure_actors()
 
         # Set current frame using nframes property
         self.current_frame = self.current_frame % self.nframes
@@ -297,6 +292,15 @@ class Scene(ps.BaseSettings):
             )
 
     @property
+    def renderables(self) -> list:
+        """Every drawable object, whatever its type.
+
+        Most per-object handling differs only in which list it loops over, so
+        it belongs here rather than being written once per type at each site.
+        """
+        return [*self.meshes, *self.volumes, *self.segmentations]
+
+    @property
     def screenshot_directory(self) -> pl.Path:
         """Computed property that returns the screenshots subdirectory."""
         return self.serialization_directory / "screenshots"
@@ -308,10 +312,7 @@ class Scene(ps.BaseSettings):
 
     @property
     def nframes(self) -> int:
-        ns = []
-        ns += [len(m.actors) for m in self.meshes]
-        ns += [len(v.actors) for v in self.volumes]
-        ns += [len(s.actors) for s in self.segmentations]
+        ns = [len(obj.actors) for obj in self.renderables]
         if not len(ns) > 0:
             logging.warning("No objects were found to display.")
             return 1
@@ -323,20 +324,8 @@ class Scene(ps.BaseSettings):
 
     def setup_pipeline(self):
         """Add all actors to the renderer and configure initial visibility."""
-        # Add mesh actors
-        for mesh in self.meshes:
-            for actor in mesh.actors:
-                self.renderer.AddActor(actor)
-
-        # Add volume actors
-        for volume in self.volumes:
-            for actor in volume.actors:
-                self.renderer.AddVolume(actor)
-
-        # Add segmentation actors
-        for segmentation in self.segmentations:
-            for actor in segmentation.actors:
-                self.renderer.AddActor(actor)
+        for obj in self.renderables:
+            obj.add_to_renderer(self.renderer)
 
         # Show current frame
         self.show_frame(self.current_frame)
@@ -358,13 +347,7 @@ class Scene(ps.BaseSettings):
             a.SetVisibility(False)
 
     def show_frame(self, frame: int):
-        for mesh in self.meshes:
-            if mesh.visible:
-                mesh.actors[frame % len(mesh.actors)].SetVisibility(True)
-        for volume in self.volumes:
-            if volume.visible:
-                volume.actors[frame % len(volume.actors)].SetVisibility(True)
-        for segmentation in self.segmentations:
-            if segmentation.visible:
-                actor = segmentation.actors[frame % len(segmentation.actors)]
+        for obj in self.renderables:
+            actor = obj.frame_actor(frame) if obj.visible else None
+            if actor is not None:
                 actor.SetVisibility(True)
