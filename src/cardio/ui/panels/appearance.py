@@ -6,6 +6,7 @@ from trame.widgets import vuetify3 as vuetify
 # Internal
 from ...state import ObjectState
 from ...volume_property_presets import list_volume_property_presets
+from ..common import SLIDER_CLASS, SUBPANEL_CLASS
 
 # on/off icons for each type's clip toggle
 CLIP_ICONS = {
@@ -19,11 +20,13 @@ def clip_depth_panel(server, scene):
     """The camera's shared near/far range."""
     near, far = scene.renderer.GetActiveCamera().GetClippingRange()
 
-    vuetify.VListSubheader("Depth Clipping")
+    vuetify.VListSubheader("Camera Depth Range")
 
     vuetify.VRangeSlider(
         v_model=("clip_depth", [near, far]),
         label="Near / Far",
+        title="Near and far clipping planes of the shared camera",
+        classes=SLIDER_CLASS,
         min=0.1,
         max=far,
         step=far / 100,
@@ -34,8 +37,6 @@ def clip_depth_panel(server, scene):
 
 def appearance_panel(server, scene):
     """One section per object type, each with the same per-object controls."""
-    vuetify.VListSubheader("Appearance and Visibility")
-
     for heading, objects in (
         ("Meshes", scene.meshes),
         ("Volumes", scene.volumes),
@@ -75,7 +76,7 @@ def object_panel(obj, clip_icons):
         off_icon=off_icon,
         classes="mx-1 ml-4",
         hide_details=True,
-        label=f"{obj.label} Clipping" if obj.kind == "volume" else "Clip",
+        label=f"Crop {obj.label}" if obj.kind == "volume" else "Crop",
     )
 
     if obj.actors:
@@ -87,8 +88,7 @@ def transfer_function_panel(keys):
     with vuetify.VExpansionPanels(
         v_model=keys.preset_panel,
         flat=True,
-        classes="ml-4",
-        style="max-width: 270px;",
+        classes=SUBPANEL_CLASS,
     ):
         with vuetify.VExpansionPanel():
             vuetify.VExpansionPanelTitle("Transfer Function")
@@ -107,17 +107,17 @@ def clip_bounds_panel(keys, bounds):
         v_model=keys.clip_panel,
         multiple=True,
         flat=True,
-        classes="ml-4",
-        style="max-width: 270px;",
+        classes=SUBPANEL_CLASS,
     ):
         with vuetify.VExpansionPanel():
-            vuetify.VExpansionPanelTitle("Clip Bounds")
+            vuetify.VExpansionPanelTitle("Crop Bounds")
             with vuetify.VExpansionPanelText():
                 for key, axis, low in zip(keys.clip_bounds, "XYZ", (0, 2, 4)):
                     minimum, maximum = bounds[low], bounds[low + 1]
                     vuetify.VRangeSlider(
                         v_model=(key, [minimum, maximum]),
                         label=f"{axis} Range",
+                        classes=SLIDER_CLASS,
                         min=minimum,
                         max=maximum,
                         step=(maximum - minimum) / 100,

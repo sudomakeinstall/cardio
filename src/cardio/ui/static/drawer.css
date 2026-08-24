@@ -1,0 +1,26 @@
+/* A slider's label renders into the prepend grid column, which vuetify sizes
+   to max-content and clips to a single line. Left alone, every slider in a
+   group starts its track at a different x and ends up a different length.
+   Pinning the label column makes the group uniform. */
+
+.cardio-slider {
+    --cardio-slider-label-width: 4.75rem;
+}
+
+.cardio-slider .v-slider__label {
+    flex: 0 0 var(--cardio-slider-label-width);
+    width: var(--cardio-slider-label-width);
+    margin-inline: 0;
+    font-size: 0.875rem;
+    line-height: 1.15;
+    white-space: normal;
+    opacity: 1;
+}
+
+/* A nested panel's text wrapper adds its own inline padding on top of the
+   section's, which would leave the sliders inside it shorter than the ones
+   outside. Zeroing it keeps every slider in a section the same length. */
+
+.cardio-subpanel .v-expansion-panel-text__wrapper {
+    padding-inline: 0;
+}

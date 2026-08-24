@@ -1,4 +1,4 @@
-"""Cine playback: frame stepping, speed and rotation."""
+"""Cine playback: frame stepping, speed, rotation and rendering cost."""
 
 # Third Party
 from trame.widgets import vuetify3 as vuetify
@@ -8,12 +8,11 @@ from ...image_quality import (
     DEFAULT_PLAYBACK_QUALITY,
     DEFAULT_PLAYBACK_RESOLUTION,
 )
+from ..common import SLIDER_CLASS
 
 
 def playback_panel(server, scene):
-    """Transport controls and the phase, speed and cycles sliders."""
-    vuetify.VListSubheader("Playback Controls")
-
+    """Transport controls, then the phase, speed, cycles and cost sliders."""
     with vuetify.VToolbar(flat=True):
         # NOTE: Previous/Next controls should be VBtn components, but we use
         # VCheckbox for consistent sizing/spacing with the other controls.
@@ -57,7 +56,7 @@ def playback_panel(server, scene):
             true_icon="mdi-movie-open-outline",
             false_icon="mdi-movie-open-off-outline",
             hide_details=True,
-            title="Incrementing",
+            title="Advance frames while playing",
         )
 
         vuetify.VSpacer()
@@ -67,70 +66,70 @@ def playback_panel(server, scene):
             true_icon="mdi-autorenew",
             false_icon="mdi-autorenew-off",
             hide_details=True,
-            title="Rotating",
+            title="Rotate the camera while playing",
         )
 
     vuetify.VSlider(
         v_model=("frame", scene.current_frame),
-        hint="Phase",
-        persistent_hint=True,
+        label="Phase",
+        title="Frame index within the cardiac cycle",
+        classes=SLIDER_CLASS,
         min=0,
         max=scene.nframes - 1,
         step=1,
-        hide_details=False,
-        style="max-width: 300px",
+        hide_details=True,
         ticks=True,
         thumb_label=True,
     )
 
     vuetify.VSlider(
         v_model=("bpm", 60),
-        hint="Speed",
-        persistent_hint=True,
+        label="BPM",
+        title="Playback speed, in beats per minute",
+        classes=SLIDER_CLASS,
         min=20,
         max=120,
         step=1,
-        hide_details=False,
-        style="max-width: 300px",
+        hide_details=True,
         ticks=True,
         thumb_label=True,
     )
 
     vuetify.VSlider(
         v_model=("bpr", 3),
-        hint="Cycles/Rotation",
-        persistent_hint=True,
+        label="Beats/rot",
+        title="Cardiac cycles per full rotation of the camera",
+        classes=SLIDER_CLASS,
         min=1,
         max=360,
         step=1,
-        hide_details=False,
-        style="max-width: 300px",
+        hide_details=True,
         ticks=True,
         thumb_label=True,
     )
 
     vuetify.VSlider(
         v_model=("playback_quality", DEFAULT_PLAYBACK_QUALITY),
-        hint="Playback Quality",
-        persistent_hint=True,
+        label="Quality",
+        title="JPEG encode quality while playing; 100 is full quality",
+        classes=SLIDER_CLASS,
         min=10,
         max=100,
         step=5,
-        hide_details=False,
-        style="max-width: 300px",
+        hide_details=True,
         ticks=True,
         thumb_label=True,
     )
 
     vuetify.VSlider(
         v_model=("playback_resolution", DEFAULT_PLAYBACK_RESOLUTION),
-        hint="Playback Resolution",
-        persistent_hint=True,
+        label="Res",
+        title="Render resolution while playing, as a percent of full",
+        classes=SLIDER_CLASS,
         min=25,
         max=100,
         step=5,
-        hide_details=False,
-        style="max-width: 300px",
+        hide_details=True,
         ticks=True,
         thumb_label=True,
     )

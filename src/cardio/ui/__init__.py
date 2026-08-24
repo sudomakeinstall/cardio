@@ -2,11 +2,13 @@
 
 # Third Party
 from trame.ui.vuetify3 import SinglePageWithDrawerLayout
+from trame.widgets import vuetify3 as vuetify
 
 # Internal
 from .. import __version__
 from ..scene import Scene
 from ..state import DEFAULT_THEME_MODE
+from .common import DEFAULT_OPEN_SECTIONS, drawer_styles, section
 from .help import help_dialog
 from .interaction import Interaction
 from .layout import toolbar, viewports
@@ -18,7 +20,10 @@ from .panels import (
     playback_panel,
     rotations_panel,
     snap_panel,
+    volume_panel,
 )
+
+DRAWER_WIDTH = 340
 
 __all__ = ["UI", "Interaction"]
 
@@ -47,10 +52,12 @@ class UI:
 
     def setup(self):
         self.server.state.trame__title = f"cardio v{__version__}"
+        drawer_styles(self.server)
 
         with SinglePageWithDrawerLayout(
             self.server, theme=("theme_mode", DEFAULT_THEME_MODE)
         ) as layout:
+            self.layout = layout
             layout.icon.click = self.server.controller.view_reset_camera
             layout.title.set_text(f"cardio v{__version__}")
 
@@ -66,14 +73,40 @@ class UI:
                 )
                 help_dialog()
 
-            with layout.drawer:
-                snap_panel(self.server, self.scene)
-                rotations_panel(self.server, self.scene)
-                overlays_panel(self.server, self.scene)
+            with layout.drawer as drawer:
+                drawer.width = DRAWER_WIDTH
+                self.drawer()
+
+    def drawer(self):
+        """The active volume, then one collapsible section per concern."""
+        volume_panel(self.server, self.scene)
+
+        with vuetify.VExpansionPanels(
+            v_model=("drawer_sections", DEFAULT_OPEN_SECTIONS),
+            multiple=True,
+            variant="accordion",
+            flat=True,
+        ):
+            with section("playback", "Playback", "mdi-play-circle-outline"):
                 playback_panel(self.server, self.scene)
-                capture_panel(self.server, self.scene)
+
+            with section("appearance", "Appearance", "mdi-palette-outline"):
                 clip_depth_panel(self.server, self.scene)
                 appearance_panel(self.server, self.scene)
+                overlays_panel(self.server, self.scene)
+
+            if self.scene.volumes:
+                with section(
+                    "orientation",
+                    "Orientation",
+                    "mdi-axis-arrow",
+                    v_if="!maximized_view",
+                ):
+                    snap_panel(self.server, self.scene)
+                    rotations_panel(self.server, self.scene)
+
+            with section("export", "Export", "mdi-video-outline"):
+                capture_panel(self.server, self.scene)
 
     def _update_all_mpr_views(self, **kwargs):
         """Push a new frame to whichever views the layout created."""

@@ -6,7 +6,7 @@ from trame.widgets import vuetify3 as vuetify
 
 def capture_panel(server, scene):
     """Viewport checkboxes and the capture button."""
-    vuetify.VListSubheader("Screenshot Viewports")
+    vuetify.VListSubheader("Viewports")
     with vuetify.VRow(classes="mx-1 mb-1"):
         for key, label in (
             ("vr", "3D"),
@@ -37,5 +37,3 @@ def capture_panel(server, scene):
                 False,
             ),
         )
-
-    vuetify.VDivider(classes="my-2")

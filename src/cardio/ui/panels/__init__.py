@@ -6,7 +6,7 @@ from .capture import capture_panel
 from .overlays import overlays_panel
 from .playback import playback_panel
 from .rotations import rotations_panel
-from .snap import snap_panel
+from .snap import snap_panel, volume_panel
 
 __all__ = [
     "appearance_panel",
@@ -16,4 +16,5 @@ __all__ = [
     "playback_panel",
     "rotations_panel",
     "snap_panel",
+    "volume_panel",
 ]

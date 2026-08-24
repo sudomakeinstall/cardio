@@ -30,18 +30,21 @@ def rotations_panel(server, scene):
                 "X",
                 click=server.controller.add_x_rotation,
                 color="primary",
+                title="Add a rotation about X",
             )
         with vuetify.VCol(cols="4"):
             vuetify.VBtn(
                 "Y",
                 click=server.controller.add_y_rotation,
                 color="primary",
+                title="Add a rotation about Y",
             )
         with vuetify.VCol(cols="4"):
             vuetify.VBtn(
                 "Z",
                 click=server.controller.add_z_rotation,
                 color="primary",
+                title="Add a rotation about Z",
             )
 
     # Individual rotation sliders with DeepReactive
@@ -159,14 +162,14 @@ def rotations_panel(server, scene):
                 hide_details=True,
             )
 
-    # Fix Camera selector
+    # Camera lock selector
     with vuetify.VRow(
         v_if="!maximized_view",
         no_gutters=True,
         classes="align-center mb-2",
     ):
         with vuetify.VCol(cols="4"):
-            vuetify.VLabel("Fix Camera:")
+            vuetify.VLabel("Lock Camera:")
         with vuetify.VCol(cols="8"):
             vuetify.VSelect(
                 v_model=("camera_lock", "free"),
