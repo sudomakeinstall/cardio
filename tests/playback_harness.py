@@ -14,7 +14,10 @@ hanging the suite.
 import asyncio
 
 # Internal
-from cardio.image_quality import DEFAULT_PLAYBACK_QUALITY
+from cardio.image_quality import (
+    DEFAULT_PLAYBACK_QUALITY,
+    DEFAULT_PLAYBACK_RESOLUTION,
+)
 from cardio.logic import playback as playback_module
 from cardio.logic.playback import PlaybackController
 
@@ -214,6 +217,7 @@ class PlaybackApp:
             "bpm": 60,
             "bpr": 3,
             "playback_quality": DEFAULT_PLAYBACK_QUALITY,
+            "playback_resolution": DEFAULT_PLAYBACK_RESOLUTION,
         }
         state_values.update(overrides)
 

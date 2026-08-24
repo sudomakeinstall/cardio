@@ -10,7 +10,10 @@ from trame.app import asynchronous
 # Internal
 from ..image_quality import (
     DEFAULT_PLAYBACK_QUALITY,
+    DEFAULT_PLAYBACK_RESOLUTION,
     FULL_QUALITY,
+    FULL_RESOLUTION,
+    ratio_from_percent,
     set_image_quality,
 )
 from ..state import ObjectState
@@ -32,7 +35,9 @@ class PlaybackController(Controller):
         state = self.server.state
         state.change("frame")(self.update_frame)
         state.change("playing")(self._handle_playing_change)
-        state.change("playback_quality")(self.sync_playback_quality)
+        state.change("playback_quality", "playback_resolution")(
+            self.sync_playback_image
+        )
 
         controller = self.server.controller
         controller.increment_frame = self.increment_frame
@@ -67,19 +72,36 @@ class PlaybackController(Controller):
 
         # Start new playback task if playing
         if playing:
-            set_image_quality(
-                self.server, self.scene, self.server.state.playback_quality
-            )
+            self._apply_playback_image()
             self._playback_task = asynchronous.create_task(
                 self._play_loop(playing, **kwargs)
             )
         else:
-            set_image_quality(self.server, self.scene, FULL_QUALITY)
+            self._restore_full_image()
 
-    def sync_playback_quality(self, playback_quality, playing=False, **kwargs):
-        """Apply a quality change that lands mid-playback straight away."""
+    def _apply_playback_image(self):
+        """Hand the views the quality and size the sliders ask for."""
+        state = self.server.state
+        set_image_quality(
+            self.server,
+            self.scene,
+            state.playback_quality,
+            ratio_from_percent(state.playback_resolution),
+        )
+
+    def _restore_full_image(self):
+        """A view being inspected is never the reduced one."""
+        set_image_quality(
+            self.server,
+            self.scene,
+            FULL_QUALITY,
+            ratio_from_percent(FULL_RESOLUTION),
+        )
+
+    def sync_playback_image(self, playing=False, **kwargs):
+        """Apply a slider change that lands mid-playback straight away."""
         if playing:
-            set_image_quality(self.server, self.scene, playback_quality)
+            self._apply_playback_image()
 
     def _calculate_target_frame(self, elapsed_seconds, bpm, nframes):
         """Calculate target frame based on elapsed time.
@@ -222,6 +244,7 @@ class PlaybackController(Controller):
         self.server.state.bpm = 60
         self.server.state.bpr = 5
         self.server.state.playback_quality = DEFAULT_PLAYBACK_QUALITY
+        self.server.state.playback_resolution = DEFAULT_PLAYBACK_RESOLUTION
         self.server.controller.view_update()
 
     @asynchronous.task

@@ -4,7 +4,10 @@
 from trame.widgets import vuetify3 as vuetify
 
 # Internal
-from ...image_quality import DEFAULT_PLAYBACK_QUALITY
+from ...image_quality import (
+    DEFAULT_PLAYBACK_QUALITY,
+    DEFAULT_PLAYBACK_RESOLUTION,
+)
 
 
 def playback_panel(server, scene):
@@ -111,6 +114,19 @@ def playback_panel(server, scene):
         hint="Playback Quality",
         persistent_hint=True,
         min=10,
+        max=100,
+        step=5,
+        hide_details=False,
+        style="max-width: 300px",
+        ticks=True,
+        thumb_label=True,
+    )
+
+    vuetify.VSlider(
+        v_model=("playback_resolution", DEFAULT_PLAYBACK_RESOLUTION),
+        hint="Playback Resolution",
+        persistent_hint=True,
+        min=25,
         max=100,
         step=5,
         hide_details=False,

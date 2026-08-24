@@ -12,7 +12,10 @@ import pytest
 import cardio.image_quality as image_quality
 from cardio.image_quality import (
     DEFAULT_PLAYBACK_QUALITY,
+    DEFAULT_PLAYBACK_RESOLUTION,
     FULL_QUALITY,
+    FULL_RESOLUTION,
+    ratio_from_percent,
     render_windows,
     set_image_quality,
 )
@@ -74,11 +77,19 @@ def test_the_quality_reaches_every_window(helper):
     assert [call[1] for call in helper.calls] == [40] * (1 + len(VIEWS))
 
 
-def test_the_resolution_is_left_alone(helper):
-    """Ratio 1 keeps set_view_quality from resizing the render window."""
+def test_full_resolution_is_the_default_and_does_not_resize(helper):
+    """Ratio 1 makes set_view_quality's SetSize a no-op."""
     set_image_quality(FakeServer(), FakeScene(), 40)
 
-    assert helper.calls[0][2] == 1
+    assert helper.calls[0][2] == 1.0
+
+
+def test_the_ratio_reaches_every_window(helper):
+    scene = FakeScene(MPRViews())
+
+    set_image_quality(FakeServer(), scene, 40, ratio=0.5)
+
+    assert [call[2] for call in helper.calls] == [0.5] * (1 + len(VIEWS))
 
 
 def test_nothing_happens_before_a_client_connects(helper):
@@ -94,3 +105,23 @@ def test_nothing_happens_without_a_render_helper(monkeypatch):
 
 def test_the_playback_default_is_below_full_quality():
     assert 0 < DEFAULT_PLAYBACK_QUALITY < FULL_QUALITY
+
+
+# --- percent to ratio --------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "percent,ratio", [(100, 1.0), (50, 0.5), (25, 0.25), (75, 0.75)]
+)
+def test_percentages_convert_to_ratios(percent, ratio):
+    assert ratio_from_percent(percent) == ratio
+
+
+def test_full_resolution_converts_to_no_scaling():
+    assert ratio_from_percent(FULL_RESOLUTION) == 1.0
+
+
+def test_resolution_defaults_to_full():
+    """Reducing resolution resizes the render window on every play and pause,
+    so it stays opt-in rather than costing everyone a resize by default."""
+    assert DEFAULT_PLAYBACK_RESOLUTION == FULL_RESOLUTION

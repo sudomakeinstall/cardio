@@ -13,7 +13,11 @@ import asyncio
 import pytest
 
 # Internal
-from cardio.image_quality import DEFAULT_PLAYBACK_QUALITY, FULL_QUALITY
+from cardio.image_quality import (
+    DEFAULT_PLAYBACK_QUALITY,
+    DEFAULT_PLAYBACK_RESOLUTION,
+    FULL_QUALITY,
+)
 from cardio.logic import playback as playback_module
 from tests.playback_harness import (
     CHECK_INTERVAL,
@@ -380,60 +384,85 @@ def test_scrubbing_does_not_swallow_the_camera_rotation(clock, monkeypatch):
 
 
 @pytest.fixture
-def quality(monkeypatch) -> list:
-    """Record what quality playback asks for, in order."""
-    applied = []
+def applied(monkeypatch) -> list:
+    """Record the (quality, ratio) pairs playback asks for, in order."""
+    calls = []
     monkeypatch.setattr(
         playback_module,
         "set_image_quality",
-        lambda server, scene, value, **kwargs: applied.append(value),
+        lambda server, scene, quality, ratio=1.0: calls.append((quality, ratio)),
     )
-    return applied
+    return calls
 
 
-def test_playing_drops_the_quality_and_pausing_restores_it(clock, monkeypatch, quality):
+def test_playing_reduces_the_image_and_pausing_restores_it(clock, monkeypatch, applied):
     async def scenario():
         install_shims(monkeypatch, clock, budget=5000)
-        app = PlaybackApp(clock, nframes=10, playback_quality=40)
+        app = PlaybackApp(
+            clock, nframes=10, playback_quality=40, playback_resolution=50
+        )
         task = play(app)
         await pump(lambda: len(app.renders) >= 3)
         pause(app)
         await drain(task)
 
     asyncio.run(scenario())
-    assert quality == [40, FULL_QUALITY]
+    assert applied == [(40, 0.5), (FULL_QUALITY, 1.0)]
 
 
-def test_the_slider_takes_effect_mid_playback(clock, monkeypatch, quality):
+def test_pausing_restores_the_resolution_too(clock, monkeypatch, applied):
+    """Leaving the window resized after a pause would leave every later
+    still -- and every screenshot taken from it -- at playback size."""
+
     async def scenario():
         install_shims(monkeypatch, clock, budget=5000)
-        app = PlaybackApp(clock, nframes=10, playback_quality=40)
+        app = PlaybackApp(clock, nframes=10, playback_resolution=25)
+        task = play(app)
+        await pump(lambda: len(app.renders) >= 2)
+        pause(app)
+        await drain(task)
+
+    asyncio.run(scenario())
+    assert applied[-1] == (FULL_QUALITY, 1.0)
+
+
+@pytest.mark.parametrize(
+    "key,value", [("playback_quality", 25), ("playback_resolution", 40)]
+)
+def test_either_slider_takes_effect_mid_playback(
+    clock, monkeypatch, applied, key, value
+):
+    async def scenario():
+        install_shims(monkeypatch, clock, budget=5000)
+        app = PlaybackApp(clock, nframes=10)
         task = play(app)
         await pump(lambda: len(app.renders) >= 2)
 
-        app.state.playback_quality = 25
+        app.state[key] = value
         app.state.flush()
 
         pause(app)
         await drain(task)
 
     asyncio.run(scenario())
-    assert quality == [40, 25, FULL_QUALITY]
+    assert len(applied) == 3, "play, the slider move, then the restore on pause"
 
 
-def test_moving_the_slider_while_paused_changes_nothing(clock, quality):
-    """A paused view stays at full quality, whatever the slider says."""
+def test_moving_a_slider_while_paused_changes_nothing(clock, applied):
+    """A paused view stays full size and full quality, whatever the sliders say."""
     app = PlaybackApp(clock, nframes=10)
 
     app.state.playback_quality = 25
+    app.state.playback_resolution = 40
     app.state.flush()
 
-    assert quality == []
+    assert applied == []
 
 
-def test_reset_restores_the_default_quality(clock, quality):
-    app = PlaybackApp(clock, nframes=10, playback_quality=25)
+def test_reset_restores_both_defaults(clock, applied):
+    app = PlaybackApp(clock, nframes=10, playback_quality=25, playback_resolution=40)
 
     app.playback.reset_all()
 
     assert app.state.playback_quality == DEFAULT_PLAYBACK_QUALITY
+    assert app.state.playback_resolution == DEFAULT_PLAYBACK_RESOLUTION
