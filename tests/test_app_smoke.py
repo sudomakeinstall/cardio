@@ -71,7 +71,7 @@ def app(scene):
     """Logic then UI, in the order app.CardioApp builds them."""
     server = trame.app.get_server(f"test-{next(_server_names)}", client_type="vue3")
     logic = Logic(server, scene)
-    ui = UI(server, scene)
+    ui = UI(server, scene, logic)
     return server, scene, logic, ui
 
 

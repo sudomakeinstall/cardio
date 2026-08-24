@@ -46,8 +46,8 @@ class CardioApp:
             if hasattr(Scene, "_config_file"):
                 delattr(Scene, "_config_file")
 
-        Logic(self.server, scene)
-        UI(self.server, scene)
+        logic = Logic(self.server, scene)
+        UI(self.server, scene, logic)
 
 
 def main():

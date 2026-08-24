@@ -507,6 +507,43 @@ class MPRController(Controller):
 
         self.server.controller.view_update()
 
+    def scroll_vector(self, view_name: str):
+        """The out-of-plane direction of a view, in the user's index order.
+
+        Composed in ITK -- the only order the rotation math is defined in --
+        then handed back in the convention ``mpr_origin`` is stored in.
+        """
+        base_normals = {
+            "axial": np.array([0.0, 0.0, 1.0]),
+            "sagittal": np.array([1.0, 0.0, 0.0]),
+            "coronal": np.array([0.0, 1.0, 0.0]),
+        }
+        if view_name not in base_normals:
+            return np.array([0.0, 0.0, 1.0])
+
+        convention = self.convention
+        sequence, angles = self.app.rotations.visible_rotation_data()
+        rotation = cumulative_rotation_matrix(sequence, angles, convention.angle_units)
+
+        return np.array(convention.point_from_itk(rotation @ base_normals[view_name]))
+
+    def scroll_slice(self, view_name: str, distance: float):
+        """Move the shared origin along ``view_name``'s out-of-plane direction."""
+        if view_name not in ("axial", "sagittal", "coronal"):
+            return
+
+        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+        step = self.scroll_vector(view_name)
+        self.server.state.mpr_origin = [
+            origin[i] + distance * step[i] for i in range(3)
+        ]
+
+    def adjust_window_level(self, window_delta: float, level_delta: float):
+        """Nudge the MPR window and level, keeping the window positive."""
+        state = self.server.state
+        state.mpr_window = max(1.0, state.mpr_window + window_delta)
+        state.mpr_level = state.mpr_level + level_delta
+
     def update_segmentation_opacity(self, **kwargs):
         """Update segmentation overlay opacity."""
         if not self.server.state.mpr_enabled:
