@@ -31,7 +31,7 @@ $ uv sync --all-extras
 Pre-commit checklist:
 
 ```bash
-$ isort .
+$ ruff check --fix
 $ ruff format
 $ pytest -v
 ```

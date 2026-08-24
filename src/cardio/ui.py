@@ -3,8 +3,7 @@ import time
 
 import numpy as np
 from trame.ui.vuetify3 import SinglePageWithDrawerLayout
-from trame.widgets import client
-from trame.widgets import html
+from trame.widgets import client, html
 from trame.widgets import vtk as vtk_widgets
 from trame.widgets import vuetify3 as vuetify
 

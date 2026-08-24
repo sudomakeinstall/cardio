@@ -4,8 +4,8 @@ import pytest
 
 from cardio.orientation import (
     AngleUnits,
-    IndexOrder,
     EulerAxis,
+    IndexOrder,
     axcode_transform_matrix,
     create_vtk_reslice_matrix,
     euler_angle_to_rotation_matrix,

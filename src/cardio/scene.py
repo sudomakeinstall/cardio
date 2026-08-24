@@ -8,7 +8,6 @@ import pydantic_settings as ps
 import vtk
 
 from .mesh import Mesh
-from .orientation import AngleUnits, IndexOrder
 from .rotation import RotationSequence
 from .segmentation import Segmentation
 from .types import RGBColor
