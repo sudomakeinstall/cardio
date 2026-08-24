@@ -39,7 +39,7 @@ class RotationController(Controller):
         falls back to the scene's, so a state payload that predates a metadata
         write cannot silently reset the convention to the model defaults.
         """
-        data = dict(getattr(self.server.state, "mpr_rotation_data", None) or {})
+        data = dict(self.server.state.mpr_rotation_data or {})
         data.setdefault("metadata", self.scene.mpr_rotation_sequence.metadata)
         data.setdefault("angles_list", [])
         return RotationSequence(**data)
@@ -63,9 +63,7 @@ class RotationController(Controller):
 
     def visible_rotation_data(self):
         """Rotation sequence and angles for the visible steps, in ITK for VTK."""
-        rotation_data = getattr(
-            self.server.state, "mpr_rotation_data", {"angles_list": []}
-        )
+        rotation_data = self.server.state.mpr_rotation_data
         return self.convention.visible_sequence_to_itk(
             rotation_data.get("angles_list", [])
         )
@@ -133,6 +131,6 @@ class RotationController(Controller):
 
         # mpr_origin lives in state rather than in the sequence, so it is
         # exchanged here rather than by with_index_order.
-        mpr_origin = getattr(self.server.state, "mpr_origin", None)
+        mpr_origin = self.server.state.mpr_origin
         if mpr_origin is not None and len(mpr_origin) == 3:
             self.server.state.mpr_origin = exchange_point(mpr_origin)

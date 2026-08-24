@@ -31,7 +31,7 @@ class CaptureController(Controller):
         dr = dt.datetime.now().strftime(self.scene.timestamp_format)
         dr = self.scene.screenshot_directory / dr
 
-        mpr_enabled = getattr(self.server.state, "mpr_enabled", False)
+        mpr_enabled = self.server.state.mpr_enabled
         selected = {
             name
             for name in ("vr", "axial", "coronal", "sagittal")
@@ -76,7 +76,7 @@ class CaptureController(Controller):
         """Save current rotation angles to TOML file."""
         timestamp = dt.datetime.now()
         timestamp_str = timestamp.strftime(self.scene.timestamp_format)
-        active_volume_label = getattr(self.server.state, "active_volume_label", "")
+        active_volume_label = self.server.state.active_volume_label
 
         if not active_volume_label:
             print("Warning: No active volume selected")

@@ -92,10 +92,10 @@ class MPRController(Controller):
 
     def update_mpr_frame(self, frame):
         """Update MPR views to show the specified frame."""
-        if not getattr(self.server.state, "mpr_enabled", False):
+        if not self.server.state.mpr_enabled:
             return
 
-        active_volume_label = getattr(self.server.state, "active_volume_label", "")
+        active_volume_label = self.server.state.active_volume_label
         if not active_volume_label:
             return
 
@@ -110,7 +110,7 @@ class MPRController(Controller):
         # CRITICAL: Sync slice positions IMMEDIATELY after creation
         # This ensures actors have correct origin before being added to renderers
 
-        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+        origin = self.server.state.mpr_origin
         rotation_sequence, rotation_angles = self.app.rotations.visible_rotation_data()
 
         origin = self.convention.point_to_itk(origin)
@@ -138,15 +138,15 @@ class MPRController(Controller):
             views.show(
                 mpr_actors,
                 active_volume.crosshair_actors,
-                getattr(self.server.state, "mpr_crosshairs_enabled", True),
+                self.server.state.mpr_crosshairs_enabled,
             )
 
         # Add segmentation overlays
         self._add_segmentation_overlays_to_mpr(frame)
 
         # Apply current window/level settings to the MPR actors
-        window = getattr(self.server.state, "mpr_window", 400.0)
-        level = getattr(self.server.state, "mpr_level", 40.0)
+        window = self.server.state.mpr_window
+        level = self.server.state.mpr_level
         active_volume.update_mpr_window_level(frame, window, level)
 
     def sync_active_volume(self, active_volume_label, **kwargs):
@@ -173,7 +173,7 @@ class MPRController(Controller):
             center = image_data.GetCenter()
 
             # Set origin to volume center if it's at default [0,0,0]
-            current_origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+            current_origin = self.server.state.mpr_origin
             if current_origin == [0.0, 0.0, 0.0]:
                 # VTK reports the centre in ITK; state holds the user's order
                 self.server.state.mpr_origin = self.convention.point_from_itk(center)
@@ -190,7 +190,7 @@ class MPRController(Controller):
             colors=self.scene.mpr_crosshair_colors,
             line_width=self.scene.mpr_crosshair_width,
         )
-        crosshairs_visible = getattr(self.server.state, "mpr_crosshairs_enabled", True)
+        crosshairs_visible = self.server.state.mpr_crosshairs_enabled
 
         # A new volume gets the cameras refit; frame changes deliberately do not
         views = self.scene.mpr_views
@@ -201,8 +201,8 @@ class MPRController(Controller):
         self._add_segmentation_overlays_to_mpr(current_frame)
 
         # Apply current window/level settings to the MPR actors
-        window = getattr(self.server.state, "mpr_window", 800.0)
-        level = getattr(self.server.state, "mpr_level", 200.0)
+        window = self.server.state.mpr_window
+        level = self.server.state.mpr_level
         active_volume.update_mpr_window_level(current_frame, window, level)
 
         # Update all views
@@ -211,10 +211,10 @@ class MPRController(Controller):
     def update_slice_positions(self, **kwargs):
         """Update MPR slice positions when sliders change."""
 
-        if not getattr(self.server.state, "mpr_enabled", False):
+        if not self.server.state.mpr_enabled:
             return
 
-        active_volume_label = getattr(self.server.state, "active_volume_label", "")
+        active_volume_label = self.server.state.active_volume_label
         if not active_volume_label:
             return
 
@@ -224,7 +224,7 @@ class MPRController(Controller):
             return
 
         # Get current origin
-        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+        origin = self.server.state.mpr_origin
         rotation_sequence, rotation_angles = self.app.rotations.visible_rotation_data()
 
         origin = self.convention.point_to_itk(origin)
@@ -257,10 +257,10 @@ class MPRController(Controller):
     def update_mpr_window_level(self, **kwargs):
         """Update MPR window/level when sliders change."""
 
-        if not getattr(self.server.state, "mpr_enabled", False):
+        if not self.server.state.mpr_enabled:
             return
 
-        active_volume_label = getattr(self.server.state, "active_volume_label", "")
+        active_volume_label = self.server.state.active_volume_label
         if not active_volume_label:
             return
 
@@ -270,15 +270,15 @@ class MPRController(Controller):
             return
 
         # Get current window/level values
-        window = getattr(self.server.state, "mpr_window", 400.0)
-        level = getattr(self.server.state, "mpr_level", 40.0)
+        window = self.server.state.mpr_window
+        level = self.server.state.mpr_level
         current_frame = getattr(self.server.state, "frame", 0)
 
         # Check if this change is from manual adjustment (not from preset)
         # by checking if we're not in the middle of a preset update
         if not getattr(self, "_updating_from_preset", False):
             # Reset preset selection when manually adjusting window/level
-            current_preset = getattr(self.server.state, "mpr_window_level_preset", None)
+            current_preset = self.server.state.mpr_window_level_preset
             if current_preset is not None:
                 self.server.state.mpr_window_level_preset = None
 
@@ -315,10 +315,10 @@ class MPRController(Controller):
         if self.server.state.rotations_saved_at:
             self.server.state.rotations_stale = True
 
-        if not getattr(self.server.state, "mpr_enabled", False):
+        if not self.server.state.mpr_enabled:
             return
 
-        active_volume_label = getattr(self.server.state, "active_volume_label", "")
+        active_volume_label = self.server.state.active_volume_label
         if not active_volume_label:
             return
 
@@ -328,7 +328,7 @@ class MPRController(Controller):
             return
 
         # Get current origin and frame
-        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+        origin = self.server.state.mpr_origin
         current_frame = getattr(self.server.state, "frame", 0)
 
         rotation_sequence, rotation_angles = self.app.rotations.visible_rotation_data()
@@ -410,10 +410,10 @@ class MPRController(Controller):
 
     def sync_crosshairs_visibility(self, **kwargs):
         """Toggle crosshair visibility on all MPR views."""
-        if not getattr(self.server.state, "mpr_enabled", False):
+        if not self.server.state.mpr_enabled:
             return
 
-        active_volume_label = getattr(self.server.state, "active_volume_label", "")
+        active_volume_label = self.server.state.active_volume_label
         if not active_volume_label:
             return
 
@@ -422,12 +422,12 @@ class MPRController(Controller):
         if not active_volume:
             return
 
-        visible = getattr(self.server.state, "mpr_crosshairs_enabled", True)
+        visible = self.server.state.mpr_crosshairs_enabled
         active_volume.set_crosshairs_visible(visible)
         self.server.controller.view_update()
 
     def reset_mpr_origin(self):
-        active_volume_label = getattr(self.server.state, "active_volume_label", "")
+        active_volume_label = self.server.state.active_volume_label
         active_volume = self._active_volume()
         if not active_volume:
             return
@@ -460,9 +460,7 @@ class MPRController(Controller):
         """Pose and add the enabled segmentation overlays on top of the views."""
         views = self.scene.mpr_views
         opacity = self.server.state.mpr_segmentation_opacity
-        origin = self.convention.point_to_itk(
-            getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
-        )
+        origin = self.convention.point_to_itk(self.server.state.mpr_origin)
         rotation_sequence, rotation_angles = self.app.rotations.visible_rotation_data()
 
         for seg in self.scene.segmentations:
@@ -499,7 +497,7 @@ class MPRController(Controller):
             views.set_image(active_volume.get_mpr_actors_for_frame(current_frame))
             views.add_crosshairs(
                 active_volume.crosshair_actors,
-                getattr(self.server.state, "mpr_crosshairs_enabled", True),
+                self.server.state.mpr_crosshairs_enabled,
             )
 
         # Poses the overlays as it adds them, so no second pass is needed here
@@ -532,7 +530,7 @@ class MPRController(Controller):
         if view_name not in ("axial", "sagittal", "coronal"):
             return
 
-        origin = getattr(self.server.state, "mpr_origin", [0.0, 0.0, 0.0])
+        origin = self.server.state.mpr_origin
         step = self.scroll_vector(view_name)
         self.server.state.mpr_origin = [
             origin[i] + distance * step[i] for i in range(3)

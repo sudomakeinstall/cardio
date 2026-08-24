@@ -20,6 +20,7 @@ from .orientation import (
     EulerAxis,
     IndexOrder,
     euler_angle_to_rotation_matrix,
+    quaternion_to_rotation_matrix,
 )
 
 
@@ -57,8 +58,6 @@ class RotationStep(pc.BaseModel):
     def to_rotation_matrix(self, units: AngleUnits) -> np.ndarray:
         """Return 3x3 rotation matrix for this step."""
         if self.quaternion is not None:
-            from .orientation import quaternion_to_rotation_matrix
-
             return quaternion_to_rotation_matrix(self.quaternion)
         return euler_angle_to_rotation_matrix(EulerAxis(self.axis), self.angle, units)
 
@@ -145,6 +144,8 @@ class RotationSequence(pc.BaseModel):
 
     def to_toml(self) -> str:
         """Serialize to TOML using stored serialization preferences."""
+        # Deferred: cardio/__init__ imports this module, so a module-scope
+        # import here would be circular.
         from . import __version__
 
         data = self.model_dump(mode="json", exclude_none=True)

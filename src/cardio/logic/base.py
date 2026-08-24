@@ -27,5 +27,5 @@ class Controller:
 
     def _active_volume(self):
         """The volume the MPR views are showing, or None if there isn't one."""
-        label = getattr(self.server.state, "active_volume_label", "")
+        label = self.server.state.active_volume_label
         return next((v for v in self.scene.volumes if v.label == label), None)

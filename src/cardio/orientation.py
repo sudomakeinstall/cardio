@@ -2,6 +2,7 @@ import enum
 
 import itk
 import numpy as np
+import vtk
 
 
 # DICOM LPS canonical orientation vector mappings
@@ -125,6 +126,8 @@ def euler_angle_to_rotation_matrix(
 
 def quaternion_to_rotation_matrix(q: list[float]) -> np.ndarray:
     """Convert quaternion [x, y, z, w] to 3x3 rotation matrix (normalizes input)."""
+    # Deferred: torch costs about half a second to import, and only the
+    # quaternion paths need it.
     import roma
     import torch as t
 
@@ -195,6 +198,7 @@ def minimal_rotation(source: np.ndarray, target: np.ndarray) -> np.ndarray:
 
 def rotation_matrix_to_quaternion(matrix: np.ndarray) -> list[float]:
     """Convert a 3x3 rotation matrix to a quaternion [x, y, z, w]."""
+    # Deferred; see quaternion_to_rotation_matrix.
     import roma
     import torch as t
 
@@ -270,9 +274,9 @@ def read_frames(path) -> list:
 
 def reset_direction(image):
     """Reset image direction to identity matrix, preserving physical extent."""
-    assert (
-        image.GetImageDimension() == 3
-    ), f"Input image must be 3D, got {image.GetImageDimension()}D"
+    assert image.GetImageDimension() == 3, (
+        f"Input image must be 3D, got {image.GetImageDimension()}D"
+    )
     assert is_axis_aligned(image), "Input image must be axis-aligned"
 
     origin = np.array(image.GetOrigin())
@@ -326,8 +330,6 @@ def create_vtk_reslice_matrix(transform_3x3, origin):
     Returns:
         vtk.vtkMatrix4x4 for use with VTK reslice operations
     """
-    import vtk
-
     matrix = vtk.vtkMatrix4x4()
     for i in range(3):
         for j in range(3):
