@@ -32,9 +32,11 @@ def write_volume(path):
 
 
 def write_segmentation(path):
+    """Three stacked labels, so the traverse branch has two interfaces."""
     array = np.zeros((8, 8, 8), dtype=np.uint8)
-    array[2:6, 2:6, 1:4] = 1
-    array[2:6, 2:6, 4:7] = 2
+    array[2:6, 2:6, 1:3] = 1
+    array[2:6, 2:6, 3:5] = 2
+    array[2:6, 2:6, 5:7] = 3
     itk.imwrite(itk.image_from_array(array), str(path))
 
 
@@ -292,3 +294,63 @@ def test_toggling_the_theme_repaints_the_background(app):
     logic.visibility.sync_background_color(THEME_LIGHT)
 
     assert scene.renderer.GetBackground() == pytest.approx(scene.background.light)
+
+
+# --- traverse runs through the real server state ------------------------------
+
+
+def traverse_selection(server):
+    """Select the three stacked labels the smoke segmentation carries.
+
+    ``state.ready()`` is what arms the change listeners; the running app calls
+    it when a client connects, and without it a write reaches no listener.
+    """
+    server.state.ready()
+    with server.state:
+        server.state.snap_mode = "traverse"
+        server.state.snap_labels_a = [1]
+        server.state.snap_labels_b = [2]
+        server.state.snap_labels_c = [3]
+
+
+def test_traverse_walks_the_origin_between_the_interfaces(app):
+    server, _, logic, _ = app
+    traverse_selection(server)
+
+    server.controller.align_to_interface()
+    start = list(server.state.mpr_origin)
+
+    with server.state:
+        server.state.snap_traverse = 100
+    end = list(server.state.mpr_origin)
+
+    assert not server.state.snap_no_interface
+    assert end != start
+    assert [step["name"] for step in server.state.mpr_rotation_data["angles_list"]] == [
+        "Interface plane"
+    ]
+
+
+def test_traverse_slider_listener_is_wired(app):
+    """The slider must move the views on its own, without pressing Align."""
+    server, _, logic, _ = app
+    traverse_selection(server)
+
+    with server.state:
+        server.state.snap_traverse = 60
+
+    assert server.state.mpr_rotation_data["angles_list"]
+
+
+def test_swap_reverses_traverse_without_losing_the_middle_group(app):
+    server, _, _, _ = app
+    traverse_selection(server)
+
+    with server.state:
+        server.state.snap_traverse = 25
+    server.controller.swap_snap_groups()
+
+    assert server.state.snap_labels_a == [3]
+    assert server.state.snap_labels_b == [2]
+    assert server.state.snap_labels_c == [1]
+    assert server.state.snap_traverse == 75

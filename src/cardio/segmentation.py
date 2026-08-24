@@ -12,6 +12,7 @@ from .orientation import (
     AngleUnits,
     minimal_rotation,
     read_frames,
+    slerp_rotation_matrices,
 )
 from .property_config import vtkPropertyConfig
 from .reslice import ResliceSet
@@ -129,6 +130,44 @@ def plane_basis(normal: np.ndarray, anchor: np.ndarray | None = None) -> np.ndar
     view_y = view_y / np.linalg.norm(view_y)
     view_x = np.cross(normal, view_y)
     return np.column_stack([view_x, view_y, normal])
+
+
+# ``plane_basis`` returns a left-handed basis, which has no quaternion and so
+# cannot be interpolated directly. Right-multiplying by a fixed improper factor
+# lands both endpoints in SO(3); the geodesic there is right-invariant, so
+# undoing the factor afterwards recovers the answer the bases themselves imply,
+# whichever improper factor is chosen.
+_HANDEDNESS_FLIP = np.diag([1.0, -1.0, 1.0])
+
+
+def interpolate_planes(
+    start: tuple[np.ndarray, np.ndarray, float],
+    end: tuple[np.ndarray, np.ndarray, float],
+    fraction: float,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """Plane ``fraction`` of the way from ``start`` to ``end``.
+
+    Both are ``(centroid, axes, flatness)`` as ``interface_plane`` returns them.
+    ``fraction`` is clamped to [0, 1]. Flatness is the worse of the two: a plane
+    between the endpoints is no better a description of its interface than they
+    are of theirs.
+    """
+    fraction = min(1.0, max(0.0, float(fraction)))
+    start_centroid, start_axes, start_flatness = start
+    end_centroid, end_axes, end_flatness = end
+
+    centroid = (1.0 - fraction) * np.asarray(
+        start_centroid, dtype=np.float64
+    ) + fraction * np.asarray(end_centroid, dtype=np.float64)
+
+    axes = (
+        slerp_rotation_matrices(
+            start_axes @ _HANDEDNESS_FLIP, end_axes @ _HANDEDNESS_FLIP, fraction
+        )
+        @ _HANDEDNESS_FLIP
+    )
+
+    return centroid, axes, max(float(start_flatness), float(end_flatness))
 
 
 class Segmentation(Object):

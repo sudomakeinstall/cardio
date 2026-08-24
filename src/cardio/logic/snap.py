@@ -1,14 +1,25 @@
 """Snapping the MPR origin and orientation to a segmentation feature."""
 
+# Third Party
+import numpy as np
+
 # Internal
 from ..orientation import (
     axcode_transform_matrix,
     rotation_matrix_to_quaternion,
 )
 from ..rotation import RotationStep
+from ..segmentation import interpolate_planes
 from .base import Controller
 
 ALIGN_STEP_NAME = "Interface plane"
+
+# The two interfaces traverse mode travels between: A|B, then B|C.
+INTERFACE_AB = 0
+INTERFACE_BC = 1
+
+# Modes that fit a plane, and so can align and lock orientation.
+PLANAR_MODES = ("interface", "traverse")
 
 
 class SnapController(Controller):
@@ -24,9 +35,10 @@ class SnapController(Controller):
 
         state = self.server.state
         state.change("snap_seg_label")(self._on_snap_seg_changed)
-        state.change("snap_mode", "snap_labels_a", "snap_labels_b")(
+        state.change("snap_mode", "snap_labels_a", "snap_labels_b", "snap_labels_c")(
             self._on_snap_selection_changed
         )
+        state.change("snap_traverse")(self._on_snap_traverse_changed)
         state.change("snap_locked")(self._on_snap_lock_changed)
         state.change("snap_orientation_locked")(self._on_snap_orientation_lock_changed)
 
@@ -34,6 +46,8 @@ class SnapController(Controller):
         state.snap_seg_label = self.scene.segmentations[0].label
         state.snap_labels_a = []
         state.snap_labels_b = []
+        state.snap_labels_c = []
+        state.snap_traverse = 0
         state.snap_available_labels = []
         state.snap_seg_items = [
             {"title": s.label, "value": s.label} for s in self.scene.segmentations
@@ -65,13 +79,15 @@ class SnapController(Controller):
         ]
         self.server.state.snap_labels_a = []
         self.server.state.snap_labels_b = []
+        self.server.state.snap_labels_c = []
         self.server.state.snap_no_interface = False
         self._invalidate_lock_cache()
 
     def _snap_selection(self):
-        """Current snap selection as (segmentation, mode, labels_a, labels_b).
+        """Current selection as (segmentation, mode, labels_a, labels_b, labels_c).
 
-        Returns None when the selection cannot produce a centroid.
+        Returns None when the selection cannot produce a centroid: every mode
+        needs group A, the interface modes need B, and traverse needs C as well.
         """
         state = self.server.state
         seg_label = getattr(state, "snap_seg_label", "")
@@ -81,19 +97,70 @@ class SnapController(Controller):
         mode = getattr(state, "snap_mode", "label")
         labels_a = list(getattr(state, "snap_labels_a", []))
         labels_b = list(getattr(state, "snap_labels_b", []))
-        if not labels_a or (mode == "interface" and not labels_b):
+        labels_c = list(getattr(state, "snap_labels_c", []))
+        if not labels_a:
             return None
-        return seg, mode, labels_a, labels_b
+        if mode in PLANAR_MODES and not labels_b:
+            return None
+        if mode == "traverse" and not labels_c:
+            return None
+        return seg, mode, labels_a, labels_b, labels_c
+
+    def _traverse_fraction(self) -> float:
+        """The traverse slider as a fraction of the way from A|B to B|C."""
+        return getattr(self.server.state, "snap_traverse", 0) / 100.0
+
+    def _interface_labels(self, selection, interface: int):
+        """The label groups on either side of ``interface`` for ``selection``."""
+        _, _, labels_a, labels_b, labels_c = selection
+        if interface == INTERFACE_BC:
+            return labels_b, labels_c
+        return labels_a, labels_b
+
+    def _endpoint_centroid(self, frame: int, interface: int) -> list[float] | None:
+        """Memoized centroid of one snap endpoint at ``frame``.
+
+        In label mode that is the centroid of group A; otherwise the centroid of
+        the named interface. Keyed on the interface rather than the mode's final
+        answer, so the memo survives the traverse slider moving.
+        """
+        key = (frame, interface)
+        if key not in self._lock_centroids:
+            selection = self._snap_selection()
+            if selection is None:
+                self._lock_centroids[key] = None
+            else:
+                seg, mode, labels_a, _, _ = selection
+                if mode == "label":
+                    self._lock_centroids[key] = seg.label_centroid(labels_a, frame)
+                else:
+                    left, right = self._interface_labels(selection, interface)
+                    self._lock_centroids[key] = seg.interface_centroid(
+                        left, right, frame
+                    )
+        return self._lock_centroids[key]
 
     def _snap_centroid(self, frame: int) -> list[float] | None:
-        """Centroid of the current snap selection at ``frame``."""
+        """Centroid the current snap selection asks for at ``frame``.
+
+        In traverse mode the two interface centroids are blended by the slider,
+        which is the same straight line ``interpolate_planes`` walks -- but taken
+        over the centres of mass the other modes use, rather than the plane fit's
+        centroid.
+        """
         selection = self._snap_selection()
         if selection is None:
             return None
-        seg, mode, labels_a, labels_b = selection
-        if mode == "label":
-            return seg.label_centroid(labels_a, frame)
-        return seg.interface_centroid(labels_a, labels_b, frame)
+        if selection[1] != "traverse":
+            return self._endpoint_centroid(frame, INTERFACE_AB)
+
+        start = self._endpoint_centroid(frame, INTERFACE_AB)
+        end = self._endpoint_centroid(frame, INTERFACE_BC)
+        if start is None or end is None:
+            return None
+        fraction = self._traverse_fraction()
+        blend = (1.0 - fraction) * np.asarray(start) + fraction * np.asarray(end)
+        return [float(v) for v in blend]
 
     def snap_to_centroid(self, **kwargs):
         if getattr(self.server.state, "snap_mode", "label") == "reset":
@@ -111,12 +178,6 @@ class SnapController(Controller):
         self.server.state.snap_no_interface = False
         self.app.mpr.set_origin(center)
 
-    def _locked_centroid(self, frame: int) -> list[float] | None:
-        """Memoized per-frame centroid, so locked playback recomputes once."""
-        if frame not in self._lock_centroids:
-            self._lock_centroids[frame] = self._snap_centroid(frame)
-        return self._lock_centroids[frame]
-
     def apply_frame_lock(self, frame: int):
         """Re-apply the locked position and orientation for ``frame``.
 
@@ -130,7 +191,7 @@ class SnapController(Controller):
 
         lock_position = getattr(state, "snap_locked", False)
         lock_orientation = (
-            getattr(state, "snap_orientation_locked", False) and mode == "interface"
+            getattr(state, "snap_orientation_locked", False) and mode in PLANAR_MODES
         )
         if not (lock_position or lock_orientation):
             return
@@ -140,14 +201,14 @@ class SnapController(Controller):
         missing = False
 
         if lock_position:
-            center = self._locked_centroid(frame)
+            center = self._snap_centroid(frame)
             if center is None:
                 missing = True
             else:
                 self.app.mpr.set_origin(center)
 
         if lock_orientation:
-            plane = self._interface_plane(frame)
+            plane = self._aligned_plane(frame)
             if plane is None:
                 missing = True
             else:
@@ -157,8 +218,8 @@ class SnapController(Controller):
 
     def _invalidate_lock_cache(self):
         """Drop the memoized per-frame centroids and interface planes."""
-        self._lock_centroids: dict[int, list[float] | None] = {}
-        self._lock_planes: dict[int, tuple | None] = {}
+        self._lock_centroids: dict[tuple[int, int], list[float] | None] = {}
+        self._lock_planes: dict[tuple[int, int], tuple | None] = {}
         self._align_reference = None
 
     def _on_snap_selection_changed(self, **kwargs):
@@ -177,23 +238,52 @@ class SnapController(Controller):
         if snap_orientation_locked:
             self.align_to_interface()
 
-    def _interface_plane(self, frame: int):
-        """Memoized dominant plane of the selected interface at ``frame``."""
-        if frame not in self._lock_planes:
+    def _interface_plane(self, frame: int, interface: int = INTERFACE_AB):
+        """Memoized dominant plane of one selected interface at ``frame``.
+
+        The B|C plane is anchored on the A|B plane of the same frame. Fitted
+        independently the two would not share in-plane axes -- ``plane_basis``
+        derives them from a fixed anatomical reference -- and travelling between
+        them would spin the view rather than simply tilt it. The anchor also
+        settles B|C's normal sign from A|B's, which is the direction of travel.
+        """
+        key = (frame, interface)
+        if key not in self._lock_planes:
             selection = self._snap_selection()
             if selection is None:
-                self._lock_planes[frame] = None
+                self._lock_planes[key] = None
             else:
-                seg, _, labels_a, labels_b = selection
-                plane = seg.interface_plane(
-                    labels_a, labels_b, frame, anchor=self._align_reference
-                )
+                seg = selection[0]
+                left, right = self._interface_labels(selection, interface)
+                anchor = self._align_reference
+                if interface == INTERFACE_BC:
+                    start = self._interface_plane(frame, INTERFACE_AB)
+                    anchor = None if start is None else start[1]
+                plane = seg.interface_plane(left, right, frame, anchor=anchor)
                 # Carry the first plane's basis onto later frames, so the view
                 # does not spin as the normal moves.
-                if plane is not None and self._align_reference is None:
+                if (
+                    plane is not None
+                    and interface == INTERFACE_AB
+                    and self._align_reference is None
+                ):
                     self._align_reference = plane[1]
-                self._lock_planes[frame] = plane
-        return self._lock_planes[frame]
+                self._lock_planes[key] = plane
+        return self._lock_planes[key]
+
+    def _traverse_plane(self, frame: int):
+        """The plane the traverse slider asks for at ``frame``."""
+        start = self._interface_plane(frame, INTERFACE_AB)
+        end = self._interface_plane(frame, INTERFACE_BC)
+        if start is None or end is None:
+            return None
+        return interpolate_planes(start, end, self._traverse_fraction())
+
+    def _aligned_plane(self, frame: int):
+        """The plane the current mode aligns to at ``frame``."""
+        if getattr(self.server.state, "snap_mode", "label") == "traverse":
+            return self._traverse_plane(frame)
+        return self._interface_plane(frame)
 
     def _apply_alignment(self, plane):
         """Replace the alignment step so the views are based on ``plane``.
@@ -230,7 +320,12 @@ class SnapController(Controller):
         self.app.rotations.edit_steps(with_alignment)
 
     def swap_groups(self, **kwargs):
-        """Exchange the two label groups, reversing the interface normal.
+        """Reverse the selection, and with it the interface normal.
+
+        In interface mode that exchanges the two groups, viewing the interface
+        from the other side. In traverse mode it exchanges the outer two, which
+        keeps both interfaces but reverses the direction of travel, so the
+        slider starts at the landmark it used to end on.
 
         Only the selection changes; the views move when the user aligns, the
         same as any other edit to the groups. The exception is an orientation
@@ -241,28 +336,44 @@ class SnapController(Controller):
         flip the recomputed normal straight back.
         """
         state = self.server.state
-        if getattr(state, "snap_mode", "label") != "interface":
+        mode = getattr(state, "snap_mode", "label")
+        if mode not in PLANAR_MODES:
             return
 
-        state.snap_labels_a, state.snap_labels_b = (
-            list(getattr(state, "snap_labels_b", [])),
-            list(getattr(state, "snap_labels_a", [])),
-        )
+        if mode == "traverse":
+            state.snap_labels_a, state.snap_labels_c = (
+                list(getattr(state, "snap_labels_c", [])),
+                list(getattr(state, "snap_labels_a", [])),
+            )
+            state.snap_traverse = 100 - getattr(state, "snap_traverse", 0)
+        else:
+            state.snap_labels_a, state.snap_labels_b = (
+                list(getattr(state, "snap_labels_b", [])),
+                list(getattr(state, "snap_labels_a", [])),
+            )
         self._invalidate_lock_cache()
 
         if getattr(state, "snap_orientation_locked", False):
             self.align_to_interface()
 
+    def _on_snap_traverse_changed(self, **kwargs):
+        """Follow the slider as it is dragged, rather than waiting for Align."""
+        if getattr(self.server.state, "snap_mode", "label") != "traverse":
+            return
+        if self._snap_selection() is None:
+            return
+        self.align_to_interface()
+
     def align_to_interface(self, **kwargs):
-        """Rotate the MPR views into the dominant plane of the selected interface."""
+        """Rotate the MPR views into the plane the current selection names."""
         state = self.server.state
-        if getattr(state, "snap_mode", "label") != "interface":
+        if getattr(state, "snap_mode", "label") not in PLANAR_MODES:
             return
         if self._snap_selection() is None:
             return
 
         frame = getattr(state, "frame", 0)
-        plane = self._interface_plane(frame)
+        plane = self._aligned_plane(frame)
         if plane is None:
             state.snap_no_interface = True
             state.interface_flatness = 0.0

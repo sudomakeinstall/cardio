@@ -196,6 +196,25 @@ def minimal_rotation(source: np.ndarray, target: np.ndarray) -> np.ndarray:
     return np.eye(3) + cross + cross @ cross * ((1.0 - cosine) / (sine**2))
 
 
+def slerp_rotation_matrices(
+    start: np.ndarray, end: np.ndarray, fraction: float
+) -> np.ndarray:
+    """Rotation ``fraction`` of the way along the geodesic from ``start`` to ``end``.
+
+    Takes the shortest arc, so opposed rotations interpolate the short way round.
+    """
+    # Deferred; see quaternion_to_rotation_matrix.
+    import roma
+    import torch as t
+
+    interpolated = roma.rotmat_slerp(
+        t.tensor(np.asarray(start), dtype=t.float64),
+        t.tensor(np.asarray(end), dtype=t.float64),
+        t.tensor([float(fraction)], dtype=t.float64),
+    )
+    return interpolated[0].numpy()
+
+
 def rotation_matrix_to_quaternion(matrix: np.ndarray) -> list[float]:
     """Convert a 3x3 rotation matrix to a quaternion [x, y, z, w]."""
     # Deferred; see quaternion_to_rotation_matrix.
@@ -274,9 +293,9 @@ def read_frames(path) -> list:
 
 def reset_direction(image):
     """Reset image direction to identity matrix, preserving physical extent."""
-    assert (
-        image.GetImageDimension() == 3
-    ), f"Input image must be 3D, got {image.GetImageDimension()}D"
+    assert image.GetImageDimension() == 3, (
+        f"Input image must be 3D, got {image.GetImageDimension()}D"
+    )
     assert is_axis_aligned(image), "Input image must be axis-aligned"
 
     origin = np.array(image.GetOrigin())

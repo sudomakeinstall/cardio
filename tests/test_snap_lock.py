@@ -121,23 +121,23 @@ def test_lock_ignores_reset_mode(logic):
     assert logic.server.state.mpr_origin == [9.0, 9.0, 9.0]
 
 
-def test_locked_centroid_is_memoized(logic):
+def test_snap_centroid_is_memoized(logic):
     calls = []
-    original = logic.snap._snap_centroid
+    seg = logic.scene.segmentations[0]
+    original = seg.interface_centroid
 
-    def counted(frame):
+    def counted(labels_a, labels_b, frame=0):
         calls.append(frame)
-        return original(frame)
+        return original(labels_a, labels_b, frame)
 
-    logic.snap._snap_centroid = counted
-    logic.snap._locked_centroid(1)
-    logic.snap._locked_centroid(1)
-    logic.snap._locked_centroid(1)
+    object.__setattr__(seg, "interface_centroid", counted)
+    for _ in range(3):
+        logic.snap._snap_centroid(1)
     assert calls == [1]
 
 
 def test_cache_is_dropped_when_selection_changes(logic):
-    logic.snap._locked_centroid(0)
+    logic.snap._snap_centroid(0)
     assert logic.snap._lock_centroids
     logic.snap._on_snap_selection_changed()
     assert logic.snap._lock_centroids == {}
