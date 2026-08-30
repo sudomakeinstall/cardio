@@ -11,6 +11,7 @@ from .mesh import Mesh
 from .mpr_views import MPRViews
 from .rotation import RotationSequence
 from .segmentation import Segmentation
+from .snap import Snap
 from .tile_views import TileViews
 from .types import RGBColor
 from .volume import Volume
@@ -160,6 +161,10 @@ class Scene(ps.BaseSettings):
         default=["vr", "axial", "coronal", "sagittal", "tile"],
         description="Viewports to capture in screenshots. Options: vr, axial, coronal, sagittal, tile",
     )
+    snap: Snap = pc.Field(
+        default_factory=Snap,
+        description='Snap selection at load time. CLI usage: --snap.mode traverse --snap.labels_a "[1]"',
+    )
 
     # Field validators for JSON string inputs
     @pc.field_validator("meshes", mode="before")
@@ -246,6 +251,9 @@ class Scene(ps.BaseSettings):
         # Validate active volume label
         self._validate_active_volume_label()
 
+        # Validate the segmentation the snap selection names
+        self._validate_snap_segmentation_label()
+
         # Configure VTK objects
         self._renderer.SetBackground(
             *self.background.light,
@@ -302,6 +310,16 @@ class Scene(ps.BaseSettings):
         elif self.active_volume_label and not self.volumes:
             raise ValueError(
                 "Active volume label specified but no volumes are available"
+            )
+
+    def _validate_snap_segmentation_label(self):
+        """Validate that snap.segmentation_label refers to an existing segmentation."""
+        if not self.snap.segmentation_label:
+            return
+        labels = [seg.label for seg in self.segmentations]
+        if self.snap.segmentation_label not in labels:
+            raise ValueError(
+                f"Snap segmentation label '{self.snap.segmentation_label}' not found in available segmentations: {labels}"
             )
 
     @property

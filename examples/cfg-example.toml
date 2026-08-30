@@ -1,6 +1,6 @@
 current_frame = 0
-screenshot_directory = "./data/screenshots"
-screenshot_subdirectory_format = "%Y-%m-%d-%H-%M-%S"
+serialization_directory = "./data"
+timestamp_format = "%Y-%m-%d-%H-%M-%S"
 
 [background]
 light = [1.0, 1.0, 1.0]
@@ -12,11 +12,9 @@ directory = "./data/obj-bl-dense"
 visible = true
 loop_subdivision_iterations = 1
 
-[meshes.property]
+[meshes.properties]
 representation = 2
-r = 1.0
-g = 0.0
-b = 0.0
+color = [1.0, 0.0, 0.0]
 edge_visibility = false
 vertex_visibility = false
 shading = true
@@ -27,11 +25,9 @@ label = "BL_Simplified"
 directory = "./data/obj-bl"
 visible = true
 
-[meshes.property]
+[meshes.properties]
 representation = 2
-r = 1.0
-g = 0.5
-b = 0.5
+color = [1.0, 0.5, 0.5]
 edge_visibility = true
 vertex_visibility = false
 shading = false
@@ -43,3 +39,22 @@ directory="./data/img-bl"
 visible=true
 transfer_function_preset="vascular_closed"
 clipping_enabled=true
+
+[[segmentations]]
+label = "BL_Labels"
+directory = "./data/seg-bl"
+visible = true
+
+# Where the MPR views start, and what they follow.  Traverse mode walks the
+# line from the BL_Labels 1|2 interface to its 2|3 interface; `traverse` is how
+# far along that line to begin, and the locks hold the views there as the frame
+# changes.  Reset returns to whatever is written here.
+[snap]
+segmentation_label = "BL_Labels"
+mode = "traverse"
+labels_a = [1]
+labels_b = [2]
+labels_c = [3]
+traverse = 50
+locked = true
+orientation_locked = true

@@ -20,6 +20,36 @@ $ uv add cardio
 $ . ./.venv/bin/activate
 ```
 
+### Snapping to a segmentation feature
+
+The MPR views can lock onto a segmentation feature: the centroid of a group of
+labels (`label`), the interface between two groups (`interface`), or a point along
+the line joining two such interfaces (`traverse`).  That selection can be made in
+the Snap & Align panel, or written down so the app opens with it already applied:
+
+```toml
+[snap]
+segmentation_label = "BL_Labels"
+mode = "traverse"
+labels_a = [1]
+labels_b = [2]
+labels_c = [3]
+traverse = 50            # percent of the way from the A|B interface to B|C
+locked = true            # hold the origin on the feature, frame to frame
+orientation_locked = true  # hold the views in the fitted plane
+```
+
+The same fields are available on the commandline, either individually or as JSON:
+
+```bash
+$ cardio --snap.mode traverse --snap.labels_a '[1]' --snap.labels_b '[2]' --snap.labels_c '[3]'
+$ cardio --snap '{"mode": "interface", "labels_a": [1], "labels_b": [2], "locked": true}'
+```
+
+Reset returns to this configuration rather than to an empty panel.  A label that
+the segmentation does not contain is reported and dropped rather than refusing to
+start.
+
 ### Developing
 
 Ensuring you have all required dependencies:

@@ -1,5 +1,8 @@
 """Test snap/lock centroid selection and per-frame locking in Logic."""
 
+# System
+import logging
+
 # Third Party
 import numpy as np
 import pytest
@@ -8,6 +11,7 @@ import pytest
 from cardio.logic import ALIGN_STEP_NAME
 from cardio.orientation import IndexOrder
 from cardio.segmentation import Segmentation
+from cardio.snap import Snap
 from tests.fakes import FakeApp, make_logic
 from tests.phantoms import write_segmentation
 
@@ -233,3 +237,115 @@ def test_reset_drops_the_memoized_planes(logic):
 
     assert logic.snap._lock_centroids == {}
     assert logic.snap._lock_planes == {}
+
+
+class TestConfiguredSelection:
+    """The panel comes up in the state the ``[snap]`` config asks for."""
+
+    @staticmethod
+    def bootstrapped(segmentation, snap: Snap) -> FakeApp:
+        """A controller taken through registration, as Logic takes it."""
+        logic = make_logic(segmentation, snap=snap, active_volume_label="")
+        logic.snap.register()
+        logic.snap.register_initial_labels()
+        return logic
+
+    def test_mode_groups_and_slider_are_seeded(self, moving_segmentation):
+        logic = self.bootstrapped(
+            moving_segmentation,
+            Snap(mode="interface", labels_a=[2], labels_b=[1], traverse=40),
+        )
+        state = logic.server.state
+        assert state.snap_mode == "interface"
+        assert state.snap_seg_label == moving_segmentation.label
+        assert state.snap_labels_a == [2]
+        assert state.snap_labels_b == [1]
+        assert state.snap_traverse == 40
+
+    def test_pickers_are_populated(self, moving_segmentation):
+        logic = self.bootstrapped(moving_segmentation, Snap(labels_a=[1]))
+        values = [item["value"] for item in logic.server.state.snap_available_labels]
+        assert values == [1, 2]
+
+    def test_absent_labels_are_dropped_with_a_warning(
+        self, moving_segmentation, caplog
+    ):
+        with caplog.at_level(logging.WARNING):
+            logic = self.bootstrapped(
+                moving_segmentation,
+                Snap(mode="interface", labels_a=[1, 9], labels_b=[2]),
+            )
+        assert logic.server.state.snap_labels_a == [1]
+        assert "[9]" in caplog.text
+
+    def test_bootstrap_does_not_clear_the_configured_groups(self, moving_segmentation):
+        """The listener fires on the first flush, for the value bootstrap wrote."""
+        logic = self.bootstrapped(
+            moving_segmentation, Snap(mode="interface", labels_a=[1], labels_b=[2])
+        )
+        logic.snap._on_snap_seg_changed(snap_seg_label=moving_segmentation.label)
+        assert logic.server.state.snap_labels_a == [1]
+
+    def test_a_genuine_segmentation_change_still_clears(self, moving_segmentation):
+        logic = self.bootstrapped(
+            moving_segmentation, Snap(mode="interface", labels_a=[1], labels_b=[2])
+        )
+        other = Segmentation(
+            label="other",
+            directory=moving_segmentation.directory,
+            file_paths=list(moving_segmentation.file_paths),
+        )
+        logic.scene.segmentations.append(other)
+        logic.snap._on_snap_seg_changed(snap_seg_label="other")
+        assert logic.server.state.snap_labels_a == []
+
+    def test_a_configured_lock_snaps_at_startup(self, moving_segmentation):
+        logic = self.bootstrapped(
+            moving_segmentation,
+            Snap(mode="interface", labels_a=[1], labels_b=[2], locked=True),
+        )
+        assert logic.server.state.snap_locked is True
+        assert logic.server.state.mpr_origin[0] == pytest.approx(INTERFACE_X, abs=1e-6)
+
+    def test_a_configured_orientation_lock_aligns_at_startup(self, moving_segmentation):
+        logic = self.bootstrapped(
+            moving_segmentation,
+            Snap(
+                mode="interface",
+                labels_a=[1],
+                labels_b=[2],
+                orientation_locked=True,
+            ),
+        )
+        assert logic.server.state.snap_orientation_locked is True
+        assert ALIGN_STEP_NAME in step_names(logic)
+
+    def test_reset_returns_to_the_configured_selection(self, moving_segmentation):
+        snap = Snap(mode="interface", labels_a=[1], labels_b=[2], traverse=40)
+        logic = self.bootstrapped(moving_segmentation, snap)
+
+        state = logic.server.state
+        state.snap_mode = "label"
+        state.snap_labels_a = [2]
+        state.snap_labels_b = []
+        state.snap_traverse = 0
+
+        logic.snap.reset()
+
+        assert state.snap_mode == "interface"
+        assert state.snap_labels_a == [1]
+        assert state.snap_labels_b == [2]
+        assert state.snap_traverse == 40
+
+    def test_reset_restores_a_configured_lock(self, moving_segmentation):
+        logic = self.bootstrapped(
+            moving_segmentation,
+            Snap(mode="interface", labels_a=[1], labels_b=[2], locked=True),
+        )
+        logic.server.state.snap_locked = False
+        logic.server.state.mpr_origin = [9.0, 9.0, 9.0]
+
+        logic.snap.reset()
+
+        assert logic.server.state.snap_locked is True
+        assert logic.server.state.mpr_origin[0] == pytest.approx(INTERFACE_X, abs=1e-6)

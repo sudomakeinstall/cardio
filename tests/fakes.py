@@ -19,11 +19,25 @@ from cardio.orientation import (
     cumulative_rotation_matrix,
 )
 from cardio.rotation import RotationMetadata, RotationSequence
+from cardio.snap import Snap
 from cardio.tile_views import TileViews
 
 
 class FakeState(dict):
-    """Stand-in for trame's state: attribute access over a plain dict."""
+    """Stand-in for trame's state: attribute access over a plain dict.
+
+    Change listeners are recorded and never fired. The bootstrap paths are
+    written not to depend on a flush, so a test can drive them here; anything
+    that does depend on one belongs in the smoke test, against a real server.
+    """
+
+    def change(self, *keys):
+        """Accept a listener registration, and drop it."""
+
+        def register(func):
+            return func
+
+        return register
 
     def __getattr__(self, name):
         try:
@@ -60,8 +74,12 @@ class FakeScene:
         tile_rows=3,
         tile_cols=3,
         mpr_views=None,
+        snap=None,
+        current_frame=0,
     ):
         self.segmentations = segmentations
+        self.snap = snap or Snap()
+        self.current_frame = current_frame
         self.volumes = list(volumes or [])
         self.tile_rows = tile_rows
         self.tile_cols = tile_cols
@@ -122,10 +140,14 @@ def snap_state(**overrides) -> dict:
     return state
 
 
-def make_logic(segmentation, index_order=IndexOrder.ITK, **overrides) -> FakeApp:
+def make_logic(
+    segmentation, index_order=IndexOrder.ITK, snap=None, **overrides
+) -> FakeApp:
     """Real controllers over a scene holding one segmentation, in interface mode."""
     state = snap_state(snap_seg_label=segmentation.label, **overrides)
-    return FakeApp(FakeScene([segmentation], index_order=index_order), **state)
+    return FakeApp(
+        FakeScene([segmentation], index_order=index_order, snap=snap), **state
+    )
 
 
 def traverse_logic(segmentation, **overrides) -> FakeApp:

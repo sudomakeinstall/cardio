@@ -1,5 +1,8 @@
 """Snapping the MPR origin and orientation to a segmentation feature."""
 
+# System
+import logging
+
 # Third Party
 import numpy as np
 
@@ -10,6 +13,7 @@ from ..orientation import (
 )
 from ..rotation import RotationStep
 from ..segmentation import interpolate_planes
+from ..snap import PLANAR_MODES, SnapMode
 from .base import Controller
 
 ALIGN_STEP_NAME = "Interface plane"
@@ -17,9 +21,6 @@ ALIGN_STEP_NAME = "Interface plane"
 # The two interfaces traverse mode travels between: A|B, then B|C.
 INTERFACE_AB = 0
 INTERFACE_BC = 1
-
-# Modes that fit a plane, and so can align and lock orientation.
-PLANAR_MODES = ("interface", "traverse")
 
 
 def _without_alignment(steps):
@@ -42,6 +43,7 @@ class SnapController(Controller):
 
     def __init__(self, app):
         super().__init__(app)
+        self._published_seg_label = None
         self._invalidate_lock_cache()
 
     def register(self):
@@ -57,12 +59,7 @@ class SnapController(Controller):
         state.change("snap_locked")(self._on_snap_lock_changed)
         state.change("snap_orientation_locked")(self._on_snap_orientation_lock_changed)
 
-        state.snap_mode = "label"
-        state.snap_seg_label = self.scene.segmentations[0].label
-        state.snap_labels_a = []
-        state.snap_labels_b = []
-        state.snap_labels_c = []
-        state.snap_traverse = 0
+        self._publish_configured_selection()
         state.snap_available_labels = []
         state.snap_seg_items = [
             {"title": s.label, "value": s.label} for s in self.scene.segmentations
@@ -78,21 +75,125 @@ class SnapController(Controller):
         self.server.controller.reset_snap = self.reset
 
     def register_initial_labels(self):
-        """Populate the label pickers, once a segmentation is selected."""
-        if self.scene.segmentations:
-            self._on_snap_seg_changed()
+        """Populate the pickers and apply the configured selection.
+
+        Called once every controller has registered and the MPR view exists,
+        which is what the configured groups have to be validated against and
+        what a configured lock has to snap against.
+        """
+        if not self.scene.segmentations:
+            return
+        seg = self._selected_segmentation()
+        if seg is None:
+            return
+        self._publish_available_labels(seg)
+        self._publish_configured_groups(seg)
+        self._apply_configured_locks()
+
+    def _apply_configured_locks(self):
+        """Turn on the locks the config asks for, and act on them now.
+
+        The change listeners would do the same work on the next flush, but a
+        lock has to hold from the first frame rather than the first flush, and
+        the tests drive the controllers without a flush at all. Doing it twice
+        costs nothing: both answers come from the memoized caches.
+        """
+        snap = self.scene.snap
+        state = self.server.state
+        state.snap_locked = snap.locked
+        state.snap_orientation_locked = snap.orientation_locked
+        if snap.locked:
+            self.snap_to_centroid()
+        if snap.orientation_locked:
+            self.align_to_interface()
+
+    @property
+    def _frame(self) -> int:
+        """The frame being shown.
+
+        ``frame`` reaches state only when the playback slider is built, which
+        happens after Logic; until then the scene's configured frame is the one
+        that will be shown.
+        """
+        frame = getattr(self.server.state, "frame", None)
+        return self.scene.current_frame if frame is None else frame
+
+    def _selected_segmentation(self, label: str | None = None):
+        """The segmentation ``label`` names, defaulting to the selected one."""
+        if label is None:
+            label = getattr(self.server.state, "snap_seg_label", "")
+        return next((s for s in self.scene.segmentations if s.label == label), None)
+
+    def _publish_configured_selection(self):
+        """Write the configured mode, segmentation and groups to state.
+
+        The groups are written unfiltered here: the pickers are not populated
+        until ``register_initial_labels``, which filters them against the
+        labels the segmentation actually holds.
+        """
+        state = self.server.state
+        snap = self.scene.snap
+        state.snap_mode = snap.mode.value
+        state.snap_seg_label = (
+            snap.segmentation_label or self.scene.segmentations[0].label
+        )
+        state.snap_labels_a = list(snap.labels_a)
+        state.snap_labels_b = list(snap.labels_b)
+        state.snap_labels_c = list(snap.labels_c)
+        state.snap_traverse = snap.traverse
+
+    def _publish_available_labels(self, seg) -> bool:
+        """Publish the label picker options for ``seg`` at the current frame.
+
+        Returns whether this is a different segmentation from the one the
+        pickers were last built for.
+        """
+        frame = self._frame
+        self.server.state.snap_available_labels = [
+            {"title": str(lv), "value": lv} for lv in seg.get_labels(frame)
+        ]
+        changed = seg.label != self._published_seg_label
+        self._published_seg_label = seg.label
+        return changed
+
+    def _publish_configured_groups(self, seg):
+        """Apply the configured groups to state, dropping labels ``seg`` lacks.
+
+        A typo leaves the mode short of a group, which the panel already shows
+        as a selection that cannot snap; that is friendlier than refusing to
+        launch over one bad value.
+        """
+        state = self.server.state
+        frame = self._frame
+        present = set(seg.get_labels(frame))
+        snap = self.scene.snap
+
+        missing = sorted({lv for group in snap.groups for lv in group} - present)
+        if missing:
+            logging.warning(
+                f"Snap labels not present in '{seg.label}' at frame {frame}: {missing}"
+            )
+
+        state.snap_labels_a = [lv for lv in snap.labels_a if lv in present]
+        state.snap_labels_b = [lv for lv in snap.labels_b if lv in present]
+        state.snap_labels_c = [lv for lv in snap.labels_c if lv in present]
+        state.snap_no_interface = False
+        self._invalidate_lock_cache()
 
     def _on_snap_seg_changed(self, snap_seg_label=None, **kwargs):
-        label = snap_seg_label or getattr(self.server.state, "snap_seg_label", "")
-        seg = next((s for s in self.scene.segmentations if s.label == label), None)
-        if not seg:
+        """Repopulate the pickers, and clear groups that no longer apply.
+
+        The groups index into the segmentation being left, so they cannot
+        survive a change of segmentation. The listener also fires on the first
+        flush, for the value the configured selection wrote -- which is the
+        segmentation the pickers were just built for, so nothing is cleared.
+        """
+        seg = self._selected_segmentation(snap_seg_label or None)
+        if seg is None:
             self.server.state.snap_available_labels = []
             return
-        frame = getattr(self.server.state, "frame", 0) or 0
-        raw_labels = seg.get_labels(frame)
-        self.server.state.snap_available_labels = [
-            {"title": str(lv), "value": lv} for lv in raw_labels
-        ]
+        if not self._publish_available_labels(seg):
+            return
         self.server.state.snap_labels_a = []
         self.server.state.snap_labels_b = []
         self.server.state.snap_labels_c = []
@@ -110,7 +211,7 @@ class SnapController(Controller):
         seg = next((s for s in self.scene.segmentations if s.label == seg_label), None)
         if seg is None:
             return None
-        mode = getattr(state, "snap_mode", "label")
+        mode = getattr(state, "snap_mode", SnapMode.LABEL)
         labels_a = list(getattr(state, "snap_labels_a", []))
         labels_b = list(getattr(state, "snap_labels_b", []))
         labels_c = list(getattr(state, "snap_labels_c", []))
@@ -118,7 +219,7 @@ class SnapController(Controller):
             return None
         if mode in PLANAR_MODES and not labels_b:
             return None
-        if mode == "traverse" and not labels_c:
+        if mode == SnapMode.TRAVERSE and not labels_c:
             return None
         return seg, mode, labels_a, labels_b, labels_c
 
@@ -147,7 +248,7 @@ class SnapController(Controller):
                 self._lock_centroids[key] = None
             else:
                 seg, mode, labels_a, _, _ = selection
-                if mode == "label":
+                if mode == SnapMode.LABEL:
                     self._lock_centroids[key] = seg.label_centroid(labels_a, frame)
                 else:
                     left, right = self._interface_labels(selection, interface)
@@ -169,7 +270,7 @@ class SnapController(Controller):
         selection = self._snap_selection()
         if selection is None:
             return None
-        if selection[1] != "traverse":
+        if selection[1] != SnapMode.TRAVERSE:
             return self._endpoint_centroid(frame, INTERFACE_AB)
 
         start = self._endpoint_centroid(frame, INTERFACE_AB)
@@ -186,7 +287,7 @@ class SnapController(Controller):
         if self._snap_selection() is None:
             return
 
-        frame = getattr(self.server.state, "frame", 0)
+        frame = self._frame
         center = self._snap_centroid(frame)
         if center is None:
             self.server.state.snap_no_interface = True
@@ -196,10 +297,14 @@ class SnapController(Controller):
         self.app.mpr.set_origin(center)
 
     def reset(self, **kwargs):
-        """Put the panel back the way it started, and undo what it did.
+        """Put the panel back the way the config asks for, and undo what it did.
 
-        The locks are released first: clearing the groups while one is still on
-        would send the views chasing a selection that is being taken apart.
+        Reset returns to the configured selection rather than to a blank panel,
+        so the state it lands in is the state the app launches in.
+
+        The locks are released first: rebuilding the groups while one is still
+        on would send the views chasing a selection that is being taken apart.
+        They go back on last, once there is a settled scene to snap against.
 
         Only the alignment step is dropped from the rotation sequence. Steps the
         user added are theirs, and the rotations panel has its own button for
@@ -212,18 +317,19 @@ class SnapController(Controller):
         state.snap_locked = False
         state.snap_orientation_locked = False
 
-        state.snap_mode = "label"
-        state.snap_seg_label = self.scene.segmentations[0].label
-        state.snap_labels_a = []
-        state.snap_labels_b = []
-        state.snap_labels_c = []
-        state.snap_traverse = 0
+        self._publish_configured_selection()
         state.snap_no_interface = False
         state.interface_flatness = 0.0
 
         self._invalidate_lock_cache()
         self.app.rotations.edit_steps(_without_alignment)
         self.app.mpr.reset_mpr_origin()
+
+        seg = self._selected_segmentation()
+        if seg is not None:
+            self._publish_available_labels(seg)
+            self._publish_configured_groups(seg)
+            self._apply_configured_locks()
 
     def travel(self, steps: float) -> bool:
         """Move along the traverse path by ``steps`` percent of its length.
@@ -238,7 +344,7 @@ class SnapController(Controller):
         still travelling -- it holds there rather than reverting to moving the
         origin through the slice.
         """
-        if getattr(self.server.state, "snap_mode", "label") != "traverse":
+        if getattr(self.server.state, "snap_mode", SnapMode.LABEL) != SnapMode.TRAVERSE:
             return False
         if self._snap_selection() is None:
             return False
@@ -274,7 +380,7 @@ class SnapController(Controller):
         state = self.server.state
         return (
             bool(getattr(state, "snap_orientation_locked", False))
-            and getattr(state, "snap_mode", "label") in PLANAR_MODES
+            and getattr(state, "snap_mode", SnapMode.LABEL) in PLANAR_MODES
         )
 
     def apply_frame_lock(self, frame: int):
@@ -378,7 +484,7 @@ class SnapController(Controller):
 
     def _aligned_plane(self, frame: int, fraction: float | None = None):
         """The plane the current mode aligns to at ``frame``."""
-        if getattr(self.server.state, "snap_mode", "label") == "traverse":
+        if getattr(self.server.state, "snap_mode", SnapMode.LABEL) == SnapMode.TRAVERSE:
             return self._traverse_plane(frame, fraction)
         return self._interface_plane(frame)
 
@@ -445,11 +551,11 @@ class SnapController(Controller):
         flip the recomputed normal straight back.
         """
         state = self.server.state
-        mode = getattr(state, "snap_mode", "label")
+        mode = getattr(state, "snap_mode", SnapMode.LABEL)
         if mode not in PLANAR_MODES:
             return
 
-        if mode == "traverse":
+        if mode == SnapMode.TRAVERSE:
             state.snap_labels_a, state.snap_labels_c = (
                 list(getattr(state, "snap_labels_c", [])),
                 list(getattr(state, "snap_labels_a", [])),
@@ -467,7 +573,7 @@ class SnapController(Controller):
 
     def _on_snap_traverse_changed(self, **kwargs):
         """Follow the slider as it is dragged, rather than waiting for Align."""
-        if getattr(self.server.state, "snap_mode", "label") != "traverse":
+        if getattr(self.server.state, "snap_mode", SnapMode.LABEL) != SnapMode.TRAVERSE:
             return
         if self._snap_selection() is None:
             return
@@ -476,12 +582,12 @@ class SnapController(Controller):
     def align_to_interface(self, **kwargs):
         """Rotate the MPR views into the plane the current selection names."""
         state = self.server.state
-        if getattr(state, "snap_mode", "label") not in PLANAR_MODES:
+        if getattr(state, "snap_mode", SnapMode.LABEL) not in PLANAR_MODES:
             return
         if self._snap_selection() is None:
             return
 
-        frame = getattr(state, "frame", 0)
+        frame = self._frame
         plane = self._aligned_plane(frame)
         if plane is None:
             state.snap_no_interface = True

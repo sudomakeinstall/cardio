@@ -17,7 +17,7 @@ import trame.app
 import vtk
 
 # Internal
-from cardio.logic import Logic
+from cardio.logic import ALIGN_STEP_NAME, Logic
 from cardio.orientation import AngleUnits
 from cardio.rotation import RotationMetadata
 from cardio.scene import Scene
@@ -51,7 +51,7 @@ def write_mesh(path):
     writer.Write()
 
 
-def build_scene(directory) -> Scene:
+def build_scene(directory, **overrides) -> Scene:
     """One object of every renderable type, so every UI branch is built."""
     write_volume(directory / "vol0.nii.gz")
     write_segmentation(directory / "seg0.nii.gz")
@@ -65,6 +65,7 @@ def build_scene(directory) -> Scene:
             {"label": "seg", "directory": directory, "file_paths": ["seg0.nii.gz"]}
         ],
         meshes=[{"label": "mesh", "directory": directory, "file_paths": ["mesh0.obj"]}],
+        **overrides,
     )
 
 
@@ -545,3 +546,38 @@ def test_the_traverse_slider_is_reachable_in_the_quad_view(read_only_app):
     assert slider is not None
     condition = re.search(r'v-if="([^"]*)"', slider.group(0)).group(1)
     assert "maximized_view !== 'tile'" in condition
+
+
+def test_configured_snap_survives_the_first_flush(tmp_path):
+    """The configured selection is what the panel holds once the state settles.
+
+    The unit tests drive the controllers directly; only here does the
+    ``snap_seg_label`` listener actually fire, which is what used to clear the
+    groups out from under the config.
+    """
+    scene = build_scene(
+        tmp_path,
+        snap={
+            "mode": "traverse",
+            "labels_a": [1],
+            "labels_b": [2],
+            "labels_c": [3],
+            "traverse": 50,
+            "locked": True,
+            "orientation_locked": True,
+        },
+    )
+    server, _, _, _ = build_app(scene)
+    server.state.flush()
+
+    assert server.state.snap_mode == "traverse"
+    assert server.state.snap_labels_a == [1]
+    assert server.state.snap_labels_b == [2]
+    assert server.state.snap_labels_c == [3]
+    assert server.state.snap_traverse == 50
+    assert server.state.snap_locked is True
+    assert server.state.snap_orientation_locked is True
+    assert server.state.snap_no_interface is False
+    assert ALIGN_STEP_NAME in [
+        step["name"] for step in server.state.mpr_rotation_data["angles_list"]
+    ]
