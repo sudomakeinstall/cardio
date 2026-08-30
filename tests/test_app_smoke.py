@@ -51,26 +51,24 @@ def write_mesh(path):
     writer.Write()
 
 
-@pytest.fixture
-def scene(tmp_path) -> Scene:
+def build_scene(directory) -> Scene:
     """One object of every renderable type, so every UI branch is built."""
-    write_volume(tmp_path / "vol0.nii.gz")
-    write_segmentation(tmp_path / "seg0.nii.gz")
-    write_mesh(tmp_path / "mesh0.obj")
+    write_volume(directory / "vol0.nii.gz")
+    write_segmentation(directory / "seg0.nii.gz")
+    write_mesh(directory / "mesh0.obj")
 
     return Scene(
         volumes=[
-            {"label": "vol", "directory": tmp_path, "file_paths": ["vol0.nii.gz"]}
+            {"label": "vol", "directory": directory, "file_paths": ["vol0.nii.gz"]}
         ],
         segmentations=[
-            {"label": "seg", "directory": tmp_path, "file_paths": ["seg0.nii.gz"]}
+            {"label": "seg", "directory": directory, "file_paths": ["seg0.nii.gz"]}
         ],
-        meshes=[{"label": "mesh", "directory": tmp_path, "file_paths": ["mesh0.obj"]}],
+        meshes=[{"label": "mesh", "directory": directory, "file_paths": ["mesh0.obj"]}],
     )
 
 
-@pytest.fixture
-def app(scene):
+def build_app(scene):
     """Logic then UI, in the order app.CardioApp builds them."""
     server = trame.app.get_server(f"test-{next(_server_names)}", client_type="vue3")
     logic = Logic(server, scene)
@@ -78,13 +76,55 @@ def app(scene):
     return server, scene, logic, ui
 
 
-def test_logic_and_ui_construct(app):
-    server, _, _, _ = app
+@pytest.fixture
+def scene(tmp_path) -> Scene:
+    return build_scene(tmp_path)
+
+
+@pytest.fixture
+def app(scene):
+    """A build of its own, for the tests that write to it."""
+    return build_app(scene)
+
+
+def snapshot(state) -> str:
+    """Every state value, as text.
+
+    ``state.initial`` is the whole state; ``to_dict`` is only what has been
+    pushed to a client, which for a server nothing has connected to is nothing
+    at all. Rendered as text because the values include arrays, which do not
+    answer ``==`` with a bool.
+    """
+    return repr(sorted(dict(state.initial).items(), key=str))
+
+
+@pytest.fixture(scope="module")
+def read_only_app(tmp_path_factory):
+    """One build shared by the tests that only read it.
+
+    Building Logic and UI is nearly the whole cost of this file, so the tests
+    that write nothing share a single build. The teardown is what keeps that
+    claim honest: a test that does write is named here, rather than surfacing
+    as a failure in whichever test happened to run after it.
+    """
+    built = build_app(build_scene(tmp_path_factory.mktemp("smoke")))
+    server = built[0]
+    before = snapshot(server.state)
+
+    yield built
+
+    assert snapshot(server.state) == before, (
+        "read_only_app was mutated: give that test the function-scoped `app`"
+    )
+
+
+def test_logic_and_ui_construct(read_only_app):
+    server, _, _, _ = read_only_app
     assert server.state.trame__title.startswith("cardio v")
 
 
-def test_every_object_gets_its_state_keys_registered(app):
-    server, scene, _, _ = app
+def test_every_object_gets_its_state_keys_registered(read_only_app):
+    server, scene, _, _ = read_only_app
 
     for obj in scene.renderables:
         keys = ObjectState.of(obj)
@@ -95,8 +135,8 @@ def test_every_object_gets_its_state_keys_registered(app):
             assert hasattr(server.state, key), key
 
 
-def test_volume_and_segmentation_specific_keys_are_registered(app):
-    server, scene, _, _ = app
+def test_volume_and_segmentation_specific_keys_are_registered(read_only_app):
+    server, scene, _, _ = read_only_app
 
     for volume in scene.volumes:
         assert hasattr(server.state, ObjectState.of(volume).preset)
@@ -106,8 +146,8 @@ def test_volume_and_segmentation_specific_keys_are_registered(app):
         assert hasattr(server.state, ObjectState.of(seg).mpr_overlay)
 
 
-def test_controller_entry_points_the_ui_binds_all_exist(app):
-    server, _, _, _ = app
+def test_controller_entry_points_the_ui_binds_all_exist(read_only_app):
+    server, _, _, _ = read_only_app
 
     for name in (
         "increment_frame",
@@ -135,8 +175,8 @@ def test_controller_entry_points_the_ui_binds_all_exist(app):
         assert getattr(server.controller, name) is not None, name
 
 
-def test_mpr_views_are_built_and_shared_with_the_scene(app):
-    _, scene, _, _ = app
+def test_mpr_views_are_built_and_shared_with_the_scene(read_only_app):
+    _, scene, _, _ = read_only_app
 
     assert scene.mpr_views is not None
     for view in ("axial", "coronal", "sagittal"):
@@ -190,8 +230,8 @@ def test_sync_clipping_applies_bounds_to_every_type(app):
 # --- rotation state has a single writer --------------------------------------
 
 
-def test_rotation_state_starts_in_step_across_all_three_representations(app):
-    server, scene, logic, _ = app
+def test_rotation_state_starts_in_step_across_all_three_representations(read_only_app):
+    server, scene, logic, _ = read_only_app
 
     sequence = logic.rotations.rotation_sequence()
     assert sequence.metadata.angle_units.value == server.state.angle_units
@@ -275,15 +315,15 @@ def test_switching_index_order_also_exchanges_the_origin(app):
     assert server.state.mpr_origin == [3.0, 2.0, 1.0]
 
 
-def test_an_unrecognised_index_order_is_rejected(app):
-    _, _, logic, _ = app
+def test_an_unrecognised_index_order_is_rejected(read_only_app):
+    _, _, logic, _ = read_only_app
 
     with pytest.raises(ValueError, match="Unrecognized index order"):
         logic.rotations.sync_index_order("nonsense")
 
 
-def test_the_renderer_starts_in_the_default_theme(app):
-    server, scene, logic, _ = app
+def test_the_renderer_starts_in_the_default_theme(read_only_app):
+    server, scene, logic, _ = read_only_app
 
     assert server.state.theme_mode == DEFAULT_THEME_MODE
     assert scene.renderer.GetBackground() == pytest.approx(
@@ -374,8 +414,8 @@ def tile_props(scene) -> list[int]:
     return [r.GetViewProps().GetNumberOfItems() for r in scene.tile_views.renderers]
 
 
-def test_the_tile_window_is_built_with_the_layout(app):
-    _, scene, _, _ = app
+def test_the_tile_window_is_built_with_the_layout(read_only_app):
+    _, scene, _, _ = read_only_app
 
     assert scene.tile_views is not None
     assert scene.tile_views.window.GetOffScreenRendering() == 1
@@ -478,14 +518,14 @@ def test_reset_recentres_on_the_volume(app):
 # --- the generated vue expressions ---------------------------------------------
 
 
-def test_no_binding_negates_a_variable_it_then_compares(app):
+def test_no_binding_negates_a_variable_it_then_compares(read_only_app):
     """Catch ``!x === 'y'``, which JS reads as ``(!x) === 'y'`` and never fires.
 
     An expression like this raises no error anywhere: the element simply never
     renders. Building the negation by prefixing "!" to a constant holding a
     comparison is the easy way to write one by accident.
     """
-    _, _, _, ui = app
+    _, _, _, ui = read_only_app
 
     trap = re.compile(r"![A-Za-z_$][\w$.]*\s*[=!]==")
     offenders = [
@@ -497,9 +537,9 @@ def test_no_binding_negates_a_variable_it_then_compares(app):
     assert offenders == []
 
 
-def test_the_traverse_slider_is_reachable_in_the_quad_view(app):
+def test_the_traverse_slider_is_reachable_in_the_quad_view(read_only_app):
     """It went missing once behind exactly the negation above."""
-    _, _, _, ui = app
+    _, _, _, ui = read_only_app
 
     slider = re.search(r'<VSlider[^>]*v-model="snap_traverse"[^>]*>', ui.layout.html)
     assert slider is not None
