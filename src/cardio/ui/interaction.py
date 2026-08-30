@@ -7,6 +7,7 @@ controller, which owns that state.
 
 # System
 import functools as ft
+import math
 import time
 
 # Internal
@@ -19,6 +20,8 @@ HANDLED_EVENTS = [
     "LeftButtonRelease",
     "RightButtonPress",
     "RightButtonRelease",
+    "MiddleButtonPress",
+    "MiddleButtonRelease",
     "KeyPress",
 ]
 
@@ -47,12 +50,14 @@ class Interaction:
 
         self.left_dragging = False
         self.right_dragging = False
+        self.middle_dragging = False
         self.last_mouse_pos = {}
 
         self.window_sensitivity = 5.0
         self.level_sensitivity = 2.0
         self.slice_sensitivity = 1.0
         self.wheel_sensitivity = 1.0
+        self.zoom_sensitivity = 0.005
 
         self.last_keypress_time = {}
         self.keypress_debounce_ms = 100
@@ -92,10 +97,19 @@ class Interaction:
             case "RightButtonRelease":
                 self.right_dragging = False
 
-            case "MouseMove" if self.left_dragging or self.right_dragging:
-                delta = self._drag_delta(view_name, event)
-                if delta is not None:
-                    self._apply_drag(view_name, *delta)
+            case "MiddleButtonPress":
+                self.middle_dragging = True
+                self._store_mouse_position(view_name, event)
+
+            case "MiddleButtonRelease":
+                self.middle_dragging = False
+
+            case "MouseMove" if (
+                self.left_dragging or self.right_dragging or self.middle_dragging
+            ):
+                motion = self._drag_motion(view_name, event)
+                if motion is not None:
+                    self._apply_drag(view_name, *motion)
 
             case "MouseWheel" if view_name in MPR_VIEWS:
                 # Signed to travel the same way as an upward both-buttons drag;
@@ -106,16 +120,35 @@ class Interaction:
                         view_name, spin * self.wheel_sensitivity
                     )
 
-    def _apply_drag(self, view_name, dx, dy):
-        """Both buttons scroll slices; the left button alone windows and levels."""
-        if self.left_dragging and self.right_dragging:
-            if view_name in MPR_VIEWS:
-                self.logic.mpr.scroll_slice(view_name, dy * self.slice_sensitivity)
-        elif self.left_dragging:
+    def _apply_drag(self, view_name, previous, position):
+        """One gesture per button combination.
+
+        Window/level is the only one the tile grid takes; the rest need a single
+        slice to act on, and zoom is the only one that is not about one view.
+        Rotation is given both positions rather than the delta, being an angle
+        swept about a point rather than a distance travelled.
+        """
+        dx = position[0] - previous[0]
+        dy = position[1] - previous[1]
+
+        if self.left_dragging and not (self.right_dragging or self.middle_dragging):
             self.logic.mpr.adjust_window_level(
                 -dx * self.window_sensitivity,
                 -dy * self.level_sensitivity,
             )
+            return
+
+        if view_name not in MPR_VIEWS:
+            return
+
+        if self.middle_dragging and self.left_dragging:
+            self.logic.mpr.rotate_view(view_name, previous, position)
+        elif self.middle_dragging and self.right_dragging:
+            self.logic.mpr.zoom_views(math.exp(dy * self.zoom_sensitivity))
+        elif self.middle_dragging:
+            self.logic.mpr.pan_view(view_name, dx, dy)
+        elif self.left_dragging and self.right_dragging:
+            self.logic.mpr.scroll_slice(view_name, dy * self.slice_sensitivity)
 
     def _on_key(self, key):
         """Apply a keyboard shortcut, ignoring repeats inside the debounce."""
@@ -144,8 +177,8 @@ class Interaction:
                 event["position"]["y"],
             ]
 
-    def _drag_delta(self, view_name, event):
-        """Movement since the last event in a draggable view, or None."""
+    def _drag_motion(self, view_name, event):
+        """Where a draggable view was and is since the last event, or None."""
         if view_name not in DRAG_VIEWS:
             return None
         if view_name not in self.last_mouse_pos or "position" not in event:
@@ -155,4 +188,4 @@ class Interaction:
         previous = self.last_mouse_pos[view_name]
         self.last_mouse_pos[view_name] = position
 
-        return position[0] - previous[0], position[1] - previous[1]
+        return previous, position

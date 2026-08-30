@@ -5,6 +5,9 @@ arithmetic it used to do now lives on the MPR controller, so the handlers can
 be driven against a recording double.
 """
 
+# System
+import math
+
 # Third Party
 import pytest
 
@@ -16,6 +19,18 @@ class RecordingMPR:
     def __init__(self):
         self.window_level = []
         self.scrolls = []
+        self.pans = []
+        self.rotations = []
+        self.zooms = []
+
+    def pan_view(self, view_name, dx, dy):
+        self.pans.append((view_name, dx, dy))
+
+    def rotate_view(self, view_name, start, end):
+        self.rotations.append((view_name, list(start), list(end)))
+
+    def zoom_views(self, factor):
+        self.zooms.append(factor)
 
     def adjust_window_level(self, window_delta, level_delta):
         self.window_level.append((window_delta, level_delta))
@@ -287,3 +302,134 @@ def test_the_wheel_does_not_disturb_window_level(interaction):
     wheel(interaction, "axial", -1.0)
 
     assert interaction.logic.mpr.window_level == []
+
+
+def press_middle(interaction, view, x, y):
+    interaction.on_event(
+        {"type": "MiddleButtonPress", "position": {"x": x, "y": y}}, view_name=view
+    )
+
+
+def test_middle_drag_pans(interaction):
+    press_middle(interaction, "axial", 100, 100)
+    move(interaction, "axial", 110, 90)
+
+    assert interaction.logic.mpr.pans == [("axial", 10, -10)]
+    assert interaction.logic.mpr.window_level == []
+    assert interaction.logic.mpr.scrolls == []
+
+
+def test_middle_drag_pans_one_to_one_with_the_cursor(interaction):
+    """Panning is a grab, so the delta reaches the view unscaled."""
+    press_middle(interaction, "coronal", 0, 0)
+    move(interaction, "coronal", 37, 11)
+
+    assert interaction.logic.mpr.pans == [("coronal", 37, 11)]
+
+
+@pytest.mark.parametrize("view", ["tile", "volume"])
+def test_middle_drag_outside_the_mpr_views_is_ignored(interaction, view):
+    press_middle(interaction, view, 100, 100)
+    move(interaction, view, 110, 90)
+
+    assert interaction.logic.mpr.pans == []
+
+
+def press_left_middle(interaction, view, x, y):
+    for button in ("LeftButtonPress", "MiddleButtonPress"):
+        interaction.on_event(
+            {"type": button, "position": {"x": x, "y": y}}, view_name=view
+        )
+
+
+def press_right_middle(interaction, view, x, y):
+    for button in ("RightButtonPress", "MiddleButtonPress"):
+        interaction.on_event(
+            {"type": button, "position": {"x": x, "y": y}}, view_name=view
+        )
+
+
+def test_left_and_middle_rotates(interaction):
+    """Rotation gets both positions: it is an angle swept, not a distance."""
+    press_left_middle(interaction, "axial", 100, 100)
+    move(interaction, "axial", 110, 90)
+
+    assert interaction.logic.mpr.rotations == [("axial", [100, 100], [110, 90])]
+
+
+def test_each_move_rotates_from_where_the_last_one_left_off(interaction):
+    press_left_middle(interaction, "axial", 100, 100)
+    move(interaction, "axial", 110, 90)
+    move(interaction, "axial", 130, 70)
+
+    assert interaction.logic.mpr.rotations == [
+        ("axial", [100, 100], [110, 90]),
+        ("axial", [110, 90], [130, 70]),
+    ]
+
+
+def test_rotating_is_not_also_a_pan_or_a_window_level(interaction):
+    """The middle button is in three gestures; only one may fire."""
+    press_left_middle(interaction, "axial", 100, 100)
+    move(interaction, "axial", 110, 90)
+
+    assert interaction.logic.mpr.pans == []
+    assert interaction.logic.mpr.window_level == []
+
+
+def test_right_and_middle_zooms(interaction):
+    press_right_middle(interaction, "axial", 100, 100)
+    move(interaction, "axial", 100, 120)
+
+    assert interaction.logic.mpr.zooms == [
+        pytest.approx(math.exp(20 * interaction.zoom_sensitivity))
+    ]
+
+
+def test_dragging_up_zooms_in_and_down_zooms_out(interaction):
+    press_right_middle(interaction, "axial", 100, 100)
+    move(interaction, "axial", 100, 120)
+    move(interaction, "axial", 100, 80)
+
+    zoomed_in, zoomed_out = interaction.logic.mpr.zooms
+    assert zoomed_in > 1.0
+    assert zoomed_out < 1.0
+
+
+def test_zoom_ignores_horizontal_movement(interaction):
+    press_right_middle(interaction, "axial", 100, 100)
+    move(interaction, "axial", 150, 100)
+
+    assert interaction.logic.mpr.zooms == [pytest.approx(1.0)]
+
+
+def test_rotate_and_zoom_need_a_single_slice(interaction):
+    """Neither means anything over the tile grid or the 3D view."""
+    for view in ("tile", "volume"):
+        press_left_middle(interaction, view, 100, 100)
+        move(interaction, view, 110, 90)
+        press_right_middle(interaction, view, 100, 100)
+        move(interaction, view, 100, 120)
+
+    assert interaction.logic.mpr.rotations == []
+    assert interaction.logic.mpr.zooms == []
+
+
+def test_releasing_the_middle_button_returns_to_window_level(interaction):
+    press_left_middle(interaction, "axial", 100, 100)
+    move(interaction, "axial", 110, 90)
+    interaction.on_event({"type": "MiddleButtonRelease"}, view_name="axial")
+    move(interaction, "axial", 120, 80)
+
+    assert len(interaction.logic.mpr.rotations) == 1
+    assert interaction.logic.mpr.window_level == [
+        (-10 * interaction.window_sensitivity, 10 * interaction.level_sensitivity)
+    ]
+
+
+def test_releasing_the_middle_button_ends_the_pan(interaction):
+    press_middle(interaction, "axial", 100, 100)
+    interaction.on_event({"type": "MiddleButtonRelease"}, view_name="axial")
+    move(interaction, "axial", 150, 150)
+
+    assert interaction.logic.mpr.pans == []

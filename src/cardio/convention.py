@@ -98,6 +98,17 @@ class Convention:
             return angle
         return exchange_angle(angle)
 
+    def axis_from_itk(self, axis: str) -> str:
+        """An ITK rotation axis name, expressed in this convention.
+
+        The axis exchange is an involution, so this is ``axis_to_itk`` again.
+        """
+        return self.axis_to_itk(axis)
+
+    def angle_from_itk(self, angle: float) -> float:
+        """An ITK rotation angle, expressed in this convention (an involution)."""
+        return self.angle_to_itk(angle)
+
     def quaternion_to_itk(self, quaternion) -> list[float]:
         """A quaternion [x, y, z, w] in this convention, expressed in ITK."""
         if self.is_itk:

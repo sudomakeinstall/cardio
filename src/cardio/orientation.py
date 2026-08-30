@@ -94,6 +94,15 @@ def axcode_transform_matrix(from_axcode: str, to_axcode: str) -> np.ndarray:
     return to_basis @ np.linalg.inv(from_basis)
 
 
+def angle_from_degrees(angle: float, units: AngleUnits) -> float:
+    """An angle in degrees, expressed in ``units``."""
+    match units:
+        case AngleUnits.RADIANS:
+            return float(np.radians(angle))
+        case AngleUnits.DEGREES:
+            return float(angle)
+
+
 def euler_angle_to_rotation_matrix(
     axis: EulerAxis, angle: float, units: AngleUnits = AngleUnits.DEGREES
 ) -> np.ndarray:

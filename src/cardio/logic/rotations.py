@@ -2,9 +2,18 @@
 
 # Internal
 from ..convention import exchange_point
-from ..orientation import AngleUnits, IndexOrder, cumulative_rotation_matrix
+from ..orientation import (
+    AngleUnits,
+    IndexOrder,
+    angle_from_degrees,
+    cumulative_rotation_matrix,
+)
 from ..rotation import RotationSequence, RotationStep
 from .base import Controller
+
+# The mouse-driven Euler steps, named by the physical axis each one turns
+# about rather than by its letter, which changes with the index order.
+MOUSE_STEP_NAMES = {"X": "Mouse L-R", "Y": "Mouse P-A", "Z": "Mouse S-I"}
 
 
 class RotationController(Controller):
@@ -80,6 +89,44 @@ class RotationController(Controller):
             steps = [step for step in steps if step.get("name") != exclude]
         sequence, angles = self.convention.visible_sequence_to_itk(steps)
         return cumulative_rotation_matrix(sequence, angles, self.convention.angle_units)
+
+    def turn_mouse(self, axis: str, degrees: float):
+        """Add ``degrees`` about ITK ``axis`` as the innermost rotation.
+
+        The step goes last, where the sequence composes it first. That is the
+        only place a turn about a fixed base axis is also a turn about the axis
+        the view shows now, which is what keeps a roll in its own plane however
+        much rotation is stacked above it.
+
+        Dragging on about the same axis accumulates into that step. Changing
+        axis starts a new one rather than reordering the sequence: reordering
+        would recompose the rotation and move the views out from under the
+        user, and putting the new axis anywhere but last would tilt the plane
+        being rolled instead of spinning it.
+        """
+        sequence = self.rotation_sequence()
+        steps = list(sequence.angles_list)
+        name = MOUSE_STEP_NAMES[axis]
+
+        angle = angle_from_degrees(
+            self.convention.angle_from_itk(degrees), sequence.metadata.angle_units
+        )
+
+        innermost = steps[-1] if steps else None
+        if innermost is not None and innermost.name == name and innermost.visible:
+            innermost.angle = (innermost.angle or 0.0) + angle
+        else:
+            steps.append(
+                RotationStep(
+                    axis=self.convention.axis_from_itk(axis),
+                    angle=angle,
+                    name=name,
+                    name_editable=False,
+                )
+            )
+
+        sequence.angles_list = steps
+        self.publish(sequence)
 
     def add_mpr_rotation(self, axis):
         """Append a new Euler rotation about ``axis``."""

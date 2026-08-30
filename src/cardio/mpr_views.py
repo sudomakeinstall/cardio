@@ -5,6 +5,9 @@ the axial, coronal and sagittal paths drifted apart. Going through this type
 means a change reaches all three views or none.
 """
 
+# System
+import math
+
 # Third Party
 import vtk
 
@@ -86,3 +89,68 @@ class MPRViews:
     def reset_cameras(self):
         for view in self.windows:
             self.renderer(view).ResetCamera()
+
+    def origin_on_screen(self, view: str) -> tuple[float, float] | None:
+        """Where the camera's focal point lands, in display coordinates.
+
+        The origin sits at the centre of every reslice and the camera looks
+        straight at it, so this is where the crosshair is drawn -- the point a
+        rotation gesture turns about. None until the window has been sized.
+        """
+        renderer = self.renderer(view)
+        if not all(renderer.GetSize()):
+            return None
+
+        x, y, _ = _focal_display_point(renderer)
+        return x, y
+
+    def zoom(self, factor: float):
+        """Zoom every view by the same factor, each about its own centre.
+
+        All three move together so the MPRs stay comparable, the way the tile
+        grid shares one scale. The focal point does not move, so the origin
+        stays under the crosshair.
+        """
+        if factor <= 0.0:
+            return
+
+        for view in self.windows:
+            renderer = self.renderer(view)
+            camera = renderer.GetActiveCamera()
+            if camera.GetParallelProjection():
+                camera.SetParallelScale(camera.GetParallelScale() / factor)
+            else:
+                camera.Dolly(factor)
+            renderer.ResetCameraClippingRange()
+
+    def world_per_pixel(self, view: str) -> float:
+        """World units spanned by one display pixel at the focal plane.
+
+        The scale a pan needs to keep the image under the cursor. Measured
+        through the camera rather than from the parallel scale, so it holds for
+        a perspective camera too. Zero if the window has never been sized, when
+        every display point projects onto the same spot.
+        """
+        renderer = self.renderer(view)
+        if not all(renderer.GetSize()):
+            return 0.0
+
+        depth = _focal_display_point(renderer)[2]
+        start = _display_to_world(renderer, 0.0, 0.0, depth)
+        end = _display_to_world(renderer, 1.0, 0.0, depth)
+        return math.dist(start, end)
+
+
+def _focal_display_point(renderer) -> tuple[float, float, float]:
+    """The camera's focal point in display coordinates, with its depth."""
+    renderer.SetWorldPoint(*renderer.GetActiveCamera().GetFocalPoint(), 1.0)
+    renderer.WorldToDisplay()
+    return renderer.GetDisplayPoint()
+
+
+def _display_to_world(renderer, x: float, y: float, depth: float) -> list[float]:
+    """One display point at a fixed depth, in world units."""
+    renderer.SetDisplayPoint(x, y, depth)
+    renderer.DisplayToWorld()
+    *point, w = renderer.GetWorldPoint()
+    return [value / w for value in point] if w else point

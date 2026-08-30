@@ -1,12 +1,43 @@
 """The MPR views: active volume, slice pose, window/level, crosshairs, overlays."""
 
+# System
+import math
+
 # Third Party
 import numpy as np
 
 # Internal
+from ..reslice import VIEW_TRANSFORMS
 from ..state import ObjectState
 from ..window_level import presets
 from .base import Controller
+
+ITK_AXIS_NAMES = ("X", "Y", "Z")
+
+# A spoke shorter than this has no reliable direction, so a drag through the
+# origin reads as no rotation rather than a wild spin.
+MIN_SPOKE_PIXELS = 8.0
+
+
+def _signed_axis(vector) -> tuple[str, float]:
+    """A signed coordinate direction as an ITK axis name and a sign."""
+    index = int(np.argmax(np.abs(vector)))
+    return ITK_AXIS_NAMES[index], float(np.sign(vector[index]))
+
+
+def _swept_degrees(centre, start, end) -> float:
+    """The angle the cursor sweeps about ``centre``, clockwise positive.
+
+    Zero when either spoke is too short to have a direction worth trusting.
+    """
+    ax, ay = start[0] - centre[0], start[1] - centre[1]
+    bx, by = end[0] - centre[0], end[1] - centre[1]
+
+    if min(math.hypot(ax, ay), math.hypot(bx, by)) < MIN_SPOKE_PIXELS:
+        return 0.0
+
+    # Display y points up, so a positive cross product sweeps anticlockwise
+    return -math.degrees(math.atan2(ax * by - ay * bx, ax * bx + ay * by))
 
 
 class MPRController(Controller):
@@ -527,6 +558,94 @@ class MPRController(Controller):
         self.server.state.mpr_origin = [
             origin[i] + distance * step[i] for i in range(3)
         ]
+
+    def rotate_view(self, view_name: str, start, end):
+        """Spin the slice frame by the angle the cursor sweeps about the origin.
+
+        The origin sits at the centre of every reslice and the camera looks
+        straight at it, so the line from it to the cursor is a spoke: the angle
+        between the spoke where the drag was and the spoke where it is now is
+        the angle to turn. The grab is direct, with no sensitivity to tune --
+        the image keeps up with the cursor at any radius.
+
+        The turn is a roll about the view's own normal, the axis
+        ``scroll_slice`` travels along, so the axial view turns about the
+        craniocaudal axis and goes on showing the same cut. That normal is a
+        signed L/A/S direction before any rotation is applied, so the drag
+        lands as a plain Euler step about X, Y or Z rather than a quaternion.
+
+        ``start`` and ``end`` are display positions, as the view events carry.
+        """
+        if view_name not in VIEW_TRANSFORMS:
+            return
+
+        views = self.scene.mpr_views
+        if views is None:
+            return
+
+        centre = views.origin_on_screen(view_name)
+        if centre is None:
+            return
+
+        degrees = _swept_degrees(centre, start, end)
+        if not degrees:
+            return
+
+        frame = VIEW_TRANSFORMS[view_name]
+
+        # Which way a turn reads on screen flips with the frame's handedness,
+        # and the axcode frames do not agree on it: coronal's is the odd one,
+        # the same disagreement scroll_vector settles by taking P rather than
+        # the axcode's A as its normal.
+        hand = float(np.linalg.det(frame))
+
+        axis, sign = _signed_axis(frame[:, 2])
+        self.app.rotations.turn_mouse(axis, sign * hand * degrees)
+
+    def zoom_views(self, factor: float):
+        """Zoom all three MPR views by ``factor``."""
+        views = self.scene.mpr_views
+        if views is None:
+            return
+
+        views.zoom(factor)
+        self.server.controller.view_update()
+
+    def pan_vectors(self, view_name: str):
+        """A view's in-plane right and up directions, in the user's index order.
+
+        Columns 0 and 1 of the reslice frame, which is the basis the view is
+        actually cut in; column 2 is the normal ``scroll_vector`` walks along.
+        Composed in ITK and handed back in the convention ``mpr_origin`` is
+        stored in, exactly as the normal is.
+        """
+        frame = self.app.rotations.rotation_matrix() @ VIEW_TRANSFORMS[view_name]
+        return tuple(
+            np.array(self.convention.point_from_itk(frame[:, axis])) for axis in (0, 1)
+        )
+
+    def pan_view(self, view_name: str, dx: float, dy: float):
+        """Slide the shared origin within ``view_name``'s own plane.
+
+        The in-plane sibling of ``scroll_slice``. The dragged view translates
+        under its crosshair, which stays put because the origin is always what
+        sits at the centre of a reslice; the other two views re-cut, one view's
+        in-plane axes being the axes the others scroll along.
+        """
+        views = self.scene.mpr_views
+        if views is None or view_name not in VIEW_TRANSFORMS:
+            return
+
+        scale = views.world_per_pixel(view_name)
+        if not scale:
+            return
+
+        right, up = self.pan_vectors(view_name)
+        # Against the drag, so the image travels with the cursor
+        step = -(dx * right + dy * up) * scale
+
+        origin = self.server.state.mpr_origin
+        self.server.state.mpr_origin = [origin[i] + step[i] for i in range(3)]
 
     def adjust_window_level(self, window_delta: float, level_delta: float):
         """Nudge the MPR window and level, keeping the window positive."""

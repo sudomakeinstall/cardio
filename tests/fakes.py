@@ -47,12 +47,14 @@ class FakeScene:
         volumes=None,
         tile_rows=3,
         tile_cols=3,
+        mpr_views=None,
     ):
         self.segmentations = segmentations
         self.volumes = list(volumes or [])
         self.tile_rows = tile_rows
         self.tile_cols = tile_cols
         self.tile_views = None
+        self.mpr_views = mpr_views
         self.mpr_rotation_sequence = RotationSequence(
             metadata=RotationMetadata(index_order=index_order, angle_units=angle_units)
         )

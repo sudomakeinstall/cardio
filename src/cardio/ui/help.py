@@ -86,6 +86,15 @@ def help_dialog():
                         with html.Tr():
                             html.Td("Scroll Wheel")
                             html.Td("Scroll through slices")
+                        with html.Tr():
+                            html.Td("Middle Drag")
+                            html.Td("Pan; the other views follow")
+                        with html.Tr():
+                            html.Td("Left + Middle Drag ↻")
+                            html.Td("Rotate; drag around the crosshair")
+                        with html.Tr():
+                            html.Td("Right + Middle Drag ↑/↓")
+                            html.Td("Zoom all three views in/out")
 
             with vuetify.VCardActions():
                 vuetify.VSpacer()
