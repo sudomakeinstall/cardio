@@ -195,6 +195,16 @@ class RecordingMPR:
         self.last_frame = frame
 
 
+class RecordingTiles:
+    """Stands in for the tile controller, which the frame path also drives."""
+
+    def __init__(self):
+        self.frames = []
+
+    def update_tiles(self, frame):
+        self.frames.append(frame)
+
+
 class FakeServer:
     """``protocol`` is None until a client connects, as on a real server."""
 
@@ -224,6 +234,7 @@ class PlaybackApp:
         self.scene = FakeScene(nframes)
         self.snap = RecordingSnap()
         self.mpr = RecordingMPR(state_values["frame"])
+        self.tiles = RecordingTiles()
         controller = FakeController(clock, render_seconds, self)
         self.server = FakeServer(FakeState(**state_values), controller)
         self.playback = PlaybackController(self)

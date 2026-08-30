@@ -75,7 +75,14 @@ def test_listeners_cover_every_handled_event(interaction):
 
 
 @pytest.mark.parametrize(
-    "key,view", [("v", "volume"), ("a", "axial"), ("c", "coronal"), ("s", "sagittal")]
+    "key,view",
+    [
+        ("v", "volume"),
+        ("a", "axial"),
+        ("c", "coronal"),
+        ("s", "sagittal"),
+        ("t", "tile"),
+    ],
 )
 def test_maximize_keys_toggle(interaction, key, view):
     press(interaction, key)
@@ -154,6 +161,29 @@ def test_releasing_ends_the_drag(interaction):
     move(interaction, "axial", 50, 50)
 
     assert interaction.logic.mpr.window_level == []
+
+
+def test_left_drag_over_the_tile_grid_windows_every_tile(interaction):
+    interaction.on_event(
+        {"type": "LeftButtonPress", "position": {"x": 100, "y": 100}},
+        view_name="tile",
+    )
+    move(interaction, "tile", 110, 90)
+
+    assert interaction.logic.mpr.window_level == [
+        (-10 * interaction.window_sensitivity, 10 * interaction.level_sensitivity)
+    ]
+
+
+def test_right_drag_over_the_tile_grid_scrolls_nothing(interaction):
+    """A grid of cuts along a path has no single slice to move."""
+    interaction.on_event(
+        {"type": "RightButtonPress", "position": {"x": 100, "y": 100}},
+        view_name="tile",
+    )
+    move(interaction, "tile", 100, 120)
+
+    assert interaction.logic.mpr.scrolls == []
 
 
 def test_dragging_in_the_volume_view_is_ignored(interaction):

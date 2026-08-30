@@ -11,7 +11,7 @@ from trame.app import asynchronous
 from ..screenshot import Screenshot
 from .base import Controller
 
-VIEWPORTS = ("vr", "axial", "coronal", "sagittal")
+VIEWPORTS = ("vr", "axial", "coronal", "sagittal", "tile")
 
 
 class CaptureController(Controller):
@@ -34,7 +34,7 @@ class CaptureController(Controller):
         mpr_enabled = self.server.state.mpr_enabled
         selected = {
             name
-            for name in ("vr", "axial", "coronal", "sagittal")
+            for name in VIEWPORTS
             if getattr(self.server.state, f"screenshot_viewport_{name}", True)
         }
         render_windows = {}
@@ -44,6 +44,8 @@ class CaptureController(Controller):
             for name in ("axial", "coronal", "sagittal"):
                 if name in selected:
                     render_windows[name] = self.scene.mpr_views[name]
+        if "tile" in selected and self.scene.tile_views is not None:
+            render_windows["tile"] = self.scene.tile_views.window
 
         for folder in render_windows:
             (dr / folder).mkdir(parents=True, exist_ok=True)

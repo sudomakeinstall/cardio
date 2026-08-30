@@ -8,7 +8,7 @@ from trame.widgets import vuetify3 as vuetify
 from .. import __version__
 from ..scene import Scene
 from ..state import DEFAULT_THEME_MODE
-from .common import DEFAULT_OPEN_SECTIONS, drawer_styles, section
+from .common import DEFAULT_OPEN_SECTIONS, TILE_ACTIVE, drawer_styles, section
 from .help import help_dialog
 from .interaction import Interaction
 from .layout import toolbar, viewports
@@ -20,6 +20,7 @@ from .panels import (
     playback_panel,
     rotations_panel,
     snap_panel,
+    tiles_panel,
     volume_panel,
 )
 
@@ -96,14 +97,20 @@ class UI:
                 overlays_panel(self.server, self.scene)
 
             if self.scene.volumes:
+                # The tile grid is posed by the same controls, so they stay
+                # reachable while it is on screen.
                 with section(
                     "orientation",
                     "Orientation",
                     "mdi-axis-arrow",
-                    v_if="!maximized_view",
+                    v_if=f"!maximized_view || {TILE_ACTIVE}",
                 ):
                     snap_panel(self.server, self.scene)
                     rotations_panel(self.server, self.scene)
+
+                if self.scene.segmentations:
+                    with section("tiles", "Tile View", "mdi-view-grid-outline"):
+                        tiles_panel(self.server, self.scene)
 
             with section("export", "Export", "mdi-video-outline"):
                 capture_panel(self.server, self.scene)
@@ -116,6 +123,7 @@ class UI:
             "coronal_update",
             "sagittal_update",
             "volume_update",
+            "tile_update",
         ):
             if hasattr(controller, name):
                 getattr(controller, name)()

@@ -23,12 +23,17 @@ HANDLED_EVENTS = [
 
 MPR_VIEWS = {"axial", "sagittal", "coronal"}
 
+# Views a drag means something in. The tile grid takes window/level but not the
+# slice scroll, which has no single slice to move.
+DRAG_VIEWS = MPR_VIEWS | {"tile"}
+
 # Keys that maximize a view, and the view each one names
 MAXIMIZE_KEYS = {
     "v": "volume",
     "a": "axial",
     "c": "coronal",
     "s": "sagittal",
+    "t": "tile",
 }
 
 
@@ -94,7 +99,7 @@ class Interaction:
                         -dy * self.level_sensitivity,
                     )
 
-            case "MouseMove" if self.right_dragging:
+            case "MouseMove" if self.right_dragging and view_name in MPR_VIEWS:
                 delta = self._drag_delta(view_name, event)
                 if delta is not None:
                     _, dy = delta
@@ -128,8 +133,8 @@ class Interaction:
             ]
 
     def _drag_delta(self, view_name, event):
-        """Movement since the last event in an MPR view, or None."""
-        if view_name not in MPR_VIEWS:
+        """Movement since the last event in a draggable view, or None."""
+        if view_name not in DRAG_VIEWS:
             return None
         if view_name not in self.last_mouse_pos or "position" not in event:
             return None

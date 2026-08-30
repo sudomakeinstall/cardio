@@ -132,6 +132,21 @@ def plane_basis(normal: np.ndarray, anchor: np.ndarray | None = None) -> np.ndar
     return np.column_stack([view_x, view_y, normal])
 
 
+def set_label_opacity(pipelines, opacity: float):
+    """Re-alpha the label colours of every pipeline ``label_color_filter`` built.
+
+    Takes the pipeline dicts rather than a ``ResliceSet``, so the tile grid can
+    hand it its own set.
+    """
+    for parts in pipelines:
+        lut = parts["lut"]
+        for i in range(1, lut.GetNumberOfTableValues()):
+            rgba = list(lut.GetTableValue(i))
+            rgba[3] = opacity
+            lut.SetTableValue(i, *rgba)
+        parts["image_to_colors"].Modified()
+
+
 # ``plane_basis`` returns a left-handed basis, which has no quaternion and so
 # cannot be interpolated directly. Right-multiplying by a fixed improper factor
 # lands both endpoints in SO(3); the geodesic there is right-invariant, so
@@ -304,15 +319,32 @@ class Segmentation(Object):
                 # by not overriding the mapper's lookup table
                 pass
 
-    def create_mpr_actors(self, frame: int = 0) -> ResliceSet:
-        """Create the MPR reslice pipelines for a frame, centred on the image."""
+    def mpr_image_data(self, frame: int = 0):
+        """The label image a frame's reslice pipelines read, wrapping short series."""
         if frame >= len(self._label_images):
             frame = 0
+        return self._label_images[frame]
 
-        image_data = self._label_images[frame]
+    def create_mpr_actors(self, frame: int = 0) -> ResliceSet:
+        """Create the MPR reslice pipelines for a frame, centred on the image."""
+        image_data = self.mpr_image_data(frame)
+
+        self._mpr_actors[frame] = ResliceSet(
+            image_data,
+            interpolation="nearest",
+            background_level=0,
+            output_filter=self.label_color_filter(image_data),
+        )
+        return self._mpr_actors[frame]
+
+    def label_color_filter(self, image_data):
+        """The reslice output filter that maps label values to colours.
+
+        Anything reslicing this segmentation needs it, not just the MPR views,
+        so it is a method rather than a closure inside ``create_mpr_actors``.
+        """
 
         def color_labels(reslice):
-            """Map the resliced label values through a colour table."""
             lut = self._create_label_lookup_table(image_data, opacity=1.0)
             image_to_colors = vtk.vtkImageMapToColors()
             image_to_colors.SetInputConnection(reslice.GetOutputPort())
@@ -320,13 +352,7 @@ class Segmentation(Object):
             image_to_colors.SetOutputFormatToRGBA()
             return image_to_colors, {"image_to_colors": image_to_colors, "lut": lut}
 
-        self._mpr_actors[frame] = ResliceSet(
-            image_data,
-            interpolation="nearest",
-            background_level=0,
-            output_filter=color_labels,
-        )
-        return self._mpr_actors[frame]
+        return color_labels
 
     def _create_label_lookup_table(self, image_data, opacity: float = 1.0):
         """Create lookup table for label-to-color mapping."""
@@ -525,10 +551,4 @@ class Segmentation(Object):
         if frame not in self._mpr_actors:
             return
 
-        for parts in self._mpr_actors[frame].values():
-            lut = parts["lut"]
-            for i in range(1, lut.GetNumberOfTableValues()):
-                rgba = list(lut.GetTableValue(i))
-                rgba[3] = opacity
-                lut.SetTableValue(i, *rgba)
-            parts["image_to_colors"].Modified()
+        set_label_opacity(self._mpr_actors[frame].values(), opacity)

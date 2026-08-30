@@ -45,6 +45,9 @@ def help_dialog():
                             html.Td("s")
                             html.Td("Toggle sagittal view")
                         with html.Tr():
+                            html.Td("t")
+                            html.Td("Toggle tile view")
+                        with html.Tr():
                             html.Td("l")
                             html.Td("Toggle crosshairs")
 

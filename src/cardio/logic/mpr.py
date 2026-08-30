@@ -4,7 +4,6 @@
 import numpy as np
 
 # Internal
-from ..orientation import cumulative_rotation_matrix
 from ..state import ObjectState
 from ..window_level import presets
 from .base import Controller
@@ -383,14 +382,7 @@ class MPRController(Controller):
 
         active_volume = self._active_volume()
         if active_volume is not None:
-            rotation_sequence, rotation_angles = (
-                self.app.rotations.visible_rotation_data()
-            )
-            rotation = cumulative_rotation_matrix(
-                rotation_sequence,
-                rotation_angles,
-                self.scene.mpr_rotation_sequence.metadata.angle_units,
-            )
+            rotation = self.app.rotations.rotation_matrix()
             normal = rotation @ normal
             up = rotation @ up
 
@@ -519,11 +511,11 @@ class MPRController(Controller):
         if view_name not in base_normals:
             return np.array([0.0, 0.0, 1.0])
 
-        convention = self.convention
-        sequence, angles = self.app.rotations.visible_rotation_data()
-        rotation = cumulative_rotation_matrix(sequence, angles, convention.angle_units)
+        rotation = self.app.rotations.rotation_matrix()
 
-        return np.array(convention.point_from_itk(rotation @ base_normals[view_name]))
+        return np.array(
+            self.convention.point_from_itk(rotation @ base_normals[view_name])
+        )
 
     def scroll_slice(self, view_name: str, distance: float):
         """Move the shared origin along ``view_name``'s out-of-plane direction."""

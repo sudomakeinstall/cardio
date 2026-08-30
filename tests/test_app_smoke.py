@@ -7,6 +7,7 @@ This is the cheap guard against that.
 
 # System
 import itertools
+import re
 
 # Third Party
 import itk
@@ -126,6 +127,8 @@ def test_controller_entry_points_the_ui_binds_all_exist(app):
         "snap_to_centroid",
         "align_to_interface",
         "swap_snap_groups",
+        "reset_snap",
+        "reset_tile_cameras",
         "view_update",
         "view_reset_camera",
     ):
@@ -299,13 +302,21 @@ def test_toggling_the_theme_repaints_the_background(app):
 # --- traverse runs through the real server state ------------------------------
 
 
-def traverse_selection(server):
-    """Select the three stacked labels the smoke segmentation carries.
+def connect(server):
+    """Do what the running app does when a client connects.
 
-    ``state.ready()`` is what arms the change listeners; the running app calls
-    it when a client connects, and without it a write reaches no listener.
+    ``state.ready()`` is what arms the change listeners, and without it a write
+    reaches no listener. ``finalize_mpr_initialization`` is hooked to
+    ``on_server_ready``, which nothing here fires, and it is what sets the
+    active volume the views resample.
     """
     server.state.ready()
+    server.controller.finalize_mpr_initialization()
+
+
+def traverse_selection(server):
+    """Select the three stacked labels the smoke segmentation carries."""
+    connect(server)
     with server.state:
         server.state.snap_mode = "traverse"
         server.state.snap_labels_a = [1]
@@ -354,3 +365,143 @@ def test_swap_reverses_traverse_without_losing_the_middle_group(app):
     assert server.state.snap_labels_b == [2]
     assert server.state.snap_labels_c == [1]
     assert server.state.snap_traverse == 75
+
+
+# --- tile mode runs through the real server state -----------------------------
+
+
+def tile_props(scene) -> list[int]:
+    return [r.GetViewProps().GetNumberOfItems() for r in scene.tile_views.renderers]
+
+
+def test_the_tile_window_is_built_with_the_layout(app):
+    _, scene, _, _ = app
+
+    assert scene.tile_views is not None
+    assert scene.tile_views.window.GetOffScreenRendering() == 1
+    assert len(scene.tile_views) == scene.tile_rows * scene.tile_cols
+
+
+def test_entering_tile_mode_fills_the_grid(app):
+    server, scene, _, _ = app
+    traverse_selection(server)
+
+    with server.state:
+        server.state.maximized_view = "tile"
+
+    assert not server.state.snap_no_interface
+    assert tile_props(scene) == [1] * len(scene.tile_views)
+
+
+def test_reshaping_the_grid_resamples_the_path(app):
+    server, scene, _, _ = app
+    traverse_selection(server)
+
+    with server.state:
+        server.state.maximized_view = "tile"
+    with server.state:
+        server.state.tile_rows = 2
+        server.state.tile_cols = 4
+
+    assert len(scene.tile_views) == 8
+    assert tile_props(scene) == [1] * 8
+
+
+def test_the_grid_stays_empty_without_a_path(app):
+    server, scene, _, _ = app
+    connect(server)
+
+    with server.state:
+        server.state.maximized_view = "tile"
+
+    assert tile_props(scene) == [0] * len(scene.tile_views)
+
+
+def test_leaving_tile_mode_stops_retiling(app):
+    server, scene, _, _ = app
+    traverse_selection(server)
+
+    with server.state:
+        server.state.maximized_view = "tile"
+    with server.state:
+        server.state.maximized_view = ""
+        server.state.tile_rows = 6
+
+    assert len(scene.tile_views) == scene.tile_rows * scene.tile_cols
+
+
+# --- Reset returns the snap panel to its defaults -----------------------------
+
+
+def test_reset_undoes_a_locked_traverse_alignment(app):
+    server, _, _, _ = app
+    traverse_selection(server)
+
+    with server.state:
+        server.state.snap_traverse = 40
+        server.state.snap_locked = True
+        server.state.snap_orientation_locked = True
+    server.controller.align_to_interface()
+
+    assert server.state.mpr_rotation_data["angles_list"]
+    moved = list(server.state.mpr_origin)
+
+    with server.state:
+        server.controller.reset_snap()
+
+    state = server.state
+    assert state.snap_mode == "label"
+    assert state.snap_labels_a == [] and state.snap_labels_b == []
+    assert state.snap_labels_c == []
+    assert state.snap_traverse == 0
+    assert state.snap_locked is False
+    assert state.snap_orientation_locked is False
+    assert state.mpr_rotation_data["angles_list"] == []
+    assert state.mpr_origin != moved
+
+
+def test_reset_recentres_on_the_volume(app):
+    server, scene, logic, _ = app
+    connect(server)
+
+    with server.state:
+        server.state.mpr_origin = [99.0, 99.0, 99.0]
+    with server.state:
+        server.controller.reset_snap()
+
+    centre = logic.mpr.convention.point_from_itk(
+        scene.volumes[0].mpr_image_data(0).GetCenter()
+    )
+    assert server.state.mpr_origin == pytest.approx(centre)
+
+
+# --- the generated vue expressions ---------------------------------------------
+
+
+def test_no_binding_negates_a_variable_it_then_compares(app):
+    """Catch ``!x === 'y'``, which JS reads as ``(!x) === 'y'`` and never fires.
+
+    An expression like this raises no error anywhere: the element simply never
+    renders. Building the negation by prefixing "!" to a constant holding a
+    comparison is the easy way to write one by accident.
+    """
+    _, _, _, ui = app
+
+    trap = re.compile(r"![A-Za-z_$][\w$.]*\s*[=!]==")
+    offenders = [
+        binding
+        for binding in re.findall(r'(?:v-if|:disabled)="([^"]*)"', ui.layout.html)
+        if trap.search(binding)
+    ]
+
+    assert offenders == []
+
+
+def test_the_traverse_slider_is_reachable_in_the_quad_view(app):
+    """It went missing once behind exactly the negation above."""
+    _, _, _, ui = app
+
+    slider = re.search(r'<VSlider[^>]*v-model="snap_traverse"[^>]*>', ui.layout.html)
+    assert slider is not None
+    condition = re.search(r'v-if="([^"]*)"', slider.group(0)).group(1)
+    assert "maximized_view !== 'tile'" in condition

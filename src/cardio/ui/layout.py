@@ -158,6 +158,22 @@ def viewports(server, scene, listeners, handled_events, update_all_views):
             interactive_ratio=1,
         )
 
+    # Tile view: one window, one renderer per tile, so the grid can be reshaped
+    # without rebuilding the layout
+    with vuetify.VContainer(
+        v_if="maximized_view === 'tile'",
+        fluid=True,
+        classes="pa-0 fill-height",
+    ):
+        scene.setup_tile_render_window()
+        tile_view = vtk_widgets.VtkRemoteView(
+            scene.tile_views.window,
+            interactor_events=("event_types", handled_events),
+            **listeners("tile"),
+            interactive_ratio=1,
+        )
+        server.controller.tile_update = tile_view.update
+
     # Maximized sagittal view
     with vuetify.VContainer(
         v_if="maximized_view === 'sagittal'",

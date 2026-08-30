@@ -4,6 +4,7 @@ import itk
 import numpy as np
 import pytest
 
+from cardio.logic import ALIGN_STEP_NAME
 from cardio.orientation import IndexOrder
 from cardio.segmentation import Segmentation
 from tests.fakes import FakeApp, FakeScene
@@ -42,10 +43,16 @@ def logic(moving_segmentation) -> FakeApp:
         snap_mode="interface",
         snap_labels_a=[1],
         snap_labels_b=[2],
+        snap_labels_c=[],
         snap_locked=False,
+        snap_orientation_locked=False,
+        snap_traverse=0,
         snap_no_interface=False,
+        interface_flatness=0.0,
         frame=0,
+        active_volume_label="",
         mpr_origin=[0.0, 0.0, 0.0],
+        mpr_rotation_data={"angles_list": []},
     )
     return obj
 
@@ -113,9 +120,10 @@ def test_lock_reports_missing_interface(logic):
     assert logic.server.state.snap_no_interface is True
 
 
-def test_lock_ignores_reset_mode(logic):
+def test_lock_ignores_an_empty_selection(logic):
+    """Resetting the origin is a button now, not a mode that suspends the lock."""
     logic.server.state.snap_locked = True
-    logic.server.state.snap_mode = "reset"
+    logic.server.state.snap_labels_a = []
     logic.server.state.mpr_origin = [9.0, 9.0, 9.0]
     logic.snap.apply_frame_lock(1)
     assert logic.server.state.mpr_origin == [9.0, 9.0, 9.0]
@@ -167,3 +175,92 @@ def test_roma_index_order_swaps_axes(moving_segmentation):
     itk_centroid = obj.snap._snap_centroid(0)
     obj.snap.apply_frame_lock(0)
     assert obj.server.state.mpr_origin == pytest.approx(itk_centroid[::-1])
+
+
+# --- Reset puts the panel back the way it started -----------------------------
+
+
+def aligned_and_locked(logic) -> None:
+    """Everything Reset has to undo, all switched on at once."""
+    state = logic.server.state
+    state.snap_mode = "traverse"
+    state.snap_labels_a = [1]
+    state.snap_labels_b = [2]
+    state.snap_labels_c = [3]
+    state.snap_traverse = 60
+    state.snap_locked = True
+    state.snap_orientation_locked = True
+    state.snap_no_interface = True
+    state.interface_flatness = 0.9
+
+
+def step_names(logic) -> list[str]:
+    return [s["name"] for s in logic.server.state.mpr_rotation_data["angles_list"]]
+
+
+def test_reset_clears_the_groups_and_the_mode(logic):
+    aligned_and_locked(logic)
+
+    logic.snap.reset()
+
+    state = logic.server.state
+    assert state.snap_mode == "label"
+    assert state.snap_labels_a == []
+    assert state.snap_labels_b == []
+    assert state.snap_labels_c == []
+    assert state.snap_traverse == 0
+
+
+def test_reset_releases_both_locks(logic):
+    aligned_and_locked(logic)
+
+    logic.snap.reset()
+
+    assert logic.server.state.snap_locked is False
+    assert logic.server.state.snap_orientation_locked is False
+
+
+def test_reset_clears_the_warnings(logic):
+    aligned_and_locked(logic)
+
+    logic.snap.reset()
+
+    assert logic.server.state.snap_no_interface is False
+    assert logic.server.state.interface_flatness == 0.0
+
+
+def test_reset_drops_the_alignment_step(logic):
+    logic.server.state.snap_labels_a = [1]
+    logic.server.state.snap_labels_b = [2]
+    logic.snap.align_to_interface()
+    assert ALIGN_STEP_NAME in step_names(logic)
+
+    logic.snap.reset()
+
+    assert step_names(logic) == []
+
+
+def test_reset_keeps_the_rotations_the_user_added(logic):
+    """Those are the rotations panel's to delete, not this button's."""
+    logic.server.state.snap_labels_a = [1]
+    logic.server.state.snap_labels_b = [2]
+    logic.snap.align_to_interface()
+    logic.rotations.add_mpr_rotation("Z")
+
+    logic.snap.reset()
+
+    steps = logic.server.state.mpr_rotation_data["angles_list"]
+    assert [step["axis"] for step in steps] == ["Z"]
+    assert ALIGN_STEP_NAME not in step_names(logic)
+
+
+def test_reset_drops_the_memoized_planes(logic):
+    logic.server.state.snap_labels_a = [1]
+    logic.server.state.snap_labels_b = [2]
+    logic.snap._snap_centroid(0)
+    assert logic.snap._lock_centroids
+
+    logic.snap.reset()
+
+    assert logic.snap._lock_centroids == {}
+    assert logic.snap._lock_planes == {}

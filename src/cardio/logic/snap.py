@@ -22,6 +22,21 @@ INTERFACE_BC = 1
 PLANAR_MODES = ("interface", "traverse")
 
 
+def _without_alignment(steps):
+    """``steps`` with the alignment step removed."""
+    return [step for step in steps if step.name != ALIGN_STEP_NAME]
+
+
+def alignment_rotation(axes: np.ndarray) -> np.ndarray:
+    """The rotation that puts the axial view in the plane ``axes`` describes.
+
+    The reslice matrix is cumulative @ view_transform, so the rotation the
+    views need satisfies R @ T_axial = axes. In ITK, as all the rotation math
+    is.
+    """
+    return axes @ axcode_transform_matrix("LPS", "LAS").T
+
+
 class SnapController(Controller):
     """Centroid snapping, interface alignment and the per-frame locks."""
 
@@ -60,6 +75,7 @@ class SnapController(Controller):
         self.server.controller.snap_to_centroid = self.snap_to_centroid
         self.server.controller.align_to_interface = self.align_to_interface
         self.server.controller.swap_snap_groups = self.swap_groups
+        self.server.controller.reset_snap = self.reset
 
     def register_initial_labels(self):
         """Populate the label pickers, once a segmentation is selected."""
@@ -140,13 +156,15 @@ class SnapController(Controller):
                     )
         return self._lock_centroids[key]
 
-    def _snap_centroid(self, frame: int) -> list[float] | None:
+    def _snap_centroid(
+        self, frame: int, fraction: float | None = None
+    ) -> list[float] | None:
         """Centroid the current snap selection asks for at ``frame``.
 
-        In traverse mode the two interface centroids are blended by the slider,
-        which is the same straight line ``interpolate_planes`` walks -- but taken
-        over the centres of mass the other modes use, rather than the plane fit's
-        centroid.
+        In traverse mode the two interface centroids are blended by ``fraction``,
+        which defaults to the slider. That is the same straight line
+        ``interpolate_planes`` walks -- but taken over the centres of mass the
+        other modes use, rather than the plane fit's centroid.
         """
         selection = self._snap_selection()
         if selection is None:
@@ -158,14 +176,13 @@ class SnapController(Controller):
         end = self._endpoint_centroid(frame, INTERFACE_BC)
         if start is None or end is None:
             return None
-        fraction = self._traverse_fraction()
+        if fraction is None:
+            fraction = self._traverse_fraction()
+        fraction = min(1.0, max(0.0, float(fraction)))
         blend = (1.0 - fraction) * np.asarray(start) + fraction * np.asarray(end)
         return [float(v) for v in blend]
 
     def snap_to_centroid(self, **kwargs):
-        if getattr(self.server.state, "snap_mode", "label") == "reset":
-            self.app.mpr.reset_mpr_origin()
-            return
         if self._snap_selection() is None:
             return
 
@@ -178,6 +195,36 @@ class SnapController(Controller):
         self.server.state.snap_no_interface = False
         self.app.mpr.set_origin(center)
 
+    def reset(self, **kwargs):
+        """Put the panel back the way it started, and undo what it did.
+
+        The locks are released first: clearing the groups while one is still on
+        would send the views chasing a selection that is being taken apart.
+
+        Only the alignment step is dropped from the rotation sequence. Steps the
+        user added are theirs, and the rotations panel has its own button for
+        deleting those.
+        """
+        if not self.scene.segmentations:
+            return
+
+        state = self.server.state
+        state.snap_locked = False
+        state.snap_orientation_locked = False
+
+        state.snap_mode = "label"
+        state.snap_seg_label = self.scene.segmentations[0].label
+        state.snap_labels_a = []
+        state.snap_labels_b = []
+        state.snap_labels_c = []
+        state.snap_traverse = 0
+        state.snap_no_interface = False
+        state.interface_flatness = 0.0
+
+        self._invalidate_lock_cache()
+        self.app.rotations.edit_steps(_without_alignment)
+        self.app.mpr.reset_mpr_origin()
+
     def apply_frame_lock(self, frame: int):
         """Re-apply the locked position and orientation for ``frame``.
 
@@ -186,8 +233,6 @@ class SnapController(Controller):
         """
         state = self.server.state
         mode = getattr(state, "snap_mode", "label")
-        if mode == "reset":
-            return
 
         lock_position = getattr(state, "snap_locked", False)
         lock_orientation = (
@@ -271,19 +316,36 @@ class SnapController(Controller):
                 self._lock_planes[key] = plane
         return self._lock_planes[key]
 
-    def _traverse_plane(self, frame: int):
-        """The plane the traverse slider asks for at ``frame``."""
+    def _traverse_plane(self, frame: int, fraction: float | None = None):
+        """The plane at ``fraction`` along the path, defaulting to the slider."""
         start = self._interface_plane(frame, INTERFACE_AB)
         end = self._interface_plane(frame, INTERFACE_BC)
         if start is None or end is None:
             return None
-        return interpolate_planes(start, end, self._traverse_fraction())
+        if fraction is None:
+            fraction = self._traverse_fraction()
+        return interpolate_planes(start, end, fraction)
 
-    def _aligned_plane(self, frame: int):
+    def _aligned_plane(self, frame: int, fraction: float | None = None):
         """The plane the current mode aligns to at ``frame``."""
         if getattr(self.server.state, "snap_mode", "label") == "traverse":
-            return self._traverse_plane(frame)
+            return self._traverse_plane(frame, fraction)
         return self._interface_plane(frame)
+
+    def traverse_pose(
+        self, frame: int, fraction: float
+    ) -> tuple[list[float], np.ndarray] | None:
+        """Origin and plane basis ``fraction`` of the way along the path.
+
+        The origin is in ITK, as ``interface_centroid`` returns it. None when
+        the selection is incomplete or either interface is missing, so a caller
+        sampling several fractions can give up on the first gap.
+        """
+        plane = self._traverse_plane(frame, fraction)
+        if plane is None:
+            return None
+        centroid = self._snap_centroid(frame, fraction) or plane[0]
+        return [float(v) for v in centroid], plane[1]
 
     def _apply_alignment(self, plane):
         """Replace the alignment step so the views are based on ``plane``.
@@ -297,15 +359,12 @@ class SnapController(Controller):
         _, axes, flatness = plane
         state.interface_flatness = flatness
 
-        # The reslice matrix is cumulative @ view_transform, so the rotation that
-        # puts the axial view in the interface plane satisfies R @ T_axial = axes.
-        target = axes @ axcode_transform_matrix("LPS", "LAS").T
-        quaternion = rotation_matrix_to_quaternion(target)
+        quaternion = rotation_matrix_to_quaternion(alignment_rotation(axes))
 
         quaternion = self.convention.quaternion_from_itk(quaternion)
 
         def with_alignment(steps):
-            kept = [step for step in steps if step.name != ALIGN_STEP_NAME]
+            kept = _without_alignment(steps)
             return [
                 RotationStep(
                     quaternion=quaternion,

@@ -2,7 +2,7 @@
 
 # Internal
 from ..convention import exchange_point
-from ..orientation import AngleUnits, IndexOrder
+from ..orientation import AngleUnits, IndexOrder, cumulative_rotation_matrix
 from ..rotation import RotationSequence, RotationStep
 from .base import Controller
 
@@ -67,6 +67,19 @@ class RotationController(Controller):
         return self.convention.visible_sequence_to_itk(
             rotation_data.get("angles_list", [])
         )
+
+    def rotation_matrix(self, exclude: str | None = None):
+        """The visible rotation composed into one 3x3 matrix, in ITK.
+
+        ``exclude`` drops every step of that name first. The steps are filtered
+        before conversion because ``visible_sequence_to_itk`` keys its angles by
+        position, so removing a step afterwards would misalign them.
+        """
+        steps = (self.server.state.mpr_rotation_data or {}).get("angles_list", [])
+        if exclude is not None:
+            steps = [step for step in steps if step.get("name") != exclude]
+        sequence, angles = self.convention.visible_sequence_to_itk(steps)
+        return cumulative_rotation_matrix(sequence, angles, self.convention.angle_units)
 
     def add_mpr_rotation(self, axis):
         """Append a new Euler rotation about ``axis``."""

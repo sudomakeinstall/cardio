@@ -68,14 +68,18 @@ class Volume(Object):
             volume.SetVisibility(False)
             volume.SetProperty(self.preset.vtk_property)
 
-    def create_mpr_actors(self, frame: int = 0) -> ResliceSet:
-        """Create the MPR reslice pipelines for a frame, centred on the image."""
+    def mpr_image_data(self, frame: int = 0):
+        """The image a frame's reslice pipelines read, wrapping short series."""
         if frame >= len(self._actors):
             frame = 0
+        return self._actors[frame].GetMapper().GetInput()
 
-        image_data = self._actors[frame].GetMapper().GetInput()
+    def create_mpr_actors(self, frame: int = 0) -> ResliceSet:
+        """Create the MPR reslice pipelines for a frame, centred on the image."""
         self._mpr_actors[frame] = ResliceSet(
-            image_data, interpolation="linear", background_level=-1000.0
+            self.mpr_image_data(frame),
+            interpolation="linear",
+            background_level=-1000.0,
         )
         return self._mpr_actors[frame]
 

@@ -23,10 +23,16 @@ from cardio.mpr_views import MPRViews
 from cardio.reslice import VIEWS
 
 
+class FakeTileViews:
+    def __init__(self, window="tile-window"):
+        self.window = window
+
+
 class FakeScene:
-    def __init__(self, mpr_views=None):
+    def __init__(self, mpr_views=None, tile_views=None):
         self.renderWindow = "vr-window"
         self.mpr_views = mpr_views
+        self.tile_views = tile_views
 
 
 class FakeServer:
@@ -65,6 +71,15 @@ def test_every_mpr_window_is_included():
     assert windows[0] == "vr-window"
     assert len(windows) == 1 + len(VIEWS)
     assert set(windows[1:]) == set(scene.mpr_views.windows.values())
+
+
+def test_the_tile_window_is_included_once_it_exists():
+    scene = FakeScene(MPRViews(), FakeTileViews())
+
+    windows = render_windows(scene)
+
+    assert len(windows) == 2 + len(VIEWS)
+    assert windows[-1] == "tile-window"
 
 
 # --- setting it --------------------------------------------------------------

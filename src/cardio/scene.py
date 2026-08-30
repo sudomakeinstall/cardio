@@ -11,6 +11,7 @@ from .mesh import Mesh
 from .mpr_views import MPRViews
 from .rotation import RotationSequence
 from .segmentation import Segmentation
+from .tile_views import TileViews
 from .types import RGBColor
 from .volume import Volume
 
@@ -149,9 +150,15 @@ class Scene(ps.BaseSettings):
     mpr_crosshair_width: float = pc.Field(
         default=1.5, description="Line width for crosshair lines"
     )
+    tile_rows: int = pc.Field(
+        default=3, ge=1, le=6, description="Rows in the tile view grid"
+    )
+    tile_cols: int = pc.Field(
+        default=3, ge=1, le=6, description="Columns in the tile view grid"
+    )
     screenshot_viewports: list[str] = pc.Field(
-        default=["vr", "axial", "coronal", "sagittal"],
-        description="Viewports to capture in screenshots. Options: vr, axial, coronal, sagittal",
+        default=["vr", "axial", "coronal", "sagittal", "tile"],
+        description="Viewports to capture in screenshots. Options: vr, axial, coronal, sagittal, tile",
     )
 
     # Field validators for JSON string inputs
@@ -205,8 +212,9 @@ class Scene(ps.BaseSettings):
         default_factory=vtk.vtkRenderWindowInteractor
     )
 
-    # Built lazily: the MPR windows only exist once the quad view is laid out
+    # Built lazily: these windows only exist once their layout branch is built
     _mpr_views: MPRViews = pc.PrivateAttr(default=None)
+    _tile_views: TileViews = pc.PrivateAttr(default=None)
 
     @property
     def renderer(self) -> vtk.vtkRenderer:
@@ -224,6 +232,11 @@ class Scene(ps.BaseSettings):
     def mpr_views(self) -> MPRViews | None:
         """The three MPR render windows, or None before the quad view is built."""
         return self._mpr_views
+
+    @property
+    def tile_views(self) -> TileViews | None:
+        """The tile grid's render window, or None before tile mode is built."""
+        return self._tile_views
 
     @pc.model_validator(mode="after")
     def setup_scene(self):
@@ -339,6 +352,12 @@ class Scene(ps.BaseSettings):
         """Initialize MPR render windows when MPR mode is enabled."""
         if self._mpr_views is None:
             self._mpr_views = MPRViews()
+
+    def setup_tile_render_window(self):
+        """Initialize the tile grid's render window on first use."""
+        if self._tile_views is None:
+            self._tile_views = TileViews()
+            self._tile_views.set_grid(self.tile_rows, self.tile_cols)
 
     def hide_all_frames(self):
         for a in self.renderer.GetActors():

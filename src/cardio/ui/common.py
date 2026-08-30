@@ -12,6 +12,14 @@ from trame.widgets import vuetify3 as vuetify
 # selected. Written out nineteen times before this constant existed.
 MPR_ACTIVE = "!maximized_view && active_volume_label"
 
+# The layouts that resample the volume: the quad MPR grid, and the tile grid.
+# Controls over the slice pose and its overlays belong to both.
+TILE_ACTIVE = "maximized_view === 'tile'"
+# Spelled out rather than negating TILE_ACTIVE: "!" binds tighter than "===",
+# so f"!{TILE_ACTIVE}" reads as (!maximized_view) === 'tile' and is never true.
+NOT_TILE_ACTIVE = "maximized_view !== 'tile'"
+RESLICE_ACTIVE = f"(!maximized_view || {TILE_ACTIVE}) && active_volume_label"
+
 # Sections the drawer opens on load; the rest start collapsed.
 DEFAULT_OPEN_SECTIONS = ["playback"]
 

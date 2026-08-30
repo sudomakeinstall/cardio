@@ -14,6 +14,7 @@ from .mpr import MPRController
 from .playback import PlaybackController
 from .rotations import RotationController
 from .snap import ALIGN_STEP_NAME, SnapController
+from .tiles import TileController
 from .visibility import VisibilityController
 
 __all__ = [
@@ -26,6 +27,7 @@ __all__ = [
     "PlaybackController",
     "RotationController",
     "SnapController",
+    "TileController",
     "VisibilityController",
 ]
 
@@ -49,6 +51,7 @@ class Logic:
         self.playback = PlaybackController(self)
         self.visibility = VisibilityController(self)
         self.clipping = ClippingController(self)
+        self.tiles = TileController(self)
         self.capture = CaptureController(self)
 
         for controller in self.controllers:
@@ -68,5 +71,6 @@ class Logic:
             self.visibility,
             self.clipping,
             self.snap,
+            self.tiles,
             self.capture,
         ]

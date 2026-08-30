@@ -59,6 +59,7 @@ class PlaybackController(Controller):
 
         # Update MPR views if MPR is enabled
         self.app.mpr.update_mpr_frame(frame)
+        self.app.tiles.update_tiles(frame)
 
         self.server.controller.view_update()
 
