@@ -96,6 +96,14 @@ def help_dialog():
                             html.Td("Right + Middle Drag ↑/↓")
                             html.Td("Zoom all three views in/out")
 
+                html.P(
+                    "A snap lock holds what it owns: locking the position "
+                    "suspends pan and slice scrolling, locking the orientation "
+                    "suspends rotation. Centring and aligning are one-off, and "
+                    "leave every gesture available.",
+                    classes="text-caption mt-3",
+                )
+
             with vuetify.VCardActions():
                 vuetify.VSpacer()
                 vuetify.VBtn(

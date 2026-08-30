@@ -225,6 +225,28 @@ class SnapController(Controller):
         self.app.rotations.edit_steps(_without_alignment)
         self.app.mpr.reset_mpr_origin()
 
+    @property
+    def position_locked(self) -> bool:
+        """Whether snap is the standing owner of ``mpr_origin``.
+
+        A lock re-applies the centroid on every frame, so a gesture that moves
+        the origin would be overwritten the next time the frame changed.
+        """
+        return bool(getattr(self.server.state, "snap_locked", False))
+
+    @property
+    def orientation_locked(self) -> bool:
+        """Whether snap is the standing owner of the alignment step.
+
+        Only the planar modes fit a plane, so only they can hold an
+        orientation to begin with.
+        """
+        state = self.server.state
+        return (
+            bool(getattr(state, "snap_orientation_locked", False))
+            and getattr(state, "snap_mode", "label") in PLANAR_MODES
+        )
+
     def apply_frame_lock(self, frame: int):
         """Re-apply the locked position and orientation for ``frame``.
 
@@ -232,12 +254,9 @@ class SnapController(Controller):
         least one is enabled.
         """
         state = self.server.state
-        mode = getattr(state, "snap_mode", "label")
 
-        lock_position = getattr(state, "snap_locked", False)
-        lock_orientation = (
-            getattr(state, "snap_orientation_locked", False) and mode in PLANAR_MODES
-        )
+        lock_position = self.position_locked
+        lock_orientation = self.orientation_locked
         if not (lock_position or lock_orientation):
             return
         if self._snap_selection() is None:

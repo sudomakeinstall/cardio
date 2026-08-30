@@ -552,6 +552,8 @@ class MPRController(Controller):
         """Move the shared origin along ``view_name``'s out-of-plane direction."""
         if view_name not in ("axial", "sagittal", "coronal"):
             return
+        if self.app.snap.position_locked:
+            return
 
         origin = self.server.state.mpr_origin
         step = self.scroll_vector(view_name)
@@ -576,7 +578,7 @@ class MPRController(Controller):
 
         ``start`` and ``end`` are display positions, as the view events carry.
         """
-        if view_name not in VIEW_TRANSFORMS:
+        if view_name not in VIEW_TRANSFORMS or self.app.snap.orientation_locked:
             return
 
         views = self.scene.mpr_views
@@ -632,6 +634,9 @@ class MPRController(Controller):
         sits at the centre of a reslice; the other two views re-cut, one view's
         in-plane axes being the axes the others scroll along.
         """
+        if self.app.snap.position_locked:
+            return
+
         views = self.scene.mpr_views
         if views is None or view_name not in VIEW_TRANSFORMS:
             return

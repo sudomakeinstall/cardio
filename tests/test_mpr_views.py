@@ -26,7 +26,16 @@ def slices(background: float = -1000.0) -> ResliceSet:
 
 @pytest.fixture
 def views() -> MPRViews:
-    return MPRViews()
+    """A fresh set of windows, released again on the way out.
+
+    Each one holds three render windows. Left to the garbage collector they
+    accumulate for the length of the run, which is enough to wedge a machine
+    whose GLX cannot service them.
+    """
+    windows = MPRViews()
+    yield windows
+    for view in windows:
+        windows[view].Finalize()
 
 
 def prop_count(views: MPRViews, view: str) -> int:
