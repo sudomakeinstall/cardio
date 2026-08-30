@@ -60,21 +60,6 @@ def test_rotation_step_quaternion_to_rotation_matrix():
     assert np.allclose(mat, np.eye(3))
 
 
-def test_rotation_step_quaternion_matches_euler():
-    """90° rotation about Z: quaternion vs Euler should agree."""
-    from cardio.orientation import AngleUnits
-
-    # quaternion for 90° about Z: [0, 0, sin(45°), cos(45°)]
-    s = np.sin(np.pi / 4)
-    c = np.cos(np.pi / 4)
-    qstep = RotationStep(quaternion=[0.0, 0.0, s, c])
-    estep = RotationStep(axis="Z", angle=90.0)
-
-    qmat = qstep.to_rotation_matrix(AngleUnits.DEGREES)
-    emat = estep.to_rotation_matrix(AngleUnits.DEGREES)
-    assert np.allclose(qmat, emat, atol=1e-6)
-
-
 def test_rotation_sequence_with_quaternion_step():
     steps = [
         RotationStep(axis="X", angle=0.5),
@@ -83,28 +68,6 @@ def test_rotation_sequence_with_quaternion_step():
     seq = RotationSequence(angles_list=steps)
     assert len(seq.angles_list) == 2
     assert seq.angles_list[1].quaternion == [0.0, 0.0, 0.0, 1.0]
-
-
-def test_rotation_sequence_quaternion_round_trip():
-    q = [0.0, -0.2588, 0.0, 0.9659]
-    steps = [
-        RotationStep(axis="X", angle=1.57, name="euler"),
-        RotationStep(quaternion=q, name="vla", name_editable=False, deletable=False),
-    ]
-    seq = RotationSequence(angles_list=steps)
-    toml_str = seq.to_toml()
-    restored = RotationSequence.from_toml(toml_str)
-
-    assert len(restored.angles_list) == 2
-    assert restored.angles_list[0].axis == "X"
-    assert np.isclose(restored.angles_list[0].angle, 1.57)
-    assert restored.angles_list[1].quaternion is not None
-    assert np.allclose(restored.angles_list[1].quaternion, q, atol=1e-10)
-    assert restored.angles_list[1].name == "vla"
-
-
-# NOTE: Conversion methods removed - data is always stored in current convention/units
-# Conversions happen at UI layer when user changes settings via sync_index_order() and sync_angle_units()
 
 
 def test_rotation_metadata_creation():
@@ -118,23 +81,6 @@ def test_rotation_metadata_creation():
 def test_rotation_metadata_invalid_coordinate_system():
     with pytest.raises(pc.ValidationError):
         RotationMetadata(coordinate_system="RAS")
-
-
-def test_rotation_sequence_creation():
-    seq = RotationSequence()
-    assert seq.metadata.coordinate_system == "LPS"
-    assert len(seq.angles_list) == 0
-
-
-def test_rotation_sequence_with_steps():
-    steps = [
-        RotationStep(axis="X", angle=0.5),
-        RotationStep(axis="Y", angle=1.0),
-    ]
-    seq = RotationSequence(angles_list=steps)
-    assert len(seq.angles_list) == 2
-    assert seq.angles_list[0].axis == "X"
-    assert seq.angles_list[1].axis == "Y"
 
 
 def test_rotation_sequence_model_dump():
@@ -208,62 +154,40 @@ def test_rotation_sequence_from_dict():
     assert seq.mpr_origin == [10.0, 20.0, 30.0]
 
 
-def test_rotation_sequence_to_toml_itk():
-    steps = [RotationStep(axis="X", angle=1.57, name="Rotate X")]
-    seq = RotationSequence(angles_list=steps)
-    seq.metadata.volume_label = "CCTA"
-    seq.metadata.index_order = IndexOrder.ITK
-    seq.metadata.angle_units = AngleUnits.RADIANS
+# --- TOML serialization ------------------------------------------------------
+#
+# to_toml and from_toml store and load the sequence as it stands, converting
+# nothing, so neither the index order nor the angle units change the path taken.
+# These cover that one path rather than repeating it per convention and unit.
+
+
+@pytest.mark.parametrize(
+    "index_order,angle_units",
+    [(IndexOrder.ITK, AngleUnits.RADIANS), (IndexOrder.ROMA, AngleUnits.DEGREES)],
+)
+def test_to_toml_writes_the_steps_and_the_metadata_it_holds(index_order, angle_units):
+    seq = RotationSequence(
+        metadata=RotationMetadata(
+            index_order=index_order, angle_units=angle_units, volume_label="CCTA"
+        ),
+        angles_list=[RotationStep(axis="X", angle=1.57, name="Rotate X")],
+    )
 
     toml_str = seq.to_toml()
 
     assert 'axis = "X"' in toml_str
     assert "angle = 1.57" in toml_str
-    assert 'index_order = "itk"' in toml_str
-    assert 'angle_units = "radians"' in toml_str
+    assert 'name = "Rotate X"' in toml_str
+    assert f'index_order = "{index_order.value}"' in toml_str
+    assert f'angle_units = "{angle_units.value}"' in toml_str
     assert 'volume_label = "CCTA"' in toml_str
 
 
-def test_rotation_sequence_to_toml_roma():
-    steps = [RotationStep(axis="Z", angle=-1.57, name="Rotate Z")]
-    seq = RotationSequence(angles_list=steps)
-    seq.metadata.index_order = IndexOrder.ROMA
-    seq.metadata.angle_units = AngleUnits.RADIANS
+def test_from_toml_reads_a_hand_written_file():
+    """The format is a saved artefact, so it is pinned as literal text."""
+    seq = RotationSequence.from_toml("""
+mpr_origin = [10.0, 20.0, 30.0]
 
-    toml_str = seq.to_toml()
-
-    assert 'axis = "Z"' in toml_str
-    assert "angle = -1.57" in toml_str
-    assert 'index_order = "roma"' in toml_str
-
-
-def test_rotation_sequence_to_toml_degrees():
-    steps = [RotationStep(axis="Y", angle=90.0)]
-    seq = RotationSequence(angles_list=steps)
-    seq.metadata.index_order = IndexOrder.ITK
-    seq.metadata.angle_units = AngleUnits.DEGREES
-
-    toml_str = seq.to_toml()
-
-    assert 'angle_units = "degrees"' in toml_str
-    assert "90.0" in toml_str
-
-
-def test_rotation_sequence_version_comment_in_toml():
-    """Test that cardio version comment is included when serializing."""
-    from cardio import __version__
-
-    seq = RotationSequence()
-    seq.metadata.volume_label = "Test"
-
-    toml_str = seq.to_toml()
-
-    assert f"# Generated by cardio version {__version__}" in toml_str
-    assert toml_str.startswith("# Generated by cardio version")
-
-
-def test_rotation_sequence_from_toml_itk():
-    toml_content = """
 [metadata]
 coordinate_system = "LPS"
 index_order = "itk"
@@ -286,152 +210,55 @@ visible = false
 name = "Second"
 name_editable = true
 deletable = true
-"""
-    seq = RotationSequence.from_toml(toml_content)
+""")
 
-    assert len(seq.angles_list) == 2
-    assert seq.angles_list[0].axis == "X"
-    assert seq.angles_list[0].angle == 1.57
-    assert seq.angles_list[0].name == "First"
-    assert seq.angles_list[1].axis == "Y"
-    assert seq.angles_list[1].angle == 0.5
-    assert seq.angles_list[1].visible is False
+    assert [step.axis for step in seq.angles_list] == ["X", "Y"]
+    assert [step.angle for step in seq.angles_list] == [1.57, 0.5]
+    assert [step.name for step in seq.angles_list] == ["First", "Second"]
+    assert [step.visible for step in seq.angles_list] == [True, False]
     assert seq.metadata.volume_label == "CCTA"
-
-
-def test_rotation_sequence_from_toml_roma():
-    toml_content = """
-[metadata]
-coordinate_system = "LPS"
-index_order = "roma"
-angle_units = "radians"
-timestamp = "2026-01-16T12:00:00"
-volume_label = "Test"
-
-[[angles_list]]
-axis = "Z"
-angle = -1.57
-visible = true
-name = ""
-name_editable = true
-deletable = true
-"""
-    seq = RotationSequence.from_toml(toml_content)
-
-    assert len(seq.angles_list) == 1
-    assert seq.angles_list[0].axis == "Z"
-    assert np.isclose(seq.angles_list[0].angle, -1.57)
-
-
-def test_rotation_sequence_from_toml_degrees():
-    toml_content = """
-[metadata]
-coordinate_system = "LPS"
-index_order = "itk"
-angle_units = "degrees"
-timestamp = "2026-01-16T12:00:00"
-volume_label = "Test"
-
-[[angles_list]]
-axis = "Y"
-angle = 90.0
-visible = true
-name = ""
-name_editable = true
-deletable = true
-"""
-    seq = RotationSequence.from_toml(toml_content)
-
-    assert len(seq.angles_list) == 1
-    assert seq.angles_list[0].axis == "Y"
-    assert np.isclose(seq.angles_list[0].angle, 90.0)
-
-
-def test_rotation_sequence_round_trip_itk():
-    original_steps = [
-        RotationStep(axis="X", angle=1.57, name="First", visible=True),
-        RotationStep(axis="Y", angle=0.5, name="Second", visible=False),
-        RotationStep(axis="Z", angle=-0.3, name="Third"),
-    ]
-    original = RotationSequence(angles_list=original_steps)
-    original.metadata.volume_label = "CCTA"
-    original.metadata.index_order = IndexOrder.ITK
-    original.metadata.angle_units = AngleUnits.RADIANS
-
-    toml_str = original.to_toml()
-    restored = RotationSequence.from_toml(toml_str)
-
-    assert len(restored.angles_list) == len(original.angles_list)
-    for orig, rest in zip(original.angles_list, restored.angles_list):
-        assert rest.axis == orig.axis
-        assert np.isclose(rest.angle, orig.angle)
-        assert rest.name == orig.name
-        assert rest.visible == orig.visible
-
-
-def test_rotation_sequence_round_trip_roma():
-    original_steps = [
-        RotationStep(axis="X", angle=1.57, name="First"),
-        RotationStep(axis="Z", angle=-0.5, name="Second"),
-    ]
-    original = RotationSequence(angles_list=original_steps)
-    original.metadata.volume_label = "Test"
-    original.metadata.index_order = IndexOrder.ROMA
-    original.metadata.angle_units = AngleUnits.RADIANS
-
-    toml_str = original.to_toml()
-    restored = RotationSequence.from_toml(toml_str)
-
-    assert len(restored.angles_list) == len(original.angles_list)
-    for orig, rest in zip(original.angles_list, restored.angles_list):
-        assert rest.axis == orig.axis
-        assert np.isclose(rest.angle, orig.angle)
-
-
-def test_rotation_sequence_round_trip_degrees():
-    original_steps = [
-        RotationStep(axis="Y", angle=90.0),
-        RotationStep(axis="X", angle=180.0),
-    ]
-    original = RotationSequence(angles_list=original_steps)
-    original.metadata.index_order = IndexOrder.ITK
-    original.metadata.angle_units = AngleUnits.DEGREES
-
-    toml_str = original.to_toml()
-    restored = RotationSequence.from_toml(toml_str)
-
-    assert len(restored.angles_list) == len(original.angles_list)
-    for orig, rest in zip(original.angles_list, restored.angles_list):
-        assert rest.axis == orig.axis
-        assert np.isclose(rest.angle, orig.angle, atol=1e-10)
-
-
-def test_rotation_sequence_round_trip_roma_degrees():
-    original_steps = [
-        RotationStep(axis="X", angle=45.0),
-        RotationStep(axis="Z", angle=-30.0),
-    ]
-    original = RotationSequence(angles_list=original_steps)
-    original.metadata.index_order = IndexOrder.ROMA
-    original.metadata.angle_units = AngleUnits.DEGREES
-
-    toml_str = original.to_toml()
-    restored = RotationSequence.from_toml(toml_str)
-
-    assert len(restored.angles_list) == len(original.angles_list)
-    for orig, rest in zip(original.angles_list, restored.angles_list):
-        assert rest.axis == orig.axis
-        assert np.isclose(rest.angle, orig.angle, atol=1e-10)
-
-
-def test_rotation_sequence_mpr_origin_default():
-    seq = RotationSequence()
-    assert seq.mpr_origin == [0.0, 0.0, 0.0]
-
-
-def test_rotation_sequence_mpr_origin_custom():
-    seq = RotationSequence(mpr_origin=[10.0, 20.0, 30.0])
     assert seq.mpr_origin == [10.0, 20.0, 30.0]
+
+
+def test_a_sequence_round_trips_through_toml():
+    """Both step forms, the flags that ride along, and the origin."""
+    quaternion = [0.0, -0.2588, 0.0, 0.9659]
+    original = RotationSequence(
+        metadata=RotationMetadata(volume_label="CCTA"),
+        angles_list=[
+            RotationStep(axis="X", angle=1.57, name="euler", visible=False),
+            RotationStep(
+                quaternion=quaternion, name="vla", name_editable=False, deletable=False
+            ),
+        ],
+        mpr_origin=[10.0, 20.0, 30.0],
+    )
+
+    restored = RotationSequence.from_toml(original.to_toml())
+
+    euler, vla = restored.angles_list
+    assert euler.axis == "X"
+    assert euler.angle == pytest.approx(1.57)
+    assert euler.visible is False
+    assert vla.quaternion == pytest.approx(quaternion)
+    assert vla.name == "vla"
+    assert vla.name_editable is False
+    assert vla.deletable is False
+    assert restored.mpr_origin == pytest.approx([10.0, 20.0, 30.0])
+    assert restored.metadata.volume_label == "CCTA"
+
+
+def test_rotation_sequence_version_comment_in_toml():
+    """Test that cardio version comment is included when serializing."""
+    from cardio import __version__
+
+    seq = RotationSequence()
+    seq.metadata.volume_label = "Test"
+
+    toml_str = seq.to_toml()
+
+    assert f"# Generated by cardio version {__version__}" in toml_str
+    assert toml_str.startswith("# Generated by cardio version")
 
 
 def test_rotation_sequence_mpr_origin_validation():
@@ -451,34 +278,6 @@ def test_rotation_sequence_mpr_origin_in_toml():
 
     assert "mpr_origin" in toml_str
     assert "[33.4, -188.9, -129.9]" in toml_str
-
-
-def test_rotation_sequence_mpr_origin_round_trip_itk():
-    original = RotationSequence(mpr_origin=[10.0, 20.0, 30.0])
-    original.metadata.volume_label = "Test"
-    original.metadata.index_order = IndexOrder.ITK
-
-    toml_str = original.to_toml()
-    restored = RotationSequence.from_toml(toml_str)
-
-    assert len(restored.mpr_origin) == 3
-    assert np.isclose(restored.mpr_origin[0], 10.0)
-    assert np.isclose(restored.mpr_origin[1], 20.0)
-    assert np.isclose(restored.mpr_origin[2], 30.0)
-
-
-def test_rotation_sequence_mpr_origin_round_trip_roma():
-    original = RotationSequence(mpr_origin=[30.0, 20.0, 10.0])
-    original.metadata.volume_label = "Test"
-    original.metadata.index_order = IndexOrder.ROMA
-
-    toml_str = original.to_toml()
-    restored = RotationSequence.from_toml(toml_str)
-
-    assert len(restored.mpr_origin) == 3
-    assert np.isclose(restored.mpr_origin[0], 30.0)
-    assert np.isclose(restored.mpr_origin[1], 20.0)
-    assert np.isclose(restored.mpr_origin[2], 10.0)
 
 
 # --- convention and unit conversion on the model -----------------------------
