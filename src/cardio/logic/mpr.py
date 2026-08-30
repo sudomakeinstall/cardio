@@ -549,9 +549,20 @@ class MPRController(Controller):
         )
 
     def scroll_slice(self, view_name: str, distance: float):
-        """Move the shared origin along ``view_name``'s out-of-plane direction."""
+        """Travel ``distance`` out of the plane, or along the traverse path.
+
+        Traverse mode names a line through the volume, and travelling it is
+        what scrolling there is for; every other mode leaves the slice along
+        its own normal.
+        """
         if view_name not in ("axial", "sagittal", "coronal"):
             return
+
+        # Traverse mode has a line to travel, and it is the more useful one:
+        # scrolling scrubs the path rather than leaving it through the slice.
+        if self.app.snap.travel(distance):
+            return
+
         if self.app.snap.position_locked:
             return
 

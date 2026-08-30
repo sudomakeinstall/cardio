@@ -225,6 +225,36 @@ class SnapController(Controller):
         self.app.rotations.edit_steps(_without_alignment)
         self.app.mpr.reset_mpr_origin()
 
+    def travel(self, steps: float) -> bool:
+        """Move along the traverse path by ``steps`` percent of its length.
+
+        The slider is the path, so travelling it is scrubbing the slider: the
+        mode already turns a fraction into an origin and an orientation, and a
+        lock derives its answer from the same fraction, so this drives the mode
+        rather than fighting it.
+
+        Returns whether there was a path to travel at all, so a caller can fall
+        back to what scrolling otherwise means. Travelling into either end is
+        still travelling -- it holds there rather than reverting to moving the
+        origin through the slice.
+        """
+        if getattr(self.server.state, "snap_mode", "label") != "traverse":
+            return False
+        if self._snap_selection() is None:
+            return False
+
+        # A trackpad sends fractions of a step; without carrying the remainder
+        # a slow scroll would round to nothing every time and never move.
+        total = self._travel_remainder + steps
+        whole = int(total)
+        self._travel_remainder = total - whole
+
+        current = getattr(self.server.state, "snap_traverse", 0)
+        moved = min(100, max(0, current + whole))
+        if moved != current:
+            self.server.state.snap_traverse = moved
+        return True
+
     @property
     def position_locked(self) -> bool:
         """Whether snap is the standing owner of ``mpr_origin``.
@@ -284,6 +314,7 @@ class SnapController(Controller):
         """Drop the memoized per-frame centroids and interface planes."""
         self._lock_centroids: dict[tuple[int, int], list[float] | None] = {}
         self._lock_planes: dict[tuple[int, int], tuple | None] = {}
+        self._travel_remainder = 0.0
         self._align_reference = None
 
     def _on_snap_selection_changed(self, **kwargs):

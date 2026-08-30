@@ -100,7 +100,8 @@ def help_dialog():
                     "A snap lock holds what it owns: locking the position "
                     "suspends pan and slice scrolling, locking the orientation "
                     "suspends rotation. Centring and aligning are one-off, and "
-                    "leave every gesture available.",
+                    "leave every gesture available. In traverse mode scrolling "
+                    "travels the path instead, so a lock does not suspend it.",
                     classes="text-caption mt-3",
                 )
 
