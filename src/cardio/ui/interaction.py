@@ -14,6 +14,7 @@ from ..window_level import presets
 
 HANDLED_EVENTS = [
     "MouseMove",
+    "MouseWheel",
     "LeftButtonPress",
     "LeftButtonRelease",
     "RightButtonPress",
@@ -51,6 +52,7 @@ class Interaction:
         self.window_sensitivity = 5.0
         self.level_sensitivity = 2.0
         self.slice_sensitivity = 1.0
+        self.wheel_sensitivity = 1.0
 
         self.last_keypress_time = {}
         self.keypress_debounce_ms = 100
@@ -90,20 +92,30 @@ class Interaction:
             case "RightButtonRelease":
                 self.right_dragging = False
 
-            case "MouseMove" if self.left_dragging:
+            case "MouseMove" if self.left_dragging or self.right_dragging:
                 delta = self._drag_delta(view_name, event)
                 if delta is not None:
-                    dx, dy = delta
-                    self.logic.mpr.adjust_window_level(
-                        -dx * self.window_sensitivity,
-                        -dy * self.level_sensitivity,
+                    self._apply_drag(view_name, *delta)
+
+            case "MouseWheel" if view_name in MPR_VIEWS:
+                # Signed to travel the same way as an upward both-buttons drag;
+                # a system set to natural scrolling inverts spinY before us
+                spin = event.get("spinY")
+                if spin:
+                    self.logic.mpr.scroll_slice(
+                        view_name, spin * self.wheel_sensitivity
                     )
 
-            case "MouseMove" if self.right_dragging and view_name in MPR_VIEWS:
-                delta = self._drag_delta(view_name, event)
-                if delta is not None:
-                    _, dy = delta
-                    self.logic.mpr.scroll_slice(view_name, dy * self.slice_sensitivity)
+    def _apply_drag(self, view_name, dx, dy):
+        """Both buttons scroll slices; the left button alone windows and levels."""
+        if self.left_dragging and self.right_dragging:
+            if view_name in MPR_VIEWS:
+                self.logic.mpr.scroll_slice(view_name, dy * self.slice_sensitivity)
+        elif self.left_dragging:
+            self.logic.mpr.adjust_window_level(
+                -dx * self.window_sensitivity,
+                -dy * self.level_sensitivity,
+            )
 
     def _on_key(self, key):
         """Apply a keyboard shortcut, ignoring repeats inside the debounce."""

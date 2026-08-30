@@ -76,12 +76,15 @@ def help_dialog():
                     with html.Tbody():
                         with html.Tr():
                             html.Td("Left Drag ←/→")
-                            html.Td("Narrow/widen window")
+                            html.Td("Widen/narrow window")
                         with html.Tr():
                             html.Td("Left Drag ↑/↓")
-                            html.Td("Increase/decrease level")
+                            html.Td("Decrease/increase level")
                         with html.Tr():
-                            html.Td("Right Drag ↑/↓")
+                            html.Td("Left + Right Drag ↑/↓")
+                            html.Td("Scroll through slices")
+                        with html.Tr():
+                            html.Td("Scroll Wheel")
                             html.Td("Scroll through slices")
 
             with vuetify.VCardActions():

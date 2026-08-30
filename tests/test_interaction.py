@@ -63,9 +63,24 @@ def press(interaction, key):
     interaction.last_keypress_time.clear()
 
 
+def press_buttons(interaction, view, x, y):
+    """Put both buttons down at one point, as a slice scroll starts."""
+    for button in ("LeftButtonPress", "RightButtonPress"):
+        interaction.on_event(
+            {"type": button, "position": {"x": x, "y": y}}, view_name=view
+        )
+
+
 def move(interaction, view, x, y):
     interaction.on_event(
         {"type": "MouseMove", "position": {"x": x, "y": y}}, view_name=view
+    )
+
+
+def wheel(interaction, view, spin_y):
+    interaction.on_event(
+        {"type": "MouseWheel", "spinY": spin_y, "position": {"x": 50, "y": 50}},
+        view_name=view,
     )
 
 
@@ -135,15 +150,36 @@ def test_left_drag_adjusts_window_and_level(interaction):
     ]
 
 
-def test_right_drag_scrolls_slices(interaction):
-    interaction.on_event(
-        {"type": "RightButtonPress", "position": {"x": 100, "y": 100}},
-        view_name="coronal",
-    )
+def test_both_buttons_drag_scrolls_slices(interaction):
+    press_buttons(interaction, "coronal", 100, 100)
     move(interaction, "coronal", 100, 120)
 
     assert interaction.logic.mpr.scrolls == [
         ("coronal", 20 * interaction.slice_sensitivity)
+    ]
+    assert interaction.logic.mpr.window_level == []
+
+
+def test_right_drag_alone_does_nothing(interaction):
+    interaction.on_event(
+        {"type": "RightButtonPress", "position": {"x": 100, "y": 100}},
+        view_name="coronal",
+    )
+    move(interaction, "coronal", 110, 120)
+
+    assert interaction.logic.mpr.scrolls == []
+    assert interaction.logic.mpr.window_level == []
+
+
+def test_releasing_the_right_button_resumes_window_level(interaction):
+    """The remaining drag continues from where it is, without a jump."""
+    press_buttons(interaction, "axial", 100, 100)
+    move(interaction, "axial", 100, 120)
+    interaction.on_event({"type": "RightButtonRelease"}, view_name="axial")
+    move(interaction, "axial", 110, 110)
+
+    assert interaction.logic.mpr.window_level == [
+        (-10 * interaction.window_sensitivity, 10 * interaction.level_sensitivity)
     ]
 
 
@@ -175,15 +211,13 @@ def test_left_drag_over_the_tile_grid_windows_every_tile(interaction):
     ]
 
 
-def test_right_drag_over_the_tile_grid_scrolls_nothing(interaction):
+def test_both_buttons_over_the_tile_grid_do_nothing(interaction):
     """A grid of cuts along a path has no single slice to move."""
-    interaction.on_event(
-        {"type": "RightButtonPress", "position": {"x": 100, "y": 100}},
-        view_name="tile",
-    )
-    move(interaction, "tile", 100, 120)
+    press_buttons(interaction, "tile", 100, 100)
+    move(interaction, "tile", 110, 120)
 
     assert interaction.logic.mpr.scrolls == []
+    assert interaction.logic.mpr.window_level == []
 
 
 def test_dragging_in_the_volume_view_is_ignored(interaction):
@@ -198,3 +232,58 @@ def test_dragging_in_the_volume_view_is_ignored(interaction):
 
 def test_an_empty_event_payload_is_ignored(interaction):
     interaction.on_event()
+
+
+def test_wheel_scrolls_slices(interaction):
+    """vtk.js normalises a notch to a spin of one."""
+    wheel(interaction, "axial", 1.0)
+
+    assert interaction.logic.mpr.scrolls == [
+        ("axial", 1.0 * interaction.wheel_sensitivity)
+    ]
+
+
+def test_wheel_reverses_with_the_spin_direction(interaction):
+    wheel(interaction, "sagittal", -1.0)
+
+    assert interaction.logic.mpr.scrolls == [
+        ("sagittal", -1.0 * interaction.wheel_sensitivity)
+    ]
+
+
+def test_a_trackpad_spin_scrolls_proportionally(interaction):
+    wheel(interaction, "coronal", 0.25)
+
+    assert interaction.logic.mpr.scrolls == [
+        ("coronal", 0.25 * interaction.wheel_sensitivity)
+    ]
+
+
+def test_the_wheel_travels_the_same_way_as_an_upward_drag(interaction):
+    """The two slice-scroll gestures must not fight each other."""
+    press_buttons(interaction, "axial", 100, 100)
+    move(interaction, "axial", 100, 110)
+    wheel(interaction, "axial", 1.0)
+
+    dragged, wheeled = (distance for _, distance in interaction.logic.mpr.scrolls)
+    assert dragged > 0 and wheeled > 0
+
+
+@pytest.mark.parametrize("view", ["tile", "volume"])
+def test_wheel_outside_the_mpr_views_is_ignored(interaction, view):
+    """The tile grid has no single slice, and the 3D view zooms itself."""
+    wheel(interaction, view, -1.0)
+
+    assert interaction.logic.mpr.scrolls == []
+
+
+def test_a_wheel_event_without_a_spin_is_ignored(interaction):
+    interaction.on_event({"type": "MouseWheel"}, view_name="axial")
+
+    assert interaction.logic.mpr.scrolls == []
+
+
+def test_the_wheel_does_not_disturb_window_level(interaction):
+    wheel(interaction, "axial", -1.0)
+
+    assert interaction.logic.mpr.window_level == []
