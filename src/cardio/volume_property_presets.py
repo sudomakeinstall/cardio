@@ -5,11 +5,12 @@ import tomlkit as tk
 
 from .volume_property import VolumePropertyConfig
 
+ASSETS_DIR = pl.Path(__file__).parent / "assets"
+
 
 def load_volume_property_preset(preset_name: str) -> VolumePropertyConfig:
     """Load a specific volume property preset from its individual file."""
-    assets_dir = pl.Path(__file__).parent / "assets"
-    preset_file = assets_dir / f"{preset_name}.toml"
+    preset_file = ASSETS_DIR / f"{preset_name}.toml"
 
     if not preset_file.exists():
         available = list(list_volume_property_presets().keys())
@@ -33,8 +34,7 @@ def list_volume_property_presets() -> dict[str, str]:
     Returns:
         Dictionary mapping preset names to descriptions
     """
-    assets_dir = pl.Path(__file__).parent / "assets"
-    preset_files = assets_dir.glob("*.toml")
+    preset_files = ASSETS_DIR.glob("*.toml")
 
     presets = {}
     for preset_file in preset_files:

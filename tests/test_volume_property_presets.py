@@ -1,123 +1,127 @@
-"""Test volume_property_presets module."""
+"""Test the volume property presets, and the loaders that find them.
 
-from unittest.mock import mock_open, patch
+Both loaders read a directory of TOML files, so the error paths are driven by
+writing files into a directory the test owns and pointing the module at it.
+Mocking pathlib out from under them tested the mocks instead, and left the
+patches loose on Path itself for the length of the test.
+"""
 
-import pytest as pt
+# System
+import pathlib as pl
 
+# Third Party
+import pytest
+
+# Internal
+import cardio.volume_property_presets as vpp
 from cardio.volume_property import VolumePropertyConfig
-from cardio.volume_property_presets import (
-    list_volume_property_presets,
-    load_volume_property_preset,
-)
+
+SHIPPED = ("bone", "vascular_closed", "vascular_open", "xray")
+
+COMPLETE = """
+name = "Test"
+description = "A test preset"
+ambient = 0.5
+diffuse = 0.5
+specular = 0.0
+
+[[transfer_functions]]
+
+[transfer_functions.opacity]
+[[transfer_functions.opacity.points]]
+x = 0.0
+y = 0.0
+
+[transfer_functions.color]
+[[transfer_functions.color.points]]
+x = 0.0
+color = [1.0, 0.0, 0.0]
+"""
 
 
-def test_list_volume_property_presets():
-    """Test listing available volume property presets."""
-    presets = list_volume_property_presets()
-
-    # Should return a dictionary
-    assert isinstance(presets, dict)
-
-    # Should contain at least the known presets
-    expected_presets = ["bone", "vascular_closed", "vascular_open", "xray"]
-    for preset in expected_presets:
-        assert preset in presets
-
-    # Values should be description strings
-    for preset_name, description in presets.items():
-        assert isinstance(preset_name, str)
-        assert isinstance(description, str)
-        assert len(description) > 0
+@pytest.fixture
+def assets(tmp_path, monkeypatch) -> pl.Path:
+    """An assets directory the test owns, in place of the shipped one."""
+    monkeypatch.setattr(vpp, "ASSETS_DIR", tmp_path)
+    return tmp_path
 
 
-def test_load_volume_property_preset_existing():
-    """Test loading an existing volume property preset."""
-    # Test loading a known preset
-    config = load_volume_property_preset("bone")
+# --- the presets that ship ---------------------------------------------------
 
-    # Should return a VolumePropertyConfig
+
+@pytest.mark.parametrize("name", SHIPPED)
+def test_every_shipped_preset_loads(name):
+    config = vpp.load_volume_property_preset(name)
+
     assert isinstance(config, VolumePropertyConfig)
-
-    # Should have required fields
-    assert hasattr(config, "name")
-    assert hasattr(config, "description")
-    assert hasattr(config, "ambient")
-    assert hasattr(config, "diffuse")
-    assert hasattr(config, "specular")
-    assert hasattr(config, "transfer_functions")
-
-    # Transfer functions should be a list
-    assert isinstance(config.transfer_functions, list)
-    assert len(config.transfer_functions) > 0
+    assert config.transfer_functions
 
 
-def test_load_volume_property_preset_nonexistent():
-    """Test loading a non-existent volume property preset."""
-    with pt.raises(KeyError, match="Volume property preset 'nonexistent' not found"):
-        load_volume_property_preset("nonexistent")
+def test_the_shipped_presets_are_listed_with_their_descriptions():
+    presets = vpp.list_volume_property_presets()
+
+    assert set(presets) == set(SHIPPED)
+    assert all(description for description in presets.values())
 
 
-@patch("cardio.volume_property_presets.tk.load")
-@patch("pathlib.Path.open")
-@patch("pathlib.Path.exists")
-def test_load_volume_property_preset_invalid_toml(
-    mock_exists, mock_open_file, mock_tk_load
-):
-    """Test loading a preset with invalid TOML content."""
-    mock_exists.return_value = True
-    mock_open_file.return_value = mock_open()()
-    mock_tk_load.side_effect = Exception("Invalid TOML")
-
-    with pt.raises(ValueError, match="Invalid preset file"):
-        load_volume_property_preset("invalid")
+def test_an_absent_preset_names_the_ones_that_exist():
+    with pytest.raises(
+        KeyError, match="Volume property preset 'nonexistent' not found"
+    ):
+        vpp.load_volume_property_preset("nonexistent")
 
 
-@patch("pathlib.Path.open")
-@patch("pathlib.Path.exists")
-def test_load_volume_property_preset_invalid_structure(mock_exists, mock_open_file):
-    """Test loading a preset with valid TOML but invalid structure."""
-    mock_exists.return_value = True
-    # Valid TOML but missing required fields for VolumePropertyConfig
-    invalid_config = """
-    name = "test"
-    # Missing required fields like ambient, diffuse, specular, transfer_functions
+# --- what the loaders do with a directory of their own -----------------------
+
+
+def test_a_written_preset_is_found_and_listed(assets):
+    (assets / "written.toml").write_text(COMPLETE)
+
+    assert vpp.list_volume_property_presets() == {"written": "A test preset"}
+    assert vpp.load_volume_property_preset("written").name == "Test"
+
+
+def test_a_file_that_is_not_toml_is_rejected(assets):
+    (assets / "broken.toml").write_text("this is not = = toml")
+
+    with pytest.raises(ValueError, match="Invalid preset file"):
+        vpp.load_volume_property_preset("broken")
+
+
+def test_a_file_missing_the_required_fields_is_rejected(assets):
+    """Parses as TOML, but carries none of what the model needs."""
+    (assets / "sparse.toml").write_text('name = "test"\n')
+
+    with pytest.raises(ValueError, match="Invalid preset file"):
+        vpp.load_volume_property_preset("sparse")
+
+
+def test_an_empty_directory_lists_nothing(assets):
+    assert vpp.list_volume_property_presets() == {}
+
+
+def test_a_file_without_a_description_is_skipped(assets):
+    """Listing is a menu, so an entry with no label is left off it."""
+    (assets / "labelled.toml").write_text(COMPLETE)
+    (assets / "unlabelled.toml").write_text('name = "test"\n')
+
+    assert set(vpp.list_volume_property_presets()) == {"labelled"}
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="listing catches (KeyError, OSError), so tomlkit's ParseError escapes",
+)
+def test_a_file_that_is_not_toml_is_skipped_from_the_listing(assets):
+    """One unreadable file must not take the whole menu down with it.
+
+    The listing means to skip files it cannot make sense of, and is also what
+    the not-found error calls to name the alternatives -- so a corrupt file in
+    the directory currently breaks that message too. Left failing rather than
+    fixed here: widening the except clause is a change to the loader, not to
+    its tests.
     """
-    mock_open_file.return_value = mock_open(read_data=invalid_config)()
+    (assets / "good.toml").write_text(COMPLETE)
+    (assets / "broken.toml").write_text("this is not = = toml")
 
-    with pt.raises(ValueError, match="Invalid preset file"):
-        load_volume_property_preset("invalid_structure")
-
-
-@patch("pathlib.Path.glob")
-@patch("pathlib.Path.open")
-def test_list_volume_property_presets_empty_directory(mock_open_file, mock_glob):
-    """Test list_volume_property_presets with no TOML files."""
-    mock_glob.return_value = []
-
-    presets = list_volume_property_presets()
-
-    assert presets == {}
-
-
-@patch("cardio.volume_property_presets.tk.load")
-@patch("pathlib.Path.glob")
-@patch("pathlib.Path.open")
-def test_list_volume_property_presets_file_with_no_description(
-    mock_open_file, mock_glob, mock_tk_load
-):
-    """Test list_volume_property_presets with a file missing description."""
-    # Mock a file path using MagicMock to allow setting stem
-    from unittest.mock import MagicMock
-
-    mock_file_path = MagicMock()
-    mock_file_path.stem = "test"
-    mock_glob.return_value = [mock_file_path]
-
-    # Mock file content without description (will cause KeyError)
-    mock_open_file.return_value = mock_open()()
-    mock_tk_load.return_value = {"name": "test"}  # No description field
-
-    presets = list_volume_property_presets()
-
-    # Should skip files without description
-    assert presets == {}
+    assert set(vpp.list_volume_property_presets()) == {"good"}
