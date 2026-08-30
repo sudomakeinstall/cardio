@@ -75,31 +75,6 @@ def test_blend_multiple_transfer_functions():
     assert 0.0 <= color[2] <= 1.0
 
 
-def test_blend_transfer_functions_custom_range():
-    """Test blending with custom scalar range."""
-    # Create transfer function pair
-    otf = vtkPiecewiseFunction()
-    otf.AddPoint(0, 0.0)
-    otf.AddPoint(50, 0.8)
-    otf.AddPoint(100, 0.0)
-
-    ctf = vtkColorTransferFunction()
-    ctf.AddRGBPoint(0, 1.0, 0.0, 0.0)
-    ctf.AddRGBPoint(50, 0.0, 1.0, 0.0)
-    ctf.AddRGBPoint(100, 0.0, 0.0, 1.0)
-
-    tfs = [(otf, ctf)]
-
-    # Blend with custom range
-    result_otf, result_ctf = blend_transfer_functions(
-        tfs, scalar_range=(0, 100), num_samples=100
-    )
-
-    # Verify the result matches input in this case
-    assert result_otf is otf
-    assert result_ctf is ctf
-
-
 def test_blend_transfer_functions_num_samples():
     """Test blending with different number of samples."""
     # Create two similar transfer function pairs

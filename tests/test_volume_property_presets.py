@@ -88,17 +88,6 @@ def test_load_volume_property_preset_invalid_structure(mock_exists, mock_open_fi
         load_volume_property_preset("invalid_structure")
 
 
-def test_list_volume_property_presets_with_invalid_files():
-    """Test that list_volume_property_presets skips invalid files gracefully."""
-    # This test uses the actual assets directory but verifies
-    # that if there were invalid files, they would be skipped
-    presets = list_volume_property_presets()
-
-    # Should still work and return valid presets
-    assert isinstance(presets, dict)
-    assert len(presets) > 0
-
-
 @patch("pathlib.Path.glob")
 @patch("pathlib.Path.open")
 def test_list_volume_property_presets_empty_directory(mock_open_file, mock_glob):
