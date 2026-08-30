@@ -72,58 +72,38 @@ def snap_panel(server, scene):
             vuetify.VBtn(value="label", text="Label")
             vuetify.VBtn(value="interface", text="Interface")
             vuetify.VBtn(value="traverse", text="Traverse")
-        with vuetify.VRow(
-            v_if=f"{RESLICE_ACTIVE} && snap_mode !== 'traverse'",
-            no_gutters=True,
-            classes="mb-2 align-center",
+        # Every mode stacks its group pickers down the drawer, so the panel
+        # reads the same whether the mode needs one group or three.
+        for variable, label, shown in (
+            (
+                "snap_labels_a",
+                ("snap_mode === 'label' ? 'Labels' : 'Group A'",),
+                RESLICE_ACTIVE,
+            ),
+            (
+                "snap_labels_b",
+                "Group B",
+                f"{RESLICE_ACTIVE} && {PLANAR_MODE}",
+            ),
+            (
+                "snap_labels_c",
+                "Group C",
+                f"{RESLICE_ACTIVE} && snap_mode === 'traverse'",
+            ),
         ):
-            with vuetify.VCol():
-                vuetify.VSelect(
-                    v_model=("snap_labels_a", []),
-                    items=("snap_available_labels", []),
-                    item_title="title",
-                    item_value="value",
-                    label=("snap_mode === 'interface' ? 'Group A' : 'Labels'",),
-                    multiple=True,
-                    chips=True,
-                    hide_details=True,
-                    density="compact",
-                )
-            with vuetify.VCol(v_if="snap_mode === 'interface'", classes="ps-1"):
-                vuetify.VSelect(
-                    v_model=("snap_labels_b", []),
-                    items=("snap_available_labels", []),
-                    item_title="title",
-                    item_value="value",
-                    label="Group B",
-                    multiple=True,
-                    chips=True,
-                    hide_details=True,
-                    density="compact",
-                )
-        # Three groups will not fit across the drawer, so traverse mode stacks
-        # its pickers rather than reusing the interface row.
-        with vuetify.VRow(
-            v_if=f"{RESLICE_ACTIVE} && snap_mode === 'traverse'",
-            no_gutters=True,
-        ):
-            for variable, label in (
-                ("snap_labels_a", "Group A (start)"),
-                ("snap_labels_b", "Group B (middle)"),
-                ("snap_labels_c", "Group C (end)"),
-            ):
-                with vuetify.VCol(cols="12", classes="mb-2"):
-                    vuetify.VSelect(
-                        v_model=(variable, []),
-                        items=("snap_available_labels", []),
-                        item_title="title",
-                        item_value="value",
-                        label=label,
-                        multiple=True,
-                        chips=True,
-                        hide_details=True,
-                        density="compact",
-                    )
+            vuetify.VSelect(
+                v_if=shown,
+                v_model=(variable, []),
+                items=("snap_available_labels", []),
+                item_title="title",
+                item_value="value",
+                label=label,
+                multiple=True,
+                chips=True,
+                hide_details=True,
+                density="compact",
+                classes="mb-2",
+            )
         # The slider drives a single pose, which the tile grid has no use for:
         # its tiles already span the whole path.
         vuetify.VSlider(
