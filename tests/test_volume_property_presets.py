@@ -108,19 +108,8 @@ def test_a_file_without_a_description_is_skipped(assets):
     assert set(vpp.list_volume_property_presets()) == {"labelled"}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="listing catches (KeyError, OSError), so tomlkit's ParseError escapes",
-)
 def test_a_file_that_is_not_toml_is_skipped_from_the_listing(assets):
-    """One unreadable file must not take the whole menu down with it.
-
-    The listing means to skip files it cannot make sense of, and is also what
-    the not-found error calls to name the alternatives -- so a corrupt file in
-    the directory currently breaks that message too. Left failing rather than
-    fixed here: widening the except clause is a change to the loader, not to
-    its tests.
-    """
+    """One unreadable file must not take the whole menu down with it."""
     (assets / "good.toml").write_text(COMPLETE)
     (assets / "broken.toml").write_text("this is not = = toml")
 

@@ -2,6 +2,7 @@ import pathlib as pl
 
 import pydantic as pc
 import tomlkit as tk
+import tomlkit.exceptions as tke
 
 from .volume_property import VolumePropertyConfig
 
@@ -43,8 +44,8 @@ def list_volume_property_presets() -> dict[str, str]:
             with preset_file.open("rt", encoding="utf-8") as fp:
                 preset_data = tk.load(fp)
                 presets[preset_name] = preset_data["description"]
-        except (KeyError, OSError):
-            # Skip files that don't have the expected structure
+        except (KeyError, OSError, tke.TOMLKitError):
+            # Skip files that cannot be read or parsed, or that name no preset
             continue
 
     return presets
