@@ -1,13 +1,15 @@
 """Test snap/lock centroid selection and per-frame locking in Logic."""
 
-import itk
+# Third Party
 import numpy as np
 import pytest
 
+# Internal
 from cardio.logic import ALIGN_STEP_NAME
 from cardio.orientation import IndexOrder
 from cardio.segmentation import Segmentation
-from tests.fakes import FakeApp, FakeScene
+from tests.fakes import FakeApp, make_logic
+from tests.phantoms import write_segmentation
 
 BLOCK_CENTER = 4.5
 INTERFACE_X = 4.5
@@ -24,37 +26,14 @@ def shifting_label_array(offset: int) -> np.ndarray:
 @pytest.fixture
 def moving_segmentation(tmp_path) -> Segmentation:
     """A 3-frame segmentation whose interface moves one voxel per frame."""
-    names = []
-    for frame, offset in enumerate((0, 1, 2)):
-        name = f"seg{frame}.nii.gz"
-        itk.imwrite(
-            itk.image_from_array(shifting_label_array(offset)), str(tmp_path / name)
-        )
-        names.append(name)
-    return Segmentation(label="moving", directory=tmp_path, file_paths=names)
+    arrays = [shifting_label_array(offset) for offset in (0, 1, 2)]
+    return write_segmentation(tmp_path, arrays, label="moving")
 
 
 @pytest.fixture
 def logic(moving_segmentation) -> FakeApp:
     """Real controllers wired to fakes, as Logic wires them."""
-    obj = FakeApp(
-        FakeScene([moving_segmentation]),
-        snap_seg_label="moving",
-        snap_mode="interface",
-        snap_labels_a=[1],
-        snap_labels_b=[2],
-        snap_labels_c=[],
-        snap_locked=False,
-        snap_orientation_locked=False,
-        snap_traverse=0,
-        snap_no_interface=False,
-        interface_flatness=0.0,
-        frame=0,
-        active_volume_label="",
-        mpr_origin=[0.0, 0.0, 0.0],
-        mpr_rotation_data={"angles_list": []},
-    )
-    return obj
+    return make_logic(moving_segmentation, active_volume_label="")
 
 
 def test_selection_requires_both_groups_in_interface_mode(logic):
@@ -160,17 +139,7 @@ def test_enabling_lock_snaps_immediately(logic):
 
 def test_roma_index_order_swaps_axes(moving_segmentation):
     """ROMA scenes receive the centroid with X and Z exchanged."""
-    obj = FakeApp(
-        FakeScene([moving_segmentation], index_order=IndexOrder.ROMA),
-        snap_seg_label="moving",
-        snap_mode="interface",
-        snap_labels_a=[1],
-        snap_labels_b=[2],
-        snap_locked=True,
-        snap_no_interface=False,
-        frame=0,
-        mpr_origin=[0.0, 0.0, 0.0],
-    )
+    obj = make_logic(moving_segmentation, index_order=IndexOrder.ROMA, snap_locked=True)
 
     itk_centroid = obj.snap._snap_centroid(0)
     obj.snap.apply_frame_lock(0)

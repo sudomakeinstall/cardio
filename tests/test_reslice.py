@@ -14,30 +14,19 @@ from cardio.orientation import (
     euler_angle_to_rotation_matrix,
 )
 from cardio.reslice import VIEWS, ResliceSet
-
-
-def make_image(dims=(8, 10, 12), spacing=(1.0, 2.0, 3.0)) -> vtk.vtkImageData:
-    """A small scalar image with non-uniform spacing, so axes cannot be confused."""
-    image = vtk.vtkImageData()
-    image.SetDimensions(*dims)
-    image.SetSpacing(*spacing)
-    image.SetOrigin(0.0, 0.0, 0.0)
-    image.AllocateScalars(vtk.VTK_SHORT, 1)
-    return image
+from tests.geometry import matrix_array
+from tests.phantoms import make_image
 
 
 def reslice_axes(reslice) -> np.ndarray:
-    """The 4x4 reslice matrix VTK is actually holding, as a numpy array."""
-    matrix = reslice.GetResliceAxes()
-    return np.array([[matrix.GetElement(i, j) for j in range(4)] for i in range(4)])
+    return matrix_array(reslice.GetResliceAxes())
 
 
 def expected_axes(view: str, rotation: np.ndarray, origin: list[float]) -> np.ndarray:
     """Recompute the pre-refactor matrix independently of ResliceSet."""
     axcodes = {"axial": "LAS", "sagittal": "ASL", "coronal": "LSA"}
     transform = rotation @ axcode_transform_matrix("LPS", axcodes[view])
-    matrix = create_vtk_reslice_matrix(transform, origin)
-    return np.array([[matrix.GetElement(i, j) for j in range(4)] for i in range(4)])
+    return matrix_array(create_vtk_reslice_matrix(transform, origin))
 
 
 @pytest.fixture

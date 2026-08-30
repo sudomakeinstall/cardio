@@ -1,23 +1,15 @@
 """Test vtkPropertyConfig."""
 
-import pathlib as pl
-
 import pytest as pt
-import tomlkit as tk
 import vtk
 
 from cardio.property_config import Interpolation, Representation, vtkPropertyConfig
 
 
-def test_property_config_from_toml():
+def test_property_config_from_toml(asset):
     """Test loading vtkPropertyConfig from TOML."""
-    # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "property_config.toml"
-    with toml_path.open("rt", encoding="utf-8") as fp:
-        data = tk.load(fp)
-
     # Create config from TOML data
-    config = vtkPropertyConfig.model_validate(data)
+    config = vtkPropertyConfig.model_validate(asset("property_config.toml"))
 
     # Verify representation was parsed correctly
     assert config.representation == Representation.Wireframe

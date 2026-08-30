@@ -7,7 +7,7 @@ import vtk
 from cardio.orientation import create_vtk_reslice_matrix
 from cardio.reslice import VIEW_TRANSFORMS, TileSet
 from cardio.tile_views import MAX_COLS, MAX_ROWS, TileViews, tile_viewport
-from tests.test_reslice import make_image
+from tests.phantoms import make_image
 
 
 def tiles(count: int, background: float = -1000.0) -> TileSet:

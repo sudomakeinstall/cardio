@@ -60,8 +60,11 @@ class SleepShim:
         await asyncio.sleep(0)
 
 
-class FakeState:
+class FlushingState:
     """trame's state semantics, as far as the playback loop depends on them.
+
+    Unlike ``fakes.FakeState``, which is a bare dict, this one fires the change
+    listeners, which is the half of trame the playback loop turns on.
 
     Assignment marks a key pending; ``flush`` fires the change listeners for
     the pending keys and is a no-op while already flushing, which is what
@@ -236,7 +239,7 @@ class PlaybackApp:
         self.mpr = RecordingMPR(state_values["frame"])
         self.tiles = RecordingTiles()
         controller = FakeController(clock, render_seconds, self)
-        self.server = FakeServer(FakeState(**state_values), controller)
+        self.server = FakeServer(FlushingState(**state_values), controller)
         self.playback = PlaybackController(self)
         self.playback.register()
 

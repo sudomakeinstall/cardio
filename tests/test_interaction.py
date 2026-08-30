@@ -13,6 +13,7 @@ import pytest
 
 # Internal
 from cardio.ui.interaction import HANDLED_EVENTS, Interaction
+from tests.fakes import FakeState
 
 
 class RecordingMPR:
@@ -51,17 +52,6 @@ class FakeLogic:
     def __init__(self):
         self.mpr = RecordingMPR()
         self.tiles = RecordingTiles()
-
-
-class FakeState(dict):
-    def __getattr__(self, name):
-        try:
-            return self[name]
-        except KeyError as exc:
-            raise AttributeError(name) from exc
-
-    def __setattr__(self, name, value):
-        self[name] = value
 
 
 @pytest.fixture

@@ -14,14 +14,9 @@ from cardio.orientation import (
 from cardio.reslice import VIEW_TRANSFORMS
 from cardio.rotation import RotationStep
 from cardio.state import ObjectState
-from tests.fakes import FakeApp, FakeScene
-from tests.test_traverse import (
-    align_at,
-    angle_between,
-    make_logic,
-    stacked_segmentation,
-    tilted_plane,
-)
+from tests.fakes import FakeApp, FakeScene, align_at, snap_state, traverse_logic
+from tests.geometry import angle_between, matrix_array, tilted_plane
+from tests.phantoms import stacked_segmentation
 
 # Sampling
 
@@ -69,7 +64,7 @@ def test_poses_along_gives_up_on_the_first_gap():
 
 def test_alignment_rotation_matches_the_published_quaternion(tmp_path):
     """The tiles compose their own rotation; it must agree with Align's."""
-    logic = make_logic(stacked_segmentation(tmp_path))
+    logic = traverse_logic(stacked_segmentation(tmp_path))
     align_at(logic, 40)
 
     step = logic.server.state.mpr_rotation_data["angles_list"][0]
@@ -92,7 +87,7 @@ def test_alignment_rotation_carries_the_basis_onto_the_axial_view():
 
 
 def test_traverse_pose_reproduces_both_interfaces(tmp_path):
-    logic = make_logic(stacked_segmentation(tmp_path))
+    logic = traverse_logic(stacked_segmentation(tmp_path))
 
     _, start_axes = logic.snap.traverse_pose(0, 0.0)
     _, end_axes = logic.snap.traverse_pose(0, 1.0)
@@ -102,7 +97,7 @@ def test_traverse_pose_reproduces_both_interfaces(tmp_path):
 
 
 def test_traverse_pose_halves_the_tilt_at_the_midpoint(tmp_path):
-    logic = make_logic(stacked_segmentation(tmp_path))
+    logic = traverse_logic(stacked_segmentation(tmp_path))
 
     _, start_axes = logic.snap.traverse_pose(0, 0.0)
     _, middle_axes = logic.snap.traverse_pose(0, 0.5)
@@ -116,7 +111,7 @@ def test_traverse_pose_halves_the_tilt_at_the_midpoint(tmp_path):
 
 
 def test_traverse_pose_origins_walk_in_a_straight_line(tmp_path):
-    logic = make_logic(stacked_segmentation(tmp_path))
+    logic = traverse_logic(stacked_segmentation(tmp_path))
 
     origins = np.array([logic.snap.traverse_pose(0, f)[0] for f in sample_fractions(5)])
     steps = np.diff(origins, axis=0)
@@ -125,7 +120,7 @@ def test_traverse_pose_origins_walk_in_a_straight_line(tmp_path):
 
 def test_consecutive_tiles_only_tilt(tmp_path):
     """A spin between neighbouring tiles would make the grid unreadable."""
-    logic = make_logic(stacked_segmentation(tmp_path))
+    logic = traverse_logic(stacked_segmentation(tmp_path))
     bases = [logic.snap.traverse_pose(0, f)[1] for f in sample_fractions(6)]
 
     for before, after in zip(bases, bases[1:]):
@@ -134,13 +129,13 @@ def test_consecutive_tiles_only_tilt(tmp_path):
 
 
 def test_traverse_pose_needs_a_complete_selection(tmp_path):
-    logic = make_logic(stacked_segmentation(tmp_path), snap_labels_c=[])
+    logic = traverse_logic(stacked_segmentation(tmp_path), snap_labels_c=[])
     assert logic.snap.traverse_pose(0, 0.5) is None
 
 
 def test_traverse_pose_leaves_the_slider_alone(tmp_path):
     """Sampling the path must not disturb the pose the quad view is showing."""
-    logic = make_logic(stacked_segmentation(tmp_path))
+    logic = traverse_logic(stacked_segmentation(tmp_path))
     align_at(logic, 25)
     origin = list(logic.server.state.mpr_origin)
 
@@ -172,20 +167,9 @@ class FakeVolume:
 
 def tiled(segmentation, **overrides) -> FakeApp:
     """A FakeApp whose tile grid is built and on screen."""
-    state = dict(
-        snap_seg_label="s",
+    state = snap_state(
         snap_mode="traverse",
-        snap_labels_a=[1],
-        snap_labels_b=[2],
         snap_labels_c=[3],
-        snap_traverse=0,
-        snap_locked=False,
-        snap_orientation_locked=False,
-        snap_no_interface=False,
-        interface_flatness=0.0,
-        frame=0,
-        mpr_origin=[0.0, 0.0, 0.0],
-        mpr_rotation_data={"angles_list": []},
         mpr_window=800.0,
         mpr_level=200.0,
         mpr_segmentation_opacity=0.7,
@@ -202,14 +186,10 @@ def tiled(segmentation, **overrides) -> FakeApp:
     return FakeApp(scene, **state)
 
 
-def as_array(matrix) -> np.ndarray:
-    return np.array([[matrix.GetElement(r, c) for c in range(4)] for r in range(4)])
-
-
 def posed_matrices(logic: FakeApp) -> list[np.ndarray]:
     key = ("volume:vol", logic.server.state.frame)
     tiles = logic.tiles._tile_sets[key]
-    return [as_array(parts["reslice"].GetResliceAxes()) for parts in tiles.values()]
+    return [matrix_array(parts["reslice"].GetResliceAxes()) for parts in tiles.values()]
 
 
 def test_the_grid_fills_with_one_tile_per_cell(tmp_path):

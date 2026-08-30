@@ -1,23 +1,17 @@
 """Test TransferFunctionPairConfig."""
 
-import pathlib as pl
-
-import tomlkit as tk
 from vtkmodules.vtkCommonDataModel import vtkPiecewiseFunction
 from vtkmodules.vtkRenderingCore import vtkColorTransferFunction
 
 from cardio.transfer_function_pair import TransferFunctionPairConfig
 
 
-def test_pair_config_from_toml():
+def test_pair_config_from_toml(asset):
     """Test loading TransferFunctionPairConfig from TOML."""
-    # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "transfer_function_pair.toml"
-    with toml_path.open("rt", encoding="utf-8") as fp:
-        data = tk.load(fp)
-
     # Create pair config from TOML data
-    pair = TransferFunctionPairConfig.model_validate(data)
+    pair = TransferFunctionPairConfig.model_validate(
+        asset("transfer_function_pair.toml")
+    )
 
     # Verify structure
     assert len(pair.opacity.points) == 2
@@ -27,14 +21,11 @@ def test_pair_config_from_toml():
     assert pair.color.points[0].color == (1.0, 0.0, 0.0)
 
 
-def test_pair_config_vtk_functions():
+def test_pair_config_vtk_functions(asset):
     """Test VTK function creation from TransferFunctionPairConfig."""
-    # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "transfer_function_pair.toml"
-    with toml_path.open("rt", encoding="utf-8") as fp:
-        data = tk.load(fp)
-
-    pair = TransferFunctionPairConfig.model_validate(data)
+    pair = TransferFunctionPairConfig.model_validate(
+        asset("transfer_function_pair.toml")
+    )
     otf, ctf = pair.vtk_functions
 
     # Verify types

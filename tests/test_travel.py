@@ -17,12 +17,13 @@ import numpy as np
 import pytest
 
 # Internal
-from tests.test_traverse import make_logic, stacked_segmentation
+from tests.fakes import traverse_logic
+from tests.phantoms import stacked_segmentation
 
 
 @pytest.fixture
 def logic(tmp_path):
-    return make_logic(stacked_segmentation(tmp_path))
+    return traverse_logic(stacked_segmentation(tmp_path))
 
 
 def traverse(logic):

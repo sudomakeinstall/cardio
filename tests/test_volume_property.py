@@ -1,23 +1,15 @@
 """Test VolumePropertyConfig."""
 
-import pathlib as pl
-
 import pytest as pt
-import tomlkit as tk
 from vtkmodules.vtkRenderingCore import vtkVolumeProperty
 
 from cardio.volume_property import VolumePropertyConfig
 
 
-def test_volume_config_from_toml():
+def test_volume_config_from_toml(asset):
     """Test loading VolumePropertyConfig from TOML."""
-    # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "volume_property.toml"
-    with toml_path.open("rt", encoding="utf-8") as fp:
-        data = tk.load(fp)
-
     # Create config from TOML data
-    config = VolumePropertyConfig.model_validate(data)
+    config = VolumePropertyConfig.model_validate(asset("volume_property.toml"))
 
     # Verify basic properties
     assert config.name == "Test Volume"
@@ -40,14 +32,9 @@ def test_volume_config_from_toml():
     assert len(pair2.color.points) == 3
 
 
-def test_volume_config_vtk_property():
+def test_volume_config_vtk_property(asset):
     """Test VTK property creation from VolumePropertyConfig."""
-    # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "volume_property.toml"
-    with toml_path.open("rt", encoding="utf-8") as fp:
-        data = tk.load(fp)
-
-    config = VolumePropertyConfig.model_validate(data)
+    config = VolumePropertyConfig.model_validate(asset("volume_property.toml"))
     vtk_property = config.vtk_property
 
     # Verify it's the right type

@@ -1,18 +1,16 @@
 """Test interface plane fitting and MPR alignment."""
 
-import itk
+# Third Party
 import numpy as np
 import pytest
 
+# Internal
 from cardio.logic import ALIGN_STEP_NAME
-from cardio.orientation import (
-    AngleUnits,
-    IndexOrder,
-    axcode_transform_matrix,
-    cumulative_rotation_matrix,
-)
+from cardio.orientation import IndexOrder
 from cardio.segmentation import Segmentation, plane_basis, principal_axes
-from tests.fakes import FakeApp, FakeScene
+from tests.fakes import FakeApp, axial_normal, make_logic
+from tests.geometry import axis_angle_between
+from tests.phantoms import write_segmentation
 
 N = 24
 
@@ -37,8 +35,7 @@ def split_array(kind: str) -> np.ndarray:
 
 
 def make_segmentation(tmp_path, kind: str) -> Segmentation:
-    itk.imwrite(itk.image_from_array(split_array(kind)), str(tmp_path / "s.nii.gz"))
-    return Segmentation(label="s", directory=tmp_path, file_paths=["s.nii.gz"])
+    return write_segmentation(tmp_path, [split_array(kind)], stem=kind)
 
 
 TILT_FRAMES = 4
@@ -46,9 +43,9 @@ TILT_FRAMES = 4
 
 def tilting_segmentation(tmp_path) -> Segmentation:
     """A series whose interface plane rotates 12 degrees per frame."""
-    names = []
     kk, jj, ii = np.meshgrid(*[np.arange(N)] * 3, indexing="ij")
     block = (ii >= 4) & (ii < 20) & (jj >= 4) & (jj < 20) & (kk >= 4) & (kk < 20)
+    arrays = []
     for frame in range(TILT_FRAMES):
         theta = np.radians(12.0 * frame)
         nx, ny = np.cos(theta), np.sin(theta)
@@ -56,34 +53,8 @@ def tilting_segmentation(tmp_path) -> Segmentation:
         array = np.zeros((N,) * 3, dtype=np.uint8)
         array[block & split] = 1
         array[block & ~split] = 2
-        name = f"tilt{frame}.nii.gz"
-        itk.imwrite(itk.image_from_array(array), str(tmp_path / name))
-        names.append(name)
-    return Segmentation(label="s", directory=tmp_path, file_paths=names)
-
-
-def make_logic(segmentation, index_order=IndexOrder.ITK) -> FakeApp:
-    obj = FakeApp(
-        FakeScene([segmentation], index_order=index_order),
-        snap_seg_label="s",
-        snap_mode="interface",
-        snap_labels_a=[1],
-        snap_labels_b=[2],
-        snap_locked=False,
-        snap_no_interface=False,
-        interface_flatness=0.0,
-        frame=0,
-        mpr_origin=[0.0, 0.0, 0.0],
-        mpr_rotation_data={"angles_list": []},
-    )
-    return obj
-
-
-def axial_normal(logic: FakeApp) -> np.ndarray:
-    """The axial slice normal the reslice pipeline will actually use."""
-    sequence, angles = logic.rotations.visible_rotation_data()
-    cumulative = cumulative_rotation_matrix(sequence, angles, AngleUnits.DEGREES)
-    return (cumulative @ axcode_transform_matrix("LPS", "LAS"))[:, 2]
+        arrays.append(array)
+    return write_segmentation(tmp_path, arrays, stem="tilt")
 
 
 def test_principal_axes_of_a_flat_cloud():
@@ -503,10 +474,6 @@ def precessing_normals(steps: int, tilt_degrees: float = 35.0) -> list[np.ndarra
     ]
 
 
-def angle_between(a, b) -> float:
-    return np.degrees(np.arccos(abs(np.clip(a @ b, -1.0, 1.0))))
-
-
 def test_plane_basis_is_a_valid_view_basis():
     """Orthonormal, left-handed, and its third column is the normal."""
     anchor = None
@@ -525,10 +492,11 @@ def test_anchored_basis_is_continuous_under_refinement():
         anchor = plane_basis(normals[0])
         bases = [plane_basis(n, anchor) for n in normals]
         worst_normal = max(
-            angle_between(normals[i], normals[i - 1]) for i in range(1, steps)
+            axis_angle_between(normals[i], normals[i - 1]) for i in range(1, steps)
         )
         worst_in_plane = max(
-            angle_between(bases[i][:, 0], bases[i - 1][:, 0]) for i in range(1, steps)
+            axis_angle_between(bases[i][:, 0], bases[i - 1][:, 0])
+            for i in range(1, steps)
         )
         assert worst_in_plane < 3 * worst_normal
 
@@ -542,9 +510,9 @@ def test_anchor_removes_the_reference_singularity():
     ]
     anchor = plane_basis(normals[0])
     bases = [plane_basis(n, anchor) for n in normals]
-    step = angle_between(normals[1], normals[0])
+    step = axis_angle_between(normals[1], normals[0])
     worst = max(
-        angle_between(bases[i][:, 0], bases[i - 1][:, 0]) for i in range(1, steps)
+        axis_angle_between(bases[i][:, 0], bases[i - 1][:, 0]) for i in range(1, steps)
     )
     assert worst == pytest.approx(step, abs=1e-6)
 
@@ -555,9 +523,9 @@ def circular_segmentation(tmp_path) -> Segmentation:
     Its in-plane extents are nearly equal, so PCA cannot order the in-plane
     axes stably -- this is the case that made the view spin during playback.
     """
-    names = []
     kk, jj, ii = np.meshgrid(*[np.arange(N)] * 3, indexing="ij")
     body = (((jj - 12.0) ** 2 + (kk - 12.0) ** 2) < 64.0) & (ii >= 4) & (ii < 20)
+    arrays = []
     for frame in range(TILT_FRAMES):
         theta = np.radians(9.0 * frame)
         nx, ny = np.cos(theta), np.sin(theta)
@@ -565,10 +533,8 @@ def circular_segmentation(tmp_path) -> Segmentation:
         array = np.zeros((N,) * 3, dtype=np.uint8)
         array[body & split] = 1
         array[body & ~split] = 2
-        name = f"round{frame}.nii.gz"
-        itk.imwrite(itk.image_from_array(array), str(tmp_path / name))
-        names.append(name)
-    return Segmentation(label="s", directory=tmp_path, file_paths=names)
+        arrays.append(array)
+    return write_segmentation(tmp_path, arrays, stem="round")
 
 
 def test_in_plane_rotation_is_stable_for_a_circular_interface(tmp_path):
@@ -578,8 +544,8 @@ def test_in_plane_rotation_is_stable_for_a_circular_interface(tmp_path):
 
     bases = [logic.snap._interface_plane(f)[1] for f in range(TILT_FRAMES)]
     for i in range(1, TILT_FRAMES):
-        tilt = angle_between(bases[i][:, 2], bases[i - 1][:, 2])
-        in_plane = angle_between(bases[i][:, 0], bases[i - 1][:, 0])
+        tilt = axis_angle_between(bases[i][:, 2], bases[i - 1][:, 2])
+        in_plane = axis_angle_between(bases[i][:, 0], bases[i - 1][:, 0])
         assert in_plane < tilt + 5.0
 
 
@@ -593,9 +559,9 @@ def wandering_group_segmentation(tmp_path) -> Segmentation:
     The A/B interface never moves, but the whole-group centroid comparison
     reverses partway through.
     """
-    names = []
     kk, jj, ii = np.meshgrid(*[np.arange(40)] * 3, indexing="ij")
     core = (jj >= 10) & (jj < 30) & (kk >= 10) & (kk < 30)
+    arrays = []
     for frame in range(WANDERING_FRAMES):
         array = np.zeros((40,) * 3, dtype=np.uint8)
         array[core & (ii >= 14) & (ii < 20)] = 1
@@ -603,10 +569,8 @@ def wandering_group_segmentation(tmp_path) -> Segmentation:
         behind = 2 * frame
         if behind:
             array[core & (ii >= 14 - behind) & (ii < 14)] = 2
-        name = f"wander{frame}.nii.gz"
-        itk.imwrite(itk.image_from_array(array), str(tmp_path / name))
-        names.append(name)
-    return Segmentation(label="s", directory=tmp_path, file_paths=names)
+        arrays.append(array)
+    return write_segmentation(tmp_path, arrays, stem="wander")
 
 
 def test_unanchored_normal_sign_can_flip(tmp_path):

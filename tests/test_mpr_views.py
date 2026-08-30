@@ -7,7 +7,7 @@ import vtk
 # Internal
 from cardio.mpr_views import MPRViews
 from cardio.reslice import VIEWS, ResliceSet
-from tests.test_reslice import make_image
+from tests.phantoms import make_image
 
 
 def make_crosshairs() -> dict:

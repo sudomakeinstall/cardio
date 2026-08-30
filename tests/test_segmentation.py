@@ -1,11 +1,13 @@
 """Test Segmentation centroid extraction."""
 
-import itk
+# Third Party
 import numpy as np
 import pytest
 import vtk
 
+# Internal
 from cardio.segmentation import Segmentation, masked_centroid
+from tests.phantoms import write_segmentation
 
 # Label 1 and label 2 are adjacent blocks sharing the plane x = 4.5.
 # Label 3 is separated from both by a band of background.
@@ -25,9 +27,7 @@ def label_array() -> np.ndarray:
 @pytest.fixture
 def segmentation(tmp_path) -> Segmentation:
     """A Segmentation built from a synthetic on-disk label image."""
-    image = itk.image_from_array(label_array())
-    itk.imwrite(image, str(tmp_path / "seg.nii.gz"))
-    return Segmentation(label="test", directory=tmp_path, file_paths=["seg.nii.gz"])
+    return write_segmentation(tmp_path, [label_array()], label="test")
 
 
 @pytest.fixture

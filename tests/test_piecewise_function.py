@@ -1,23 +1,15 @@
 """Test PiecewiseFunctionPoint and PiecewiseFunctionConfig."""
 
-import pathlib as pl
-
 import pytest as pt
-import tomlkit as tk
 from vtkmodules.vtkCommonDataModel import vtkPiecewiseFunction
 
 from cardio.piecewise_function import PiecewiseFunctionConfig, PiecewiseFunctionPoint
 
 
-def test_piecewise_point_from_toml():
+def test_piecewise_point_from_toml(asset):
     """Test loading PiecewiseFunctionPoint from TOML."""
-    # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "piecewise_point.toml"
-    with toml_path.open("rt", encoding="utf-8") as fp:
-        data = tk.load(fp)
-
     # Create point from TOML data
-    point = PiecewiseFunctionPoint.model_validate(data)
+    point = PiecewiseFunctionPoint.model_validate(asset("piecewise_point.toml"))
 
     # Verify values
     assert point.x == 100.0
@@ -40,15 +32,10 @@ def test_piecewise_point_validation():
         PiecewiseFunctionPoint(x=0.0, y=-0.1)
 
 
-def test_piecewise_config_from_toml():
+def test_piecewise_config_from_toml(asset):
     """Test loading PiecewiseFunctionConfig from TOML."""
-    # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "piecewise_config.toml"
-    with toml_path.open("rt", encoding="utf-8") as fp:
-        data = tk.load(fp)
-
     # Create config from TOML data
-    config = PiecewiseFunctionConfig.model_validate(data)
+    config = PiecewiseFunctionConfig.model_validate(asset("piecewise_config.toml"))
 
     # Verify points
     assert len(config.points) == 3
@@ -60,14 +47,9 @@ def test_piecewise_config_from_toml():
     assert config.points[2].y == 0.0
 
 
-def test_piecewise_config_vtk_function():
+def test_piecewise_config_vtk_function(asset):
     """Test VTK function creation from PiecewiseFunctionConfig."""
-    # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "piecewise_config.toml"
-    with toml_path.open("rt", encoding="utf-8") as fp:
-        data = tk.load(fp)
-
-    config = PiecewiseFunctionConfig.model_validate(data)
+    config = PiecewiseFunctionConfig.model_validate(asset("piecewise_config.toml"))
     vtk_func = config.vtk_function
 
     # Verify it's the right type

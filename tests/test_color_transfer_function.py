@@ -1,9 +1,6 @@
 """Test ColorTransferFunctionPoint and ColorTransferFunctionConfig."""
 
-import pathlib as pl
-
 import pytest as pt
-import tomlkit as tk
 from vtkmodules.vtkRenderingCore import vtkColorTransferFunction
 
 from cardio.color_transfer_function import (
@@ -12,15 +9,10 @@ from cardio.color_transfer_function import (
 )
 
 
-def test_color_point_from_toml():
+def test_color_point_from_toml(asset):
     """Test loading ColorTransferFunctionPoint from TOML."""
-    # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "color_point.toml"
-    with toml_path.open("rt", encoding="utf-8") as fp:
-        data = tk.load(fp)
-
     # Create point from TOML data
-    point = ColorTransferFunctionPoint.model_validate(data)
+    point = ColorTransferFunctionPoint.model_validate(asset("color_point.toml"))
 
     # Verify values
     assert point.x == 200.0
@@ -47,15 +39,10 @@ def test_color_point_validation():
         ColorTransferFunctionPoint(x=0.0, color=(0.0, 0.0, 2.0))
 
 
-def test_color_config_from_toml():
+def test_color_config_from_toml(asset):
     """Test loading ColorTransferFunctionConfig from TOML."""
-    # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "color_config.toml"
-    with toml_path.open("rt", encoding="utf-8") as fp:
-        data = tk.load(fp)
-
     # Create config from TOML data
-    config = ColorTransferFunctionConfig.model_validate(data)
+    config = ColorTransferFunctionConfig.model_validate(asset("color_config.toml"))
 
     # Verify points
     assert len(config.points) == 3
@@ -67,14 +54,9 @@ def test_color_config_from_toml():
     assert config.points[2].color == (1.0, 1.0, 1.0)
 
 
-def test_color_config_vtk_function():
+def test_color_config_vtk_function(asset):
     """Test VTK function creation from ColorTransferFunctionConfig."""
-    # Load test data
-    toml_path = pl.Path(__file__).parent / "assets" / "color_config.toml"
-    with toml_path.open("rt", encoding="utf-8") as fp:
-        data = tk.load(fp)
-
-    config = ColorTransferFunctionConfig.model_validate(data)
+    config = ColorTransferFunctionConfig.model_validate(asset("color_config.toml"))
     vtk_func = config.vtk_function
 
     # Verify it's the right type
