@@ -1,19 +1,17 @@
 """Test TransferFunctionPairConfig."""
 
-from vtkmodules.vtkCommonDataModel import vtkPiecewiseFunction
-from vtkmodules.vtkRenderingCore import vtkColorTransferFunction
+# Third Party
+import vtk
 
+# Internal
 from cardio.transfer_function_pair import TransferFunctionPairConfig
 
 
 def test_pair_config_from_toml(asset):
-    """Test loading TransferFunctionPairConfig from TOML."""
-    # Create pair config from TOML data
     pair = TransferFunctionPairConfig.model_validate(
         asset("transfer_function_pair.toml")
     )
 
-    # Verify structure
     assert len(pair.opacity.points) == 2
     assert len(pair.color.points) == 2
     assert pair.opacity.points[0].x == 0.0
@@ -22,28 +20,25 @@ def test_pair_config_from_toml(asset):
 
 
 def test_pair_config_vtk_functions(asset):
-    """Test VTK function creation from TransferFunctionPairConfig."""
     pair = TransferFunctionPairConfig.model_validate(
         asset("transfer_function_pair.toml")
     )
+
     otf, ctf = pair.vtk_functions
 
-    # Verify types
-    assert isinstance(otf, vtkPiecewiseFunction)
-    assert isinstance(ctf, vtkColorTransferFunction)
-
-    # Verify they have the expected number of points
+    assert isinstance(otf, vtk.vtkPiecewiseFunction)
+    assert isinstance(ctf, vtk.vtkColorTransferFunction)
     assert otf.GetSize() == 2
     assert ctf.GetSize() == 2
 
 
 def test_pair_config_validation():
-    """Test TransferFunctionPairConfig validation."""
-    # Valid config
-    data = {
-        "opacity": {"points": [{"x": 0.0, "y": 0.0}]},
-        "color": {"points": [{"x": 0.0, "color": [1.0, 0.0, 0.0]}]},
-    }
-    pair = TransferFunctionPairConfig.model_validate(data)
+    pair = TransferFunctionPairConfig.model_validate(
+        {
+            "opacity": {"points": [{"x": 0.0, "y": 0.0}]},
+            "color": {"points": [{"x": 0.0, "color": [1.0, 0.0, 0.0]}]},
+        }
+    )
+
     assert len(pair.opacity.points) == 1
     assert len(pair.color.points) == 1
