@@ -161,6 +161,15 @@ class TileController(Controller):
         """Re-tile at the current frame, for any change that alters the cuts."""
         self.update_tiles(getattr(self.server.state, "frame", 0))
 
+    def zoom_tiles(self, factor: float):
+        """Zoom the whole grid, leaving the fit that put the tiles on one scale."""
+        views = self.scene.tile_views
+        if views is None or not self.active:
+            return
+
+        views.zoom(factor)
+        self.server.controller.view_update()
+
     def reset_cameras(self, **kwargs):
         """Refit every tile, on demand.
 

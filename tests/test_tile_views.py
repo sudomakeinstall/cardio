@@ -18,9 +18,15 @@ def tiles(count: int, background: float = -1000.0) -> TileSet:
 
 @pytest.fixture
 def views() -> TileViews:
+    """A grid, released again on the way out.
+
+    Left to the garbage collector the windows accumulate for the length of the
+    run, which is enough to wedge a machine whose GLX cannot service them.
+    """
     grid = TileViews()
     grid.set_grid(3, 4)
-    return grid
+    yield grid
+    grid.window.Finalize()
 
 
 def prop_count(views: TileViews, tile: int) -> int:
@@ -178,3 +184,76 @@ def test_set_poses_ignores_poses_it_has_no_tile_for():
     grid = tiles(2)
     grid.set_poses([([0.0, 0.0, 0.0], np.eye(3))] * 5)
     assert len(grid) == 2
+
+
+# Zoom
+
+
+def scales(views: TileViews) -> list[float]:
+    return [r.GetActiveCamera().GetParallelScale() for r in views.renderers]
+
+
+def fitted(views: TileViews) -> TileViews:
+    views.window.SetSize(400, 300)
+    views.show(tiles(len(views)), reset_cameras=True)
+    return views
+
+
+def test_zoom_scales_every_tile(views):
+    fitted(views)
+    before = scales(views)
+
+    views.zoom(2.0)
+
+    assert scales(views) == pytest.approx([s / 2.0 for s in before])
+
+
+def test_zoom_keeps_the_tiles_on_one_scale(views):
+    """The grid exists to be compared, so a zoom must not break its shared fit."""
+    fitted(views)
+    assert len(set(scales(views))) == 1
+
+    views.zoom(1.7)
+
+    assert len(set(scales(views))) == 1
+
+
+def test_zooming_out_undoes_zooming_in(views):
+    fitted(views)
+    before = scales(views)
+
+    views.zoom(1.5)
+    views.zoom(1 / 1.5)
+
+    assert scales(views) == pytest.approx(before)
+
+
+def test_a_larger_factor_magnifies(views):
+    """A parallel scale is a half-height, so magnifying shrinks it."""
+    fitted(views)
+    before = scales(views)[0]
+
+    views.zoom(3.0)
+
+    assert scales(views)[0] < before
+
+
+@pytest.mark.parametrize("factor", [0.0, -1.0])
+def test_a_degenerate_zoom_is_ignored(views, factor):
+    fitted(views)
+    before = scales(views)
+
+    views.zoom(factor)
+
+    assert scales(views) == pytest.approx(before)
+
+
+def test_a_refit_replaces_the_zoom(views):
+    """Refitting is how a stale fit is escaped, so it must win over a zoom."""
+    fitted(views)
+    before = scales(views)
+
+    views.zoom(4.0)
+    views.reset_cameras()
+
+    assert scales(views) == pytest.approx(before)

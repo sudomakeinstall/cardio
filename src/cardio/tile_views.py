@@ -105,6 +105,20 @@ class TileViews:
         if reset_cameras:
             self.reset_cameras()
 
+    def zoom(self, factor: float):
+        """Zoom every tile by the same factor, keeping their one shared scale.
+
+        The tiles exist to be compared, so they hold a single parallel scale;
+        scaling them all by the same amount is the only zoom that leaves that
+        true. Each tile keeps its own centre, so the grid magnifies in place.
+        """
+        if factor <= 0.0:
+            return
+
+        for renderer in self._renderers:
+            camera = renderer.GetActiveCamera()
+            camera.SetParallelScale(camera.GetParallelScale() / factor)
+
     def reset_cameras(self):
         """Refit the tiles, then put them all on one scale.
 

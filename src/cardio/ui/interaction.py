@@ -123,10 +123,10 @@ class Interaction:
     def _apply_drag(self, view_name, previous, position):
         """One gesture per button combination.
 
-        Window/level is the only one the tile grid takes; the rest need a single
-        slice to act on, and zoom is the only one that is not about one view.
-        Rotation is given both positions rather than the delta, being an angle
-        swept about a point rather than a distance travelled.
+        Window/level and zoom are about a grid of views rather than any one of
+        them, so the tile grid takes both; the rest need a single slice to act
+        on. Rotation is given both positions rather than the delta, being an
+        angle swept about a point rather than a distance travelled.
         """
         dx = position[0] - previous[0]
         dy = position[1] - previous[1]
@@ -138,17 +138,26 @@ class Interaction:
             )
             return
 
+        if self.middle_dragging and self.right_dragging:
+            self._zoom(view_name, math.exp(dy * self.zoom_sensitivity))
+            return
+
         if view_name not in MPR_VIEWS:
             return
 
         if self.middle_dragging and self.left_dragging:
             self.logic.mpr.rotate_view(view_name, previous, position)
-        elif self.middle_dragging and self.right_dragging:
-            self.logic.mpr.zoom_views(math.exp(dy * self.zoom_sensitivity))
         elif self.middle_dragging:
             self.logic.mpr.pan_view(view_name, dx, dy)
         elif self.left_dragging and self.right_dragging:
             self.logic.mpr.scroll_slice(view_name, dy * self.slice_sensitivity)
+
+    def _zoom(self, view_name, factor):
+        """Zoom whichever grid of views the drag is over, all of it together."""
+        if view_name == "tile":
+            self.logic.tiles.zoom_tiles(factor)
+        elif view_name in MPR_VIEWS:
+            self.logic.mpr.zoom_views(factor)
 
     def _on_key(self, key):
         """Apply a keyboard shortcut, ignoring repeats inside the debounce."""

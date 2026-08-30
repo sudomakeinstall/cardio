@@ -39,9 +39,18 @@ class RecordingMPR:
         self.scrolls.append((view_name, distance))
 
 
+class RecordingTiles:
+    def __init__(self):
+        self.zooms = []
+
+    def zoom_tiles(self, factor):
+        self.zooms.append(factor)
+
+
 class FakeLogic:
     def __init__(self):
         self.mpr = RecordingMPR()
+        self.tiles = RecordingTiles()
 
 
 class FakeState(dict):
@@ -328,7 +337,7 @@ def test_middle_drag_pans_one_to_one_with_the_cursor(interaction):
 
 
 @pytest.mark.parametrize("view", ["tile", "volume"])
-def test_middle_drag_outside_the_mpr_views_is_ignored(interaction, view):
+def test_middle_drag_outside_the_mpr_views_does_not_pan(interaction, view):
     press_middle(interaction, view, 100, 100)
     move(interaction, view, 110, 90)
 
@@ -403,16 +412,41 @@ def test_zoom_ignores_horizontal_movement(interaction):
     assert interaction.logic.mpr.zooms == [pytest.approx(1.0)]
 
 
-def test_rotate_and_zoom_need_a_single_slice(interaction):
-    """Neither means anything over the tile grid or the 3D view."""
+def test_rotating_needs_a_single_slice(interaction):
+    """There is no one plane to spin over the tile grid or the 3D view."""
     for view in ("tile", "volume"):
         press_left_middle(interaction, view, 100, 100)
         move(interaction, view, 110, 90)
-        press_right_middle(interaction, view, 100, 100)
-        move(interaction, view, 100, 120)
 
     assert interaction.logic.mpr.rotations == []
+
+
+def test_zooming_over_the_tile_grid_zooms_the_grid(interaction):
+    """Zoom is about a grid of views, so the tiles take it as the MPRs do."""
+    press_right_middle(interaction, "tile", 100, 100)
+    move(interaction, "tile", 100, 120)
+
+    assert interaction.logic.tiles.zooms == [
+        pytest.approx(math.exp(20 * interaction.zoom_sensitivity))
+    ]
     assert interaction.logic.mpr.zooms == []
+
+
+def test_zooming_over_an_mpr_view_leaves_the_tile_grid_alone(interaction):
+    press_right_middle(interaction, "axial", 100, 100)
+    move(interaction, "axial", 100, 120)
+
+    assert interaction.logic.tiles.zooms == []
+    assert interaction.logic.mpr.zooms != []
+
+
+def test_zooming_over_the_volume_view_zooms_nothing(interaction):
+    """The 3D view has its own trackball, and zooms itself."""
+    press_right_middle(interaction, "volume", 100, 100)
+    move(interaction, "volume", 100, 120)
+
+    assert interaction.logic.mpr.zooms == []
+    assert interaction.logic.tiles.zooms == []
 
 
 def test_releasing_the_middle_button_returns_to_window_level(interaction):

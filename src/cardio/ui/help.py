@@ -94,7 +94,7 @@ def help_dialog():
                             html.Td("Rotate; drag around the crosshair")
                         with html.Tr():
                             html.Td("Right + Middle Drag ↑/↓")
-                            html.Td("Zoom all three views in/out")
+                            html.Td("Zoom every view in/out together")
 
                 html.P(
                     "A snap lock holds what it owns: locking the position "
