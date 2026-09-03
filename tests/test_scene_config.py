@@ -185,7 +185,7 @@ def test_unknown_view_key_is_rejected(tmp_path):
 
 def test_playback_defaults_match_the_sliders():
     playback = Playback()
-    assert (playback.bpm, playback.bpr) == (60, 3)
+    assert (playback.bpm, playback.bpr) == (20, 3)
     assert playback.incrementing and not playback.rotating
 
 

@@ -20,7 +20,7 @@ class Playback(pc.BaseModel):
     model_config = pc.ConfigDict(extra="forbid")
 
     bpm: int = pc.Field(
-        default=60, ge=20, le=120, description="Playback speed, in beats per minute"
+        default=20, ge=20, le=120, description="Playback speed, in beats per minute"
     )
     bpr: int = pc.Field(
         default=3,
