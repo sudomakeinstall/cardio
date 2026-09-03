@@ -76,6 +76,10 @@ Tile view draws several cuts along the traverse path at once, so it wants a
 `[snap]` block in traverse mode to have anything to show.  Reset returns the
 playback controls to whatever is written here.
 
+The `volume` and `tile` layouts do not draw the three MPR views, so the slices
+behind them are not resampled while either is on screen; they are brought up to
+date on the way back.
+
 ### Developing
 
 Ensuring you have all required dependencies:

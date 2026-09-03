@@ -29,6 +29,24 @@ class Layout(str, enum.Enum):
     def state_value(self) -> str:
         return QUAD_LAYOUT if self is Layout.QUAD else self.value
 
+    @classmethod
+    def from_state(cls, value: str | None) -> "Layout":
+        """The layout ``maximized_view`` names, quad for its empty string.
+
+        Unset state reads as None rather than raising, so an unbuilt layout
+        counts as the quad view it will open in.
+        """
+        return cls(value) if value else cls.QUAD
+
+    @property
+    def shows_slices(self) -> bool:
+        """Whether this layout draws the three MPR views.
+
+        The volume rendering and the tile grid do not, so the reslicing behind
+        those views is wasted work while either is on screen.
+        """
+        return self not in (Layout.VOLUME, Layout.TILE)
+
 
 class CameraLock(str, enum.Enum):
     """Which MPR view the volume rendering's camera is tied to, if any."""

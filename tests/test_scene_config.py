@@ -132,6 +132,30 @@ def test_every_maximizable_layout_keeps_its_name(layout):
     assert Layout(layout).state_value == layout
 
 
+@pytest.mark.parametrize(
+    "value,expected",
+    [("", Layout.QUAD), (None, Layout.QUAD), ("tile", Layout.TILE)],
+)
+def test_the_state_value_reads_back_as_its_layout(value, expected):
+    """Unset state reads as None, which is the quad view it will open in."""
+    assert Layout.from_state(value) is expected
+
+
+@pytest.mark.parametrize(
+    "layout,shows",
+    [
+        (Layout.QUAD, True),
+        (Layout.AXIAL, True),
+        (Layout.CORONAL, True),
+        (Layout.SAGITTAL, True),
+        (Layout.VOLUME, False),
+        (Layout.TILE, False),
+    ],
+)
+def test_only_the_layouts_with_slices_in_them_want_the_reslice(layout, shows):
+    assert layout.shows_slices is shows
+
+
 def test_unknown_layout_is_rejected():
     with pytest.raises(pc.ValidationError):
         View(layout="quadrant")

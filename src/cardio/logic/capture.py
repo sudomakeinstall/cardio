@@ -31,7 +31,6 @@ class CaptureController(Controller):
         dr = dt.datetime.now().strftime(self.scene.timestamp_format)
         dr = self.scene.screenshot_directory / dr
 
-        mpr_enabled = self.server.state.mpr_enabled
         selected = {
             name
             for name in VIEWPORTS
@@ -40,7 +39,9 @@ class CaptureController(Controller):
         render_windows = {}
         if "vr" in selected:
             render_windows["vr"] = self.scene.renderWindow
-        if mpr_enabled:
+        # Only when they are on screen: off screen they hold whichever frame
+        # was last drawn, and saving that is worse than leaving it out.
+        if self.app.mpr.active:
             for name in ("axial", "coronal", "sagittal"):
                 if name in selected:
                     render_windows[name] = self.scene.mpr_views[name]

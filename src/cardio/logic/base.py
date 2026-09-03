@@ -25,6 +25,17 @@ class Controller:
         """The index order and angle units the MPR state is currently written in."""
         return Convention.from_metadata(self.scene.mpr_rotation_sequence.metadata)
 
+    @property
+    def _frame(self) -> int:
+        """The frame being shown.
+
+        ``frame`` reaches state only when the playback slider is built, which
+        happens after Logic; until then the scene's configured frame is the one
+        that will be shown.
+        """
+        frame = getattr(self.server.state, "frame", None)
+        return self.scene.current_frame if frame is None else frame
+
     def _active_volume(self):
         """The volume the MPR views are showing, or None if there isn't one."""
         label = self.server.state.active_volume_label

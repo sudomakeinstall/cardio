@@ -9,7 +9,7 @@ import numpy as np
 # Internal
 from ..reslice import VIEW_TRANSFORMS
 from ..state import ObjectState
-from ..view import CameraLock
+from ..view import CameraLock, Layout
 from ..window_level import presets
 from .base import Controller
 
@@ -58,6 +58,19 @@ class MPRController(Controller):
         super().__init__(app)
         self._updating_from_preset = False
         self._pending_active_volume = None
+        self._missed_volume_change = False
+
+    @property
+    def active(self) -> bool:
+        """Whether the layout on screen draws the MPR views.
+
+        Every reslice here costs three resampled planes per frame, so the work
+        is skipped while the volume rendering or the tile grid is up and the
+        views are caught up on the way back.
+        """
+        return Layout.from_state(
+            getattr(self.server.state, "maximized_view", None)
+        ).shows_slices
 
     def register(self):
         state = self.server.state
@@ -81,6 +94,7 @@ class MPRController(Controller):
         state.change("mpr_window_level_preset")(self.update_mpr_preset)
         state.change("mpr_rotation_data")(self.update_mpr_rotation)
         state.change("camera_lock")(self._on_camera_lock_change)
+        state.change("maximized_view")(self._on_layout_changed)
         state.change("mpr_segmentation_opacity")(self.update_segmentation_opacity)
         for seg in self.scene.segmentations:
             state.change(ObjectState.of(seg).mpr_overlay)(
@@ -104,7 +118,6 @@ class MPRController(Controller):
         listener bookkeeping.
         """
         state = self.server.state
-        state.mpr_enabled = self.scene.mpr_enabled
         state.active_volume_label = ""
         self._pending_active_volume = (
             self.scene.volumes[0].label
@@ -131,7 +144,7 @@ class MPRController(Controller):
 
     def update_mpr_frame(self, frame):
         """Update MPR views to show the specified frame."""
-        if not self.server.state.mpr_enabled:
+        if not self.active:
             return
 
         active_volume_label = self.server.state.active_volume_label
@@ -191,7 +204,7 @@ class MPRController(Controller):
     def sync_active_volume(self, active_volume_label, **kwargs):
         """Handle active volume selection for MPR."""
 
-        if not active_volume_label or not self.server.state.mpr_enabled:
+        if not active_volume_label:
             return
 
         # Find the selected volume
@@ -218,6 +231,12 @@ class MPRController(Controller):
                 self.server.state.mpr_origin = self.convention.point_from_itk(center)
         except (RuntimeError, IndexError) as e:
             print(f"Error: Cannot get center for volume '{active_volume_label}': {e}")
+            return
+
+        # The origin is centred above whatever the layout is, because snapping
+        # and the tile grid read it; only the views themselves can wait.
+        if not self.active:
+            self._missed_volume_change = True
             return
 
         # Create MPR actors for current frame
@@ -250,7 +269,7 @@ class MPRController(Controller):
     def update_slice_positions(self, **kwargs):
         """Update MPR slice positions when sliders change."""
 
-        if not self.server.state.mpr_enabled:
+        if not self.active:
             return
 
         active_volume_label = self.server.state.active_volume_label
@@ -296,7 +315,7 @@ class MPRController(Controller):
     def update_mpr_window_level(self, **kwargs):
         """Update MPR window/level when sliders change."""
 
-        if not self.server.state.mpr_enabled:
+        if not self.active:
             return
 
         active_volume_label = self.server.state.active_volume_label
@@ -354,7 +373,11 @@ class MPRController(Controller):
         if self.server.state.rotations_saved_at:
             self.server.state.rotations_stale = True
 
-        if not self.server.state.mpr_enabled:
+        if not self.active:
+            # A locked volume camera follows the slice pose even while the
+            # slices themselves are off screen, so that much still has to run.
+            self._sync_vr_camera_to_mpr()
+            self.server.controller.view_update()
             return
 
         active_volume_label = self.server.state.active_volume_label
@@ -436,13 +459,33 @@ class MPRController(Controller):
         vr_cam.SetViewUp(*up)
         vr_renderer.ResetCameraClippingRange()
 
+    def _on_layout_changed(self, **kwargs):
+        """Catch the views up on what changed while they were off screen.
+
+        Nothing reposes them while another layout is up, so coming back has to
+        redraw from the state as it now stands rather than trust the renderers.
+        ``update_mpr_frame`` rebuilds all three without refitting the cameras,
+        which would throw away the pan and zoom the views were left at; a
+        volume changed in the meantime does want that refit, and says so.
+        """
+        if not self.active:
+            return
+
+        if self._missed_volume_change:
+            self._missed_volume_change = False
+            self.sync_active_volume(self.server.state.active_volume_label)
+            return
+
+        self.update_mpr_frame(self._frame)
+        self.server.controller.view_update()
+
     def _on_camera_lock_change(self, camera_lock, **kwargs):
         self._sync_vr_camera_to_mpr()
         self.server.controller.view_update()
 
     def sync_crosshairs_visibility(self, **kwargs):
         """Toggle crosshair visibility on all MPR views."""
-        if not self.server.state.mpr_enabled:
+        if not self.active:
             return
 
         active_volume_label = self.server.state.active_volume_label
@@ -514,7 +557,7 @@ class MPRController(Controller):
 
     def sync_segmentation_overlays(self, **kwargs):
         """Toggle segmentation overlay visibility on MPR views."""
-        if not self.server.state.mpr_enabled:
+        if not self.active:
             return
 
         views = self.scene.mpr_views
@@ -680,7 +723,7 @@ class MPRController(Controller):
 
     def update_segmentation_opacity(self, **kwargs):
         """Update segmentation overlay opacity."""
-        if not self.server.state.mpr_enabled:
+        if not self.active:
             return
 
         current_frame = self.server.state.frame

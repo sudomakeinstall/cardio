@@ -676,6 +676,85 @@ def test_the_quad_layout_leaves_the_tiles_empty(tmp_path):
     )
 
 
+def drawn(scene) -> dict[str, int]:
+    """How many props each MPR view is holding."""
+    return {
+        view: scene.mpr_views.renderer(view).GetViewProps().GetNumberOfItems()
+        for view in scene.mpr_views
+    }
+
+
+def slice_origin(scene, view: str = "axial") -> list[float]:
+    """Where a view's reslice is currently aimed, in ITK coordinates."""
+    axes = (
+        scene.volumes[0].get_mpr_actors_for_frame(0)[view]["reslice"].GetResliceAxes()
+    )
+    return [axes.GetElement(row, 3) for row in range(3)]
+
+
+@pytest.mark.parametrize("layout", ["volume", "tile"])
+def test_a_layout_that_hides_the_slices_does_not_reslice(tmp_path, layout):
+    """Three resampled planes per frame, for views nobody is looking at."""
+    _, scene, logic, _ = build_ready(tmp_path, view={"layout": layout})
+
+    assert not logic.mpr.active
+    assert set(drawn(scene).values()) == {0}
+
+
+@pytest.mark.parametrize("layout", ["quad", "axial"])
+def test_a_layout_that_shows_the_slices_draws_them(tmp_path, layout):
+    _, scene, logic, _ = build_ready(tmp_path, view={"layout": layout})
+
+    assert logic.mpr.active
+    assert all(count > 0 for count in drawn(scene).values())
+
+
+def test_returning_to_a_slice_layout_draws_it(tmp_path):
+    server, scene, _, _ = build_ready(tmp_path, view={"layout": "volume"})
+
+    with server.state:
+        server.state.maximized_view = ""
+    server.state.flush()
+
+    assert all(count > 0 for count in drawn(scene).values())
+
+
+def test_the_views_come_back_at_the_origin_they_missed(tmp_path):
+    """The point of the catch-up: the origin moved with nothing listening."""
+    server, scene, logic, _ = build_ready(tmp_path)
+    moved = [3.0, -2.0, 1.0]
+
+    for key, value in (("maximized_view", "volume"), ("mpr_origin", moved)):
+        with server.state:
+            server.state[key] = value
+        server.state.flush()
+
+    assert slice_origin(scene) != pytest.approx(
+        logic.mpr.convention.point_to_itk(moved)
+    )
+
+    with server.state:
+        server.state.maximized_view = ""
+    server.state.flush()
+
+    assert slice_origin(scene) == pytest.approx(
+        logic.mpr.convention.point_to_itk(moved)
+    )
+
+
+def test_a_locked_volume_camera_follows_while_the_slices_are_hidden(tmp_path):
+    """The volume rendering is on screen in exactly the layout the slices are not."""
+    _, scene, logic, _ = build_ready(
+        tmp_path, view={"layout": "volume", "camera_lock": "LL"}
+    )
+    camera = scene.renderer.GetActiveCamera()
+    camera.SetViewUp(1.0, 0.0, 0.0)
+
+    logic.mpr.update_mpr_rotation()
+
+    assert camera.GetViewUp() == pytest.approx((0.0, 0.0, 1.0))
+
+
 def test_configured_camera_lock_reaches_state(tmp_path):
     """Seeding this fires a camera sync on the first flush, so it is built here."""
     server, _, _, _ = build_ready(tmp_path, view={"camera_lock": "LL"})

@@ -107,17 +107,6 @@ class SnapController(Controller):
         if snap.orientation_locked:
             self.align_to_interface()
 
-    @property
-    def _frame(self) -> int:
-        """The frame being shown.
-
-        ``frame`` reaches state only when the playback slider is built, which
-        happens after Logic; until then the scene's configured frame is the one
-        that will be shown.
-        """
-        frame = getattr(self.server.state, "frame", None)
-        return self.scene.current_frame if frame is None else frame
-
     def _selected_segmentation(self, label: str | None = None):
         """The segmentation ``label`` names, defaulting to the selected one."""
         if label is None:
