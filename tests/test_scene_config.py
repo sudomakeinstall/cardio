@@ -231,3 +231,31 @@ def test_toml_playback_table_reaches_the_scene(tmp_path):
 def test_unknown_playback_key_is_rejected(tmp_path):
     with pytest.raises(pc.ValidationError):
         scene_from_toml(tmp_path, "[playback]\nbeats_per_minute = 75\n")
+
+
+# --- objects ------------------------------------------------------------------
+
+
+def test_a_misspelled_background_key_is_rejected(tmp_path):
+    with pytest.raises(pc.ValidationError):
+        scene_from_toml(tmp_path, "[background]\nlite = [1.0, 1.0, 1.0]\n")
+
+
+def test_a_misspelled_property_key_is_rejected(tmp_path):
+    """One table deeper than the object itself, where the same typo hid."""
+    with pytest.raises(pc.ValidationError):
+        scene_from_toml(
+            tmp_path,
+            '[[meshes]]\nlabel = "obj"\ndirectory = "."\n'
+            "\n[meshes.properties]\nedge_visibilty = true\n",
+        )
+
+
+@pytest.mark.parametrize("kind", ["meshes", "volumes", "segmentations"])
+def test_a_misspelled_object_key_is_rejected(tmp_path, kind):
+    """The trap this closes: ``[meshes.property]`` was ignored, not reported."""
+    with pytest.raises(pc.ValidationError):
+        scene_from_toml(
+            tmp_path,
+            f'[[{kind}]]\nlabel = "obj"\ndirectory = "."\nmpr_overlays = true\n',
+        )

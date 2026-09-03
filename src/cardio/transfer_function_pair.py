@@ -8,6 +8,8 @@ from .piecewise_function import PiecewiseFunctionConfig
 class TransferFunctionPairConfig(pc.BaseModel):
     """Configuration for a pair of opacity and color transfer functions."""
 
+    model_config = pc.ConfigDict(extra="forbid")
+
     opacity: PiecewiseFunctionConfig = pc.Field(
         description="Opacity transfer function configuration"
     )

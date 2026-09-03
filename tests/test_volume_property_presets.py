@@ -96,6 +96,27 @@ def test_a_file_missing_the_required_fields_is_rejected(assets):
         vpp.load_volume_property_preset("sparse")
 
 
+@pytest.mark.parametrize(
+    "line,under",
+    [
+        ("specularity = 1.0", ""),
+        ("smoothing = true", "[transfer_functions.opacity]"),
+        ("z = 0.0", "[[transfer_functions.opacity.points]]"),
+    ],
+)
+def test_a_preset_with_an_unknown_key_is_rejected(assets, line, under):
+    """Every level of a preset says so, rather than dropping what it cannot use.
+
+    The key goes into the table that already exists rather than after a second
+    copy of its header, which TOML rejects on its own and would prove nothing.
+    """
+    body = COMPLETE.replace(under, f"{under}\n{line}", 1) if under else COMPLETE + line
+    (assets / "stray.toml").write_text(body + "\n")
+
+    with pytest.raises(ValueError, match="Invalid preset file"):
+        vpp.load_volume_property_preset("stray")
+
+
 def test_an_empty_directory_lists_nothing(assets):
     assert vpp.list_volume_property_presets() == {}
 

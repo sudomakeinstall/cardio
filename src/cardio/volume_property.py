@@ -9,6 +9,8 @@ from .types import ScalarComponent
 class VolumePropertyConfig(pc.BaseModel):
     """Configuration for volume rendering properties and transfer functions."""
 
+    model_config = pc.ConfigDict(extra="forbid")
+
     name: str = pc.Field(description="Display name of the preset")
     description: str = pc.Field(description="Description of the preset")
 

@@ -11,9 +11,15 @@ from .utils import calculate_combined_bounds
 
 
 class Object(pc.BaseModel):
-    """Base class for renderable objects with validated configuration."""
+    """Base class for renderable objects with validated configuration.
 
-    model_config = pc.ConfigDict(arbitrary_types_allowed=True, frozen=True)
+    Extras are forbidden, as they are on ``Scene``: a misspelled key in a
+    hand-written object should say so rather than quietly do nothing.
+    """
+
+    model_config = pc.ConfigDict(
+        arbitrary_types_allowed=True, frozen=True, extra="forbid"
+    )
 
     # Names this object's per-type state keys; see state.ObjectState
     kind: ty.ClassVar[str] = "object"

@@ -44,6 +44,8 @@ SegmentationList = ty.Annotated[
 
 
 class Background(pc.BaseModel):
+    model_config = pc.ConfigDict(extra="forbid")
+
     light: RGBColor = pc.Field(
         default=(1.0, 1.0, 1.0),
         description="Background color in light mode.  CLI usage: --background.light '[0.8,0.9,1.0]'",

@@ -7,12 +7,16 @@ from .types import RGBColor
 class ColorTransferFunctionPoint(pc.BaseModel):
     """A single point in a color transfer function."""
 
+    model_config = pc.ConfigDict(extra="forbid")
+
     x: float = pc.Field(description="Scalar value")
     color: RGBColor
 
 
 class ColorTransferFunctionConfig(pc.BaseModel):
     """Configuration for a VTK color transfer function."""
+
+    model_config = pc.ConfigDict(extra="forbid")
 
     points: list[ColorTransferFunctionPoint] = pc.Field(
         min_length=1, description="Points defining the color transfer function"

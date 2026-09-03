@@ -7,12 +7,16 @@ from .types import ScalarComponent
 class PiecewiseFunctionPoint(pc.BaseModel):
     """A single point in a piecewise function."""
 
+    model_config = pc.ConfigDict(extra="forbid")
+
     x: float = pc.Field(description="Scalar value")
     y: ScalarComponent
 
 
 class PiecewiseFunctionConfig(pc.BaseModel):
     """Configuration for a VTK piecewise function (opacity)."""
+
+    model_config = pc.ConfigDict(extra="forbid")
 
     points: list[PiecewiseFunctionPoint] = pc.Field(
         min_length=1, description="Points defining the piecewise function"

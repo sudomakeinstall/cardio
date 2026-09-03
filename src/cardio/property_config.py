@@ -27,6 +27,8 @@ class Interpolation(enum.IntEnum):
 class vtkPropertyConfig(pc.BaseModel):
     """Configuration for mesh rendering properties."""
 
+    model_config = pc.ConfigDict(extra="forbid")
+
     representation: Representation = pc.Field(
         default=Representation.Surface, description="Rendering representation mode"
     )
