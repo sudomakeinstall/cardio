@@ -548,7 +548,7 @@ def test_the_traverse_slider_is_reachable_in_the_quad_view(read_only_app):
     assert "maximized_view !== 'tile'" in condition
 
 
-def test_configured_snap_survives_the_first_flush(tmp_path):
+def test_configured_snap_survives_startup(tmp_path):
     """The configured selection is what the panel holds once the state settles.
 
     The unit tests drive the controllers directly; only here does the
@@ -568,7 +568,10 @@ def test_configured_snap_survives_the_first_flush(tmp_path):
         },
     )
     server, _, _, _ = build_app(scene)
-    server.state.flush()
+    # ``state.ready()`` rather than ``state.flush()``: flushing is skipped
+    # until the state is marked ready, so a flush on its own fires no change
+    # listener at all, and this asserted nothing about what they do.
+    server.state.ready()
 
     assert server.state.snap_mode == "traverse"
     assert server.state.snap_labels_a == [1]
