@@ -15,7 +15,7 @@ def overlays_panel(server, scene):
 
         vuetify.VSlider(
             v_if=RESLICE_ACTIVE,
-            v_model=("mpr_segmentation_opacity", 0.7),
+            v_model=("mpr_segmentation_opacity", scene.mpr_segmentation_opacity),
             label="Opacity",
             title="Opacity of the segmentation overlays on the MPR views",
             classes=SLIDER_CLASS,
@@ -29,7 +29,7 @@ def overlays_panel(server, scene):
         for seg in scene.segmentations:
             vuetify.VCheckbox(
                 v_if=RESLICE_ACTIVE,
-                v_model=(ObjectState.of(seg).mpr_overlay, False),
+                v_model=(ObjectState.of(seg).mpr_overlay, seg.mpr_overlay),
                 label=f"{seg.label}",
                 hide_details=True,
             )

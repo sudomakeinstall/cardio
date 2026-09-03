@@ -7,8 +7,7 @@ from trame.widgets import vuetify3 as vuetify
 # Internal
 from .. import __version__
 from ..scene import Scene
-from ..state import DEFAULT_THEME_MODE
-from .common import DEFAULT_OPEN_SECTIONS, TILE_ACTIVE, drawer_styles, section
+from .common import TILE_ACTIVE, drawer_styles, section
 from .help import help_dialog
 from .interaction import Interaction
 from .layout import toolbar, viewports
@@ -37,8 +36,8 @@ class UI:
         self.scene = scene
         self.interaction = Interaction(server, logic)
 
-        self.server.state.help_overlay_visible = False
-        self.server.state.maximized_view = ""
+        self.server.state.help_overlay_visible = scene.view.help_visible
+        self.server.state.maximized_view = scene.view.layout.state_value
         self.server.state.rotations_saved_at = None
         self.server.state.rotations_stale = False
 
@@ -56,7 +55,7 @@ class UI:
         drawer_styles(self.server)
 
         with SinglePageWithDrawerLayout(
-            self.server, theme=("theme_mode", DEFAULT_THEME_MODE)
+            self.server, theme=("theme_mode", self.scene.view.theme.value)
         ) as layout:
             self.layout = layout
             layout.icon.click = self.server.controller.view_reset_camera
@@ -72,7 +71,7 @@ class UI:
                     self.handled_events,
                     self._update_all_mpr_views,
                 )
-                help_dialog()
+                help_dialog(self.scene)
 
             with layout.drawer as drawer:
                 drawer.width = DRAWER_WIDTH
@@ -83,7 +82,7 @@ class UI:
         volume_panel(self.server, self.scene)
 
         with vuetify.VExpansionPanels(
-            v_model=("drawer_sections", DEFAULT_OPEN_SECTIONS),
+            v_model=("drawer_sections", self.scene.view.open_sections),
             multiple=True,
             variant="accordion",
             flat=True,

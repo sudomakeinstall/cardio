@@ -9,6 +9,7 @@ import numpy as np
 # Internal
 from ..reslice import VIEW_TRANSFORMS
 from ..state import ObjectState
+from ..view import CameraLock
 from ..window_level import presets
 from .base import Controller
 
@@ -40,6 +41,16 @@ def _swept_degrees(centre, start, end) -> float:
     return -math.degrees(math.atan2(ax * by - ay * bx, ax * bx + ay * by))
 
 
+# The camera lock choices as the picker labels them. Keyed by the enum, so a
+# new member without a label fails here rather than silently missing from it.
+CAMERA_LOCK_TITLES = {
+    CameraLock.FREE: "Free",
+    CameraLock.UL: "UL (Axial)",
+    CameraLock.LL: "LL (Coronal)",
+    CameraLock.LR: "LR (Sagittal)",
+}
+
+
 class MPRController(Controller):
     """Everything that decides what the three MPR views show."""
 
@@ -55,12 +66,10 @@ class MPRController(Controller):
             {"text": volume.label, "value": volume.label}
             for volume in self.scene.volumes
         ]
-        state.camera_lock = "free"
+        state.camera_lock = self.scene.view.camera_lock.value
         state.camera_lock_items = [
-            {"title": "Free", "value": "free"},
-            {"title": "UL (Axial)", "value": "UL"},
-            {"title": "LL (Coronal)", "value": "LL"},
-            {"title": "LR (Sagittal)", "value": "LR"},
+            {"title": CAMERA_LOCK_TITLES[lock], "value": lock.value}
+            for lock in CameraLock
         ]
         state.mpr_origin = [0.0, 0.0, 0.0]
         state.mpr_crosshairs_enabled = self.scene.mpr_crosshairs_enabled
@@ -79,8 +88,8 @@ class MPRController(Controller):
             )
 
         for seg in self.scene.segmentations:
-            state[ObjectState.of(seg).mpr_overlay] = False
-        state.mpr_segmentation_opacity = 0.7
+            state[ObjectState.of(seg).mpr_overlay] = seg.mpr_overlay
+        state.mpr_segmentation_opacity = self.scene.mpr_segmentation_opacity
 
         self.server.controller.reset_mpr_origin = self.reset_mpr_origin
         self.server.controller.finalize_mpr_initialization = (

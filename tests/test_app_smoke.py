@@ -21,8 +21,9 @@ from cardio.logic import ALIGN_STEP_NAME, Logic
 from cardio.orientation import AngleUnits
 from cardio.rotation import RotationMetadata
 from cardio.scene import Scene
-from cardio.state import DEFAULT_THEME_MODE, THEME_LIGHT, ObjectState
+from cardio.state import ObjectState
 from cardio.ui import UI
+from cardio.view import Theme
 
 _server_names = itertools.count()
 
@@ -51,7 +52,7 @@ def write_mesh(path):
     writer.Write()
 
 
-def build_scene(directory, **overrides) -> Scene:
+def build_scene(directory, segmentation_overrides=None, **overrides) -> Scene:
     """One object of every renderable type, so every UI branch is built."""
     write_volume(directory / "vol0.nii.gz")
     write_segmentation(directory / "seg0.nii.gz")
@@ -62,7 +63,12 @@ def build_scene(directory, **overrides) -> Scene:
             {"label": "vol", "directory": directory, "file_paths": ["vol0.nii.gz"]}
         ],
         segmentations=[
-            {"label": "seg", "directory": directory, "file_paths": ["seg0.nii.gz"]}
+            {
+                "label": "seg",
+                "directory": directory,
+                "file_paths": ["seg0.nii.gz"],
+                **(segmentation_overrides or {}),
+            }
         ],
         meshes=[{"label": "mesh", "directory": directory, "file_paths": ["mesh0.obj"]}],
         **overrides,
@@ -323,19 +329,19 @@ def test_an_unrecognised_index_order_is_rejected(read_only_app):
         logic.rotations.sync_index_order("nonsense")
 
 
-def test_the_renderer_starts_in_the_default_theme(read_only_app):
+def test_the_renderer_starts_in_the_configured_theme(read_only_app):
     server, scene, logic, _ = read_only_app
 
-    assert server.state.theme_mode == DEFAULT_THEME_MODE
+    assert server.state.theme_mode == scene.view.theme.value
     assert scene.renderer.GetBackground() == pytest.approx(
-        logic.visibility.background_color(DEFAULT_THEME_MODE)
+        logic.visibility.background_color(scene.view.theme.value)
     )
 
 
 def test_toggling_the_theme_repaints_the_background(app):
     _, scene, logic, _ = app
 
-    logic.visibility.sync_background_color(THEME_LIGHT)
+    logic.visibility.sync_background_color(Theme.LIGHT.value)
 
     assert scene.renderer.GetBackground() == pytest.approx(scene.background.light)
 
@@ -548,6 +554,22 @@ def test_the_traverse_slider_is_reachable_in_the_quad_view(read_only_app):
     assert "maximized_view !== 'tile'" in condition
 
 
+def build_ready(tmp_path, **overrides):
+    """A built app taken through the startup a running server performs.
+
+    ``state.ready()`` rather than ``state.flush()``: flushing is skipped until
+    the state is marked ready, so a test that only flushes fires no change
+    listener at all and proves nothing about what they do.
+    ``finalize_mpr_initialization`` is the initialization the UI defers to the
+    client's mount, which is what fills in the active volume.
+    """
+    server, scene, logic, ui = build_app(build_scene(tmp_path, **overrides))
+    server.state.ready()
+    server.controller.finalize_mpr_initialization()
+    server.state.flush()
+    return server, scene, logic, ui
+
+
 def test_configured_snap_survives_startup(tmp_path):
     """The configured selection is what the panel holds once the state settles.
 
@@ -555,7 +577,7 @@ def test_configured_snap_survives_startup(tmp_path):
     ``snap_seg_label`` listener actually fire, which is what used to clear the
     groups out from under the config.
     """
-    scene = build_scene(
+    server, _, _, _ = build_ready(
         tmp_path,
         snap={
             "mode": "traverse",
@@ -567,11 +589,6 @@ def test_configured_snap_survives_startup(tmp_path):
             "orientation_locked": True,
         },
     )
-    server, _, _, _ = build_app(scene)
-    # ``state.ready()`` rather than ``state.flush()``: flushing is skipped
-    # until the state is marked ready, so a flush on its own fires no change
-    # listener at all, and this asserted nothing about what they do.
-    server.state.ready()
 
     assert server.state.snap_mode == "traverse"
     assert server.state.snap_labels_a == [1]
@@ -584,3 +601,106 @@ def test_configured_snap_survives_startup(tmp_path):
     assert ALIGN_STEP_NAME in [
         step["name"] for step in server.state.mpr_rotation_data["angles_list"]
     ]
+
+
+def test_configured_layout_opens_maximized(tmp_path):
+    server, _, _, _ = build_ready(tmp_path, view={"layout": "sagittal"})
+    assert server.state.maximized_view == "sagittal"
+
+
+def test_the_quad_layout_leaves_maximized_view_empty(tmp_path):
+    server, _, _, _ = build_ready(tmp_path)
+    assert server.state.maximized_view == ""
+
+
+def test_opening_in_tile_mode_builds_the_grid(tmp_path):
+    """The riskiest of these: the tile listener fires on the first flush.
+
+    Tiles are only drawn for a traverse path, so the layout and the snap
+    selection have to be configured together to reach the grid at all.
+    """
+    server, scene, logic, _ = build_ready(
+        tmp_path,
+        view={"layout": "tile"},
+        snap={
+            "mode": "traverse",
+            "labels_a": [1],
+            "labels_b": [2],
+            "labels_c": [3],
+        },
+    )
+
+    assert server.state.maximized_view == "tile"
+    assert logic.tiles.active
+    assert server.state.snap_no_interface is False
+    # Every tile actually carries a cut, rather than the grid merely existing:
+    # the render windows are built whichever layout is on screen.
+    assert all(
+        renderer.GetViewProps().GetNumberOfItems() > 0
+        for renderer in scene.tile_views.renderers
+    )
+
+
+def test_configured_theme_reaches_the_renderer(tmp_path):
+    server, scene, _, _ = build_ready(tmp_path, view={"theme": "light"})
+
+    assert server.state.theme_mode == "light"
+    assert scene.renderer.GetBackground() == pytest.approx(scene.background.light)
+
+
+def test_configured_segmentation_overlay_starts_on(tmp_path):
+    server, scene, _, _ = build_ready(
+        tmp_path, segmentation_overrides={"mpr_overlay": True}
+    )
+
+    for seg in scene.segmentations:
+        assert server.state[ObjectState.of(seg).mpr_overlay] is True
+
+
+def test_configured_overlay_opacity_reaches_state(tmp_path):
+    server, _, _, _ = build_ready(tmp_path, mpr_segmentation_opacity=0.25)
+    assert server.state.mpr_segmentation_opacity == 0.25
+
+
+def test_the_quad_layout_leaves_the_tiles_empty(tmp_path):
+    """The counterpart to the tile test: an empty grid is what "not built" looks like."""
+    _, scene, logic, _ = build_ready(
+        tmp_path,
+        snap={"mode": "traverse", "labels_a": [1], "labels_b": [2], "labels_c": [3]},
+    )
+
+    assert not logic.tiles.active
+    assert all(
+        renderer.GetViewProps().GetNumberOfItems() == 0
+        for renderer in scene.tile_views.renderers
+    )
+
+
+def test_configured_camera_lock_reaches_state(tmp_path):
+    """Seeding this fires a camera sync on the first flush, so it is built here."""
+    server, _, _, _ = build_ready(tmp_path, view={"camera_lock": "LL"})
+
+    assert server.state.camera_lock == "LL"
+    assert [item["value"] for item in server.state.camera_lock_items] == [
+        "free",
+        "UL",
+        "LL",
+        "LR",
+    ]
+
+
+def test_configured_drawer_sections_open(tmp_path):
+    server, _, _, _ = build_ready(
+        tmp_path, view={"drawer_sections": ["orientation", "export"]}
+    )
+    assert server.state.drawer_sections == ["orientation", "export"]
+
+
+def test_the_help_dialog_can_open_with_the_app(tmp_path):
+    server, _, _, _ = build_ready(tmp_path, view={"help_visible": True})
+    assert server.state.help_overlay_visible is True
+
+
+def test_the_help_dialog_is_closed_by_default(tmp_path):
+    server, _, _, _ = build_ready(tmp_path)
+    assert server.state.help_overlay_visible is False

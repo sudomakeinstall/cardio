@@ -4,10 +4,6 @@
 from trame.widgets import vuetify3 as vuetify
 
 # Internal
-from ...image_quality import (
-    DEFAULT_PLAYBACK_QUALITY,
-    DEFAULT_PLAYBACK_RESOLUTION,
-)
 from ..common import SLIDER_CLASS
 
 
@@ -52,7 +48,7 @@ def playback_panel(server, scene):
         vuetify.VSpacer()
 
         vuetify.VCheckbox(
-            v_model=("incrementing", True),
+            v_model=("incrementing", scene.playback.incrementing),
             true_icon="mdi-movie-open-outline",
             false_icon="mdi-movie-open-off-outline",
             hide_details=True,
@@ -62,7 +58,7 @@ def playback_panel(server, scene):
         vuetify.VSpacer()
 
         vuetify.VCheckbox(
-            v_model=("rotating", False),
+            v_model=("rotating", scene.playback.rotating),
             true_icon="mdi-autorenew",
             false_icon="mdi-autorenew-off",
             hide_details=True,
@@ -83,7 +79,7 @@ def playback_panel(server, scene):
     )
 
     vuetify.VSlider(
-        v_model=("bpm", 60),
+        v_model=("bpm", scene.playback.bpm),
         label="BPM",
         title="Playback speed, in beats per minute",
         classes=SLIDER_CLASS,
@@ -96,7 +92,7 @@ def playback_panel(server, scene):
     )
 
     vuetify.VSlider(
-        v_model=("bpr", 3),
+        v_model=("bpr", scene.playback.bpr),
         label="Beats/rot",
         title="Cardiac cycles per full rotation of the camera",
         classes=SLIDER_CLASS,
@@ -109,7 +105,7 @@ def playback_panel(server, scene):
     )
 
     vuetify.VSlider(
-        v_model=("playback_quality", DEFAULT_PLAYBACK_QUALITY),
+        v_model=("playback_quality", scene.playback.quality),
         label="Quality",
         title="JPEG encode quality while playing; 100 is full quality",
         classes=SLIDER_CLASS,
@@ -122,7 +118,7 @@ def playback_panel(server, scene):
     )
 
     vuetify.VSlider(
-        v_model=("playback_resolution", DEFAULT_PLAYBACK_RESOLUTION),
+        v_model=("playback_resolution", scene.playback.resolution),
         label="Res",
         title="Render resolution while playing, as a percent of full",
         classes=SLIDER_CLASS,

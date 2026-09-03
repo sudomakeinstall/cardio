@@ -20,9 +20,6 @@ TILE_ACTIVE = "maximized_view === 'tile'"
 NOT_TILE_ACTIVE = "maximized_view !== 'tile'"
 RESLICE_ACTIVE = f"(!maximized_view || {TILE_ACTIVE}) && active_volume_label"
 
-# Sections the drawer opens on load; the rest start collapsed.
-DEFAULT_OPEN_SECTIONS = ["playback"]
-
 
 @cl.contextmanager
 def section(value, title, icon, **kwargs):

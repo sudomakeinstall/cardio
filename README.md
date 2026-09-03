@@ -50,6 +50,32 @@ Reset returns to this configuration rather than to an empty panel.  A label that
 the segmentation does not contain is reported and dropped rather than refusing to
 start.
 
+### Opening in a particular view
+
+The layout and theme the app opens in, and where the playback controls start:
+
+```toml
+[view]
+layout = "tile"     # quad (default), volume, axial, coronal, sagittal, tile
+theme = "dark"      # selects between the two [background] colours
+camera_lock = "LL"  # MPR view the volume rendering's camera follows, or "free"
+drawer_sections = ["playback", "tiles"]   # sections open on load
+help_visible = false                      # open showing the shortcut reference
+
+[playback]
+bpm = 75            # playback speed, in beats per minute
+bpr = 3             # cardiac cycles per full rotation of the camera
+rotating = true     # rotate the camera while playing
+```
+
+```bash
+$ cardio --view.layout tile --playback.bpm 75
+```
+
+Tile view draws several cuts along the traverse path at once, so it wants a
+`[snap]` block in traverse mode to have anything to show.  Reset returns the
+playback controls to whatever is written here.
+
 ### Developing
 
 Ensuring you have all required dependencies:

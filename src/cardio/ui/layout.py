@@ -5,7 +5,7 @@ from trame.widgets import vtk as vtk_widgets
 from trame.widgets import vuetify3 as vuetify
 
 # Internal
-from ..state import DEFAULT_THEME_MODE, THEME_DARK, THEME_LIGHT
+from ..view import Theme
 
 
 def toolbar(server, scene, layout):
@@ -16,9 +16,9 @@ def toolbar(server, scene, layout):
         vuetify.VSpacer()
 
         vuetify.VCheckbox(
-            v_model=("theme_mode", DEFAULT_THEME_MODE),
-            true_value=THEME_DARK,
-            false_value=THEME_LIGHT,
+            v_model=("theme_mode", scene.view.theme.value),
+            true_value=Theme.DARK.value,
+            false_value=Theme.LIGHT.value,
             label="Dark Mode",
             true_icon="mdi-lightbulb-off-outline",
             false_icon="mdi-lightbulb-outline",

@@ -8,10 +8,10 @@ from trame.widgets import vuetify3 as vuetify
 from ..window_level import presets
 
 
-def help_dialog():
+def help_dialog(scene):
     """The shortcut reference, toggled with the `h` key."""
     with vuetify.VDialog(
-        v_model=("help_overlay_visible", False),
+        v_model=("help_overlay_visible", scene.view.help_visible),
         max_width="700px",
         scrim="rgba(0, 0, 0, 0.7)",
     ):

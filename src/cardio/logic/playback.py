@@ -9,8 +9,6 @@ from trame.app import asynchronous
 
 # Internal
 from ..image_quality import (
-    DEFAULT_PLAYBACK_QUALITY,
-    DEFAULT_PLAYBACK_RESOLUTION,
     FULL_QUALITY,
     FULL_RESOLUTION,
     ratio_from_percent,
@@ -33,6 +31,7 @@ class PlaybackController(Controller):
 
     def register(self):
         state = self.server.state
+        self._publish_configured_playback()
         state.change("frame")(self.update_frame)
         state.change("playing")(self._handle_playing_change)
         state.change("playback_quality", "playback_resolution")(
@@ -44,6 +43,17 @@ class PlaybackController(Controller):
         controller.decrement_frame = self.decrement_frame
         controller.reset_all = self.reset_all
         controller.close_application = self.close_application
+
+    def _publish_configured_playback(self):
+        """Write the configured playback controls to state."""
+        state = self.server.state
+        playback = self.scene.playback
+        state.bpm = playback.bpm
+        state.bpr = playback.bpr
+        state.incrementing = playback.incrementing
+        state.rotating = playback.rotating
+        state.playback_quality = playback.quality
+        state.playback_resolution = playback.resolution
 
     def update_frame(self, frame, **kwargs):
         # Before update_mpr_frame reads mpr_origin, so the new frame is
@@ -238,14 +248,14 @@ class PlaybackController(Controller):
             self.server.controller.view_update()
 
     def reset_all(self):
-        self.server.state.frame = 0
+        """Put playback back where the config starts it.
+
+        The controls used to be reset to literals that had drifted from the
+        ones the widgets open with; there is now one source for both.
+        """
+        self.server.state.frame = self.scene.current_frame
         self.server.state.playing = False
-        self.server.state.incrementing = True
-        self.server.state.rotating = False
-        self.server.state.bpm = 60
-        self.server.state.bpr = 5
-        self.server.state.playback_quality = DEFAULT_PLAYBACK_QUALITY
-        self.server.state.playback_resolution = DEFAULT_PLAYBACK_RESOLUTION
+        self._publish_configured_playback()
         self.server.controller.view_update()
 
     @asynchronous.task

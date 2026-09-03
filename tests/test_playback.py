@@ -460,9 +460,28 @@ def test_moving_a_slider_while_paused_changes_nothing(clock, applied):
 
 
 def test_reset_restores_both_defaults(clock, applied):
-    app = PlaybackApp(clock, nframes=10, playback_quality=25, playback_resolution=40)
+    app = PlaybackApp(clock, nframes=10)
 
+    app.state.playback_quality = 25
+    app.state.playback_resolution = 40
     app.playback.reset_all()
 
     assert app.state.playback_quality == DEFAULT_PLAYBACK_QUALITY
     assert app.state.playback_resolution == DEFAULT_PLAYBACK_RESOLUTION
+
+
+def test_reset_restores_the_configured_values_not_the_built_in_ones(clock, applied):
+    """Reset lands where the app launched, which is what the config says.
+
+    The controls used to be reset to literals of their own -- the beats per
+    rotation slider opened on 3 and reset to 5 -- so this pins them to one
+    source.
+    """
+    app = PlaybackApp(clock, nframes=10, playback_quality=25, bpr=7)
+
+    app.state.playback_quality = 90
+    app.state.bpr = 1
+    app.playback.reset_all()
+
+    assert app.state.playback_quality == 25
+    assert app.state.bpr == 7

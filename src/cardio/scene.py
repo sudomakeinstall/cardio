@@ -9,11 +9,13 @@ import vtk
 
 from .mesh import Mesh
 from .mpr_views import MPRViews
+from .playback import Playback
 from .rotation import RotationSequence
 from .segmentation import Segmentation
 from .snap import Snap
 from .tile_views import TileViews
 from .types import RGBColor
+from .view import View
 from .volume import Volume
 
 MeshListAdapter = pc.TypeAdapter(list[Mesh])
@@ -151,6 +153,12 @@ class Scene(ps.BaseSettings):
     mpr_crosshair_width: float = pc.Field(
         default=1.5, description="Line width for crosshair lines"
     )
+    mpr_segmentation_opacity: float = pc.Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Opacity of the segmentation overlays on the MPR and tile views",
+    )
     tile_rows: int = pc.Field(
         default=3, ge=1, le=6, description="Rows in the tile view grid"
     )
@@ -160,6 +168,14 @@ class Scene(ps.BaseSettings):
     screenshot_viewports: list[str] = pc.Field(
         default=["vr", "axial", "coronal", "sagittal", "tile"],
         description="Viewports to capture in screenshots. Options: vr, axial, coronal, sagittal, tile",
+    )
+    playback: Playback = pc.Field(
+        default_factory=Playback,
+        description="Playback controls' starting positions. CLI usage: --playback.bpm 75",
+    )
+    view: View = pc.Field(
+        default_factory=View,
+        description="Layout and theme to open in. CLI usage: --view.layout tile",
     )
     snap: Snap = pc.Field(
         default_factory=Snap,

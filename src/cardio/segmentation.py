@@ -202,6 +202,10 @@ class Segmentation(Object):
         default_factory=vtkPropertyConfig, description="Property configuration"
     )
     include_labels: list[int] | None = pc.Field(default=None)
+    mpr_overlay: bool = pc.Field(
+        default=False,
+        description="Whether this segmentation is initially drawn over the MPR views",
+    )
     label_properties: dict[int, dict] = pc.Field(default_factory=dict)
 
     @pc.model_validator(mode="after")

@@ -45,6 +45,24 @@ label = "BL_Labels"
 directory = "./data/seg-bl"
 visible = true
 
+# What the app opens on.  `layout` is the quad MPR view unless a viewport is
+# named: volume, axial, coronal, sagittal, or tile.  `theme` selects between the
+# two backgrounds above.
+[view]
+layout = "tile"
+theme = "dark"
+camera_lock = "free"                     # free, UL, LL, or LR
+drawer_sections = ["playback", "tiles"]  # playback, appearance, orientation, tiles, export
+help_visible = false
+
+# Where the playback controls start.  BPM and beats per rotation describe the
+# acquisition rather than a preference, so they belong with the dataset.
+[playback]
+bpm = 60
+bpr = 3
+incrementing = true
+rotating = false
+
 # Where the MPR views start, and what they follow.  Traverse mode walks the
 # line from the BL_Labels 1|2 interface to its 2|3 interface; `traverse` is how
 # far along that line to begin, and the locks hold the views there as the frame

@@ -1,7 +1,8 @@
 """Per-object visibility, transfer function presets and the background."""
 
 # Internal
-from ..state import DEFAULT_THEME_MODE, THEME_DARK, ObjectState
+from ..state import ObjectState
+from ..view import Theme
 from ..volume_property_presets import load_volume_property_preset
 from .base import Controller
 
@@ -11,7 +12,7 @@ class VisibilityController(Controller):
 
     def register(self):
         state = self.server.state
-        state.setdefault("theme_mode", DEFAULT_THEME_MODE)
+        state.theme_mode = self.scene.view.theme.value
         state.change("theme_mode")(self.sync_background_color)
         self.apply_background_color(state.theme_mode)
 
@@ -51,7 +52,7 @@ class VisibilityController(Controller):
 
     def background_color(self, theme_mode) -> tuple[float, float, float]:
         background = self.scene.background
-        return background.dark if theme_mode == THEME_DARK else background.light
+        return background.dark if theme_mode == Theme.DARK else background.light
 
     def apply_background_color(self, theme_mode):
         """Set the VR renderer background for a theme, without a re-render.

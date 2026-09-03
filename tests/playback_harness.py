@@ -13,13 +13,11 @@ hanging the suite.
 # System
 import asyncio
 
-# Internal
-from cardio.image_quality import (
-    DEFAULT_PLAYBACK_QUALITY,
-    DEFAULT_PLAYBACK_RESOLUTION,
-)
 from cardio.logic import playback as playback_module
 from cardio.logic.playback import PlaybackController
+
+# Internal
+from cardio.playback import Playback
 
 # The constant _play_loop uses for its pause-check granularity.
 CHECK_INTERVAL = 0.01
@@ -164,8 +162,10 @@ class FakeRenderer:
 
 
 class FakeScene:
-    def __init__(self, nframes: int):
+    def __init__(self, nframes: int, playback=None):
         self.nframes = nframes
+        self.current_frame = 0
+        self.playback = playback or Playback()
         self.renderables = []
         self.renderer = FakeRenderer()
         self.hides = 0
@@ -218,23 +218,38 @@ class FakeServer:
         self.protocol = None
 
 
+# The playback state keys, and the Playback field each is published from.
+PLAYBACK_KEYS = {
+    "incrementing": "incrementing",
+    "rotating": "rotating",
+    "bpm": "bpm",
+    "bpr": "bpr",
+    "playback_quality": "quality",
+    "playback_resolution": "resolution",
+}
+
+
 class PlaybackApp:
     """A real PlaybackController over fakes, wired the way Logic wires it."""
 
     def __init__(self, clock, nframes=10, render_seconds=0.0, **overrides):
-        state_values = {
-            "frame": 0,
-            "playing": False,
-            "incrementing": True,
-            "rotating": False,
-            "bpm": 60,
-            "bpr": 3,
-            "playback_quality": DEFAULT_PLAYBACK_QUALITY,
-            "playback_resolution": DEFAULT_PLAYBACK_RESOLUTION,
-        }
+        # The controller publishes these from the scene at registration, so an
+        # override has to arrive as config rather than as state it would
+        # immediately overwrite.
+        playback = Playback(
+            **{
+                field: overrides.pop(key)
+                for key, field in PLAYBACK_KEYS.items()
+                if key in overrides
+            }
+        )
+        state_values = {"frame": 0, "playing": False}
+        state_values.update(
+            {key: getattr(playback, field) for key, field in PLAYBACK_KEYS.items()}
+        )
         state_values.update(overrides)
 
-        self.scene = FakeScene(nframes)
+        self.scene = FakeScene(nframes, playback=playback)
         self.snap = RecordingSnap()
         self.mpr = RecordingMPR(state_values["frame"])
         self.tiles = RecordingTiles()
