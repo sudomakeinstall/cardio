@@ -24,6 +24,10 @@ class Object(pc.BaseModel):
     # Names this object's per-type state keys; see state.ObjectState
     kind: ty.ClassVar[str] = "object"
 
+    # Whether a directory the frame pattern finds nothing in should be read as a
+    # DICOM series.  False for objects that read meshes rather than images.
+    reads_dicom: ty.ClassVar[bool] = False
+
     label: str = pc.Field(description="Object identifier (only [a-zA-Z0-9_] allowed)")
     directory: pl.Path = pc.Field(description="Directory containing object files")
     pattern: str | None = pc.Field(
@@ -33,6 +37,10 @@ class Object(pc.BaseModel):
     frame_interval: pc.PositiveInt = 1
     file_paths: list[str] | None = pc.Field(
         default=None, description="Static list of file paths relative to directory"
+    )
+    series_uid: str | None = pc.Field(
+        default=None,
+        description="DICOM SeriesInstanceUID, when the directory holds more than one",
     )
     visible: bool = pc.Field(
         default=True, description="Whether object is initially visible"
@@ -78,8 +86,11 @@ class Object(pc.BaseModel):
         if self.pattern is not None and self.file_paths is not None:
             logging.info("Both pattern and file_paths specified; using file_paths.")
 
+        if not self.path_list:
+            raise ValueError(f"No files matching '{self.pattern}' in {self.directory}.")
+
         for path in self.path_list:
-            if not path.is_file():
+            if not (path.is_file() or path.is_dir()):
                 raise ValueError(f"File does not exist: {path}")
 
         return self
@@ -103,7 +114,11 @@ class Object(pc.BaseModel):
 
     @functools.cached_property
     def path_list(self) -> list[pl.Path]:
-        """Return list of file paths, using static paths if provided, otherwise dynamic pattern-based paths."""
+        """What to read: explicit paths, the frames the pattern names, or a directory.
+
+        A directory that the pattern finds nothing in is read as a DICOM series,
+        so pointing an object at one needs no extra configuration.
+        """
         if self.file_paths is not None:
             return [self.directory / path for path in self.file_paths]
 
@@ -115,6 +130,10 @@ class Object(pc.BaseModel):
                 break
             paths.append(path)
             frame += self.frame_interval
+
+        if not paths and self.reads_dicom and self.directory.is_dir():
+            return [self.directory]
+
         return paths
 
     @property

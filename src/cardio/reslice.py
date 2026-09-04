@@ -57,6 +57,9 @@ def build_pipeline(
             raise ValueError(f"Unknown interpolation mode: {interpolation}")
     reslice.SetBackgroundLevel(background_level)
     reslice.AutoCropOutputOn()
+    # The output otherwise inherits the input's direction, and a cut through an
+    # obliquely acquired image would not lie flat in the view plane.
+    reslice.SetOutputDirection(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
 
     if output_filter is None:
         source, extra = reslice, {}

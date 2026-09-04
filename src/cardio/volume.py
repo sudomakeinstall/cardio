@@ -15,6 +15,7 @@ class Volume(Object):
     """Volume object with transfer functions and clipping support."""
 
     kind: ty.ClassVar[str] = "volume"
+    reads_dicom: ty.ClassVar[bool] = True
 
     pattern: str = pc.Field(
         default="{frame}.nii.gz",
@@ -33,7 +34,7 @@ class Volume(Object):
     def initialize_volume(self):
         """Generate VTK volume actors for all frames."""
         for path in self.path_list:
-            for image in read_frames(path):
+            for image in read_frames(path, self.series_uid):
                 logging.info(f"{self.label}: Loading frame {len(self._actors)}.")
 
                 image = itk.vtk_image_from_image(image)

@@ -189,6 +189,7 @@ class Segmentation(Object):
     """Segmentation object with multi-label mesh extraction using SurfaceNets."""
 
     kind: ty.ClassVar[str] = "segmentation"
+    reads_dicom: ty.ClassVar[bool] = True
 
     pattern: str = pc.Field(
         default="{frame}.nii.gz",
@@ -212,7 +213,7 @@ class Segmentation(Object):
     def initialize_segmentation(self):
         """Generate VTK actors for all frames using SurfaceNets3D."""
         for path in self.path_list:
-            for image in read_frames(path):
+            for image in read_frames(path, self.series_uid):
                 logging.info(
                     f"{self.label}: Loading segmentation frame {len(self._actors)}."
                 )

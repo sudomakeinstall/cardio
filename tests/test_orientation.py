@@ -15,7 +15,6 @@ from cardio.orientation import (
     minimal_rotation,
     quaternion_to_rotation_matrix,
     read_frames,
-    reset_direction,
     temporal_frames,
 )
 
@@ -170,50 +169,6 @@ def test_is_axis_aligned():
     assert is_axis_aligned(permuted_image) is True
 
 
-def test_reset_direction():
-    image_type = itk.Image[itk.F, 3]
-
-    # Test with flipped image
-    flipped_image = image_type.New()
-    flipped_image.SetRegions(itk.Size[3]([10, 20, 30]))
-    flipped_image.Allocate()
-    flipped_image.SetOrigin([5.0, 10.0, 15.0])
-    flipped_image.SetSpacing([1.0, 2.0, 3.0])
-
-    flipped_matrix = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]], dtype=np.float64)
-    direction = itk.matrix_from_array(flipped_matrix)
-    flipped_image.SetDirection(direction)
-
-    # Fill with test data
-    pixel_array = itk.array_from_image(flipped_image)
-    pixel_array.fill(42)
-
-    reset_image = reset_direction(flipped_image)
-
-    # Verify output has identity direction
-    assert is_axis_aligned(reset_image)
-    output_direction = itk.array_from_matrix(reset_image.GetDirection())
-    np.testing.assert_array_equal(output_direction, np.eye(3))
-
-    # Test with permuted image
-    permuted_image = image_type.New()
-    permuted_image.SetRegions(itk.Size[3]([10, 20, 30]))
-    permuted_image.Allocate()
-    permuted_image.SetOrigin([0.0, 0.0, 0.0])
-    permuted_image.SetSpacing([1.0, 1.0, 1.0])
-
-    permuted_matrix = np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]], dtype=np.float64)
-    direction = itk.matrix_from_array(permuted_matrix)
-    permuted_image.SetDirection(direction)
-
-    reset_image = reset_direction(permuted_image)
-
-    # Verify output has identity direction
-    assert is_axis_aligned(reset_image)
-    output_direction = itk.array_from_matrix(reset_image.GetDirection())
-    np.testing.assert_array_equal(output_direction, np.eye(3))
-
-
 def make_4d_image(size=(10, 20, 30, 4), spatial_direction=np.eye(3)):
     """Build a 4D ITK image whose voxels encode their temporal index."""
     image = itk.Image[itk.F, 4].New()
@@ -279,11 +234,6 @@ def test_temporal_frames_rejects_other_dimensions():
         temporal_frames(image)
 
 
-def test_reset_direction_rejects_4d():
-    with pytest.raises(AssertionError):
-        reset_direction(make_4d_image())
-
-
 def test_read_frames_splits_4d_file(tmp_path):
     flipped = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]], dtype=np.float64)
     path = tmp_path / "4d.nii.gz"
@@ -297,7 +247,7 @@ def test_read_frames_splits_4d_file(tmp_path):
     for index, frame in enumerate(frames):
         assert frame.GetImageDimension() == 3
         np.testing.assert_array_equal(
-            itk.array_from_matrix(frame.GetDirection()), np.eye(3)
+            itk.array_from_matrix(frame.GetDirection()), flipped
         )
         np.testing.assert_array_equal(
             itk.array_from_image(frame), np.full((30, 20, 10), index, dtype=np.float32)

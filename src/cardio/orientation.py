@@ -4,6 +4,8 @@ import itk
 import numpy as np
 import vtk
 
+from . import dicom
+
 
 # DICOM LPS canonical orientation vector mappings
 class EulerAxis(enum.StrEnum):
@@ -295,57 +297,15 @@ def temporal_frames(image) -> list:
     return frames
 
 
-def read_frames(path) -> list:
-    """Read an image file as direction-reset 3D frames, splitting 4D input."""
-    return [reset_direction(frame) for frame in temporal_frames(itk.imread(path))]
+def read_frames(path, series_uid: str | None = None) -> list:
+    """Read a path as 3D frames: a DICOM series directory, or an image file.
 
-
-def reset_direction(image):
-    """Reset image direction to identity matrix, preserving physical extent."""
-    assert image.GetImageDimension() == 3, (
-        f"Input image must be 3D, got {image.GetImageDimension()}D"
-    )
-    assert is_axis_aligned(image), "Input image must be axis-aligned"
-
-    origin = np.array(image.GetOrigin())
-    spacing = np.array(image.GetSpacing())
-    direction = itk.array_from_matrix(image.GetDirection())
-    size = np.array(image.GetLargestPossibleRegion().GetSize())
-    pixel_array = itk.array_from_image(image)
-
-    permutation = []
-    flips = []
-
-    for col in range(3):
-        row = np.nonzero(direction[:, col])[0][0]
-        permutation.append(row)
-        flips.append(direction[row, col] < 0)
-
-    array_permutation = [2 - p for p in reversed(permutation)]
-    pixel_array = np.transpose(pixel_array, array_permutation)
-
-    for i, should_flip in enumerate(reversed(flips)):
-        if should_flip:
-            pixel_array = np.flip(pixel_array, axis=i)
-
-    new_spacing = spacing[permutation]
-
-    adjusted_origin = origin.copy()
-    for i, should_flip in enumerate(flips):
-        if should_flip:
-            image_axis = permutation[i]
-            extent_vector = (
-                direction[:, image_axis] * (size[image_axis] - 1) * spacing[image_axis]
-            )
-            adjusted_origin += extent_vector
-
-    new_origin = adjusted_origin[permutation]
-
-    output = itk.image_from_array(pixel_array)
-    output.SetOrigin(new_origin)
-    output.SetSpacing(new_spacing)
-
-    return output
+    A 4D file is split along time, so a directory of DICOM, a file per frame
+    and a single 4D file all reach the caller as a list of 3D frames.
+    """
+    if path.is_dir():
+        return dicom.read_series(path, series_uid)
+    return temporal_frames(itk.imread(path))
 
 
 def create_vtk_reslice_matrix(transform_3x3, origin):

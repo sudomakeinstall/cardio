@@ -6,8 +6,9 @@ built primarily on [trame](https://github.com/kitware/trame),
 [itk](https://github.com/insightsoftwareconsortium/itk).  `cardio` can render sequences
 of mesh files (e.g., `*.obj` files), segmentation files (e.g., `*.nii.gz` files with
 discrete labels) and volume renderings of grayscale images (e.g., `*.nii.gz` files with
-continuous values).  `cardio` is launched from the commandline and may be configured via
-commandline arguments, a static TOML configuration file, or a combination of the two.
+continuous values).  Images may be NIfTI or DICOM.  `cardio` is launched from the
+commandline and may be configured via commandline arguments, a static TOML
+configuration file, or a combination of the two.
 
 ## Quickstart
 
@@ -19,6 +20,42 @@ $ uv init
 $ uv add cardio
 $ . ./.venv/bin/activate
 ```
+
+### Reading DICOM
+
+Point an object at a directory holding a DICOM series and it is read as one:
+
+```toml
+[[volumes]]
+label = "Cine"
+directory = "./data/dicom-cine"
+```
+
+There is no format to declare.  A directory is read as DICOM when the frame
+pattern (`{frame}.nii.gz` by default) finds nothing in it, so the NIfTI layouts
+below keep working untouched.
+
+A time-resolved series becomes one frame per cardiac phase.  Slices are
+identified by their position along the acquisition normal rather than by
+`InstanceNumber`, so a series numbered slice-major, phase-major or not usefully
+at all all read the same; within a slice, phases are ordered by `TriggerTime`,
+then `TemporalPositionIdentifier`, `AcquisitionTime` and `InstanceNumber`.  A
+series that does not hold the same number of images at every slice location is
+reported rather than quietly reshaped.
+
+If the directory holds more than one series, `cardio` says so and lists them;
+name the one you want:
+
+```toml
+[[volumes]]
+label = "Cine"
+directory = "./data/study"
+series_uid = "1.2.840.113619.2.55.3.12345"
+```
+
+Obliquely acquired data needs nothing special -- the acquisition axes are
+carried through to the views, and the MPR cuts are taken in patient (LPS)
+coordinates whatever the slices were angled to.
 
 ### Snapping to a segmentation feature
 
