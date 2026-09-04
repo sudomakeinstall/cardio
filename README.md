@@ -101,10 +101,18 @@ Uploading:
 ```bash
 $ uv version --bump major # Year
 $ uv version --bump minor # Month
-$ uv version --bump patch $ Day
-$ git tag -a $(cardio --version) -m "Release $(cardio --version)"
+$ uv version --bump patch # Day
+$ git commit -am "Bump version to $(uv version --short)"
+$ git tag -a $(uv version --short) -m "Release $(uv version --short)"
+$ git log --oneline -1 --decorate   # the tag should sit on the bump
 $ rm -rf dist/
 $ uv build --no-sources
 $ git push origin main --follow-tags
 $ uv publish --token <pypi_api_key>
 ```
+
+`uv version` edits `pyproject.toml` and `uv.lock` but commits nothing, and a tag
+names a commit rather than a working tree -- so the bump has to be committed
+before the tag, or the tag lands on the previous commit and the release carries
+the old version.  `--follow-tags` pushes the tag along with the branch, so a tag
+made after the push does not reach the remote.
