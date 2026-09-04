@@ -174,6 +174,8 @@ class Interaction:
             state.mpr_crosshairs_enabled = not state.mpr_crosshairs_enabled
         elif key == "h":
             state.help_overlay_visible = not state.help_overlay_visible
+        elif key == "i":
+            state.metadata_overlay_visible = not state.metadata_overlay_visible
         elif key in MAXIMIZE_KEYS:
             view = MAXIMIZE_KEYS[key]
             state.maximized_view = "" if state.maximized_view == view else view

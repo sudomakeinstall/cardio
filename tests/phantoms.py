@@ -146,6 +146,10 @@ def write_cine_series(
 
         dataset.SOPClassUID = pd.uid.MRImageStorage
         dataset.SOPInstanceUID = dataset.file_meta.MediaStorageSOPInstanceUID
+        dataset.PatientName = "Phantom^Cine"
+        dataset.PatientID = "PHANTOM-1"
+        dataset.Modality = "MR"
+        dataset.StudyDate = "20260101"
         dataset.StudyInstanceUID = study_uid
         dataset.SeriesInstanceUID = uid
         dataset.SeriesDescription = series_description

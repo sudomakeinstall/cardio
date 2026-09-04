@@ -222,6 +222,52 @@ def test_empty_directory_is_reported(tmp_path):
         dicom.read_series(tmp_path)
 
 
+# --- the header the metadata sheet reads --------------------------------------
+
+
+def test_select_instances_returns_the_headers_the_frames_were_read_from(tmp_path):
+    """The sheet needs the instances, which read_series used to discard."""
+    uid = write_cine_series(tmp_path, slices=3, phases=2)
+
+    instances = dicom.select_instances(tmp_path)
+
+    assert len(instances) == 6
+    assert {instance.series_uid for instance in instances} == {uid}
+    assert [slice_values(frame) for frame in dicom.read_instances(instances)] == [
+        slice_values(frame) for frame in dicom.read_series(tmp_path)
+    ]
+
+
+def test_select_instances_chooses_by_series_uid(tmp_path):
+    wanted = write_cine_series(tmp_path / "a", slices=2, phases=3)
+    write_cine_series(tmp_path / "b", slices=3, phases=2)
+
+    instances = dicom.select_instances(tmp_path, wanted)
+
+    assert {instance.series_uid for instance in instances} == {wanted}
+
+
+def test_the_header_carries_the_patient_and_the_transfer_syntax(tmp_path):
+    write_cine_series(tmp_path, slices=2, phases=2)
+
+    fields = dicom.header(dicom.select_instances(tmp_path)[0])
+
+    assert fields["PatientName"] == "Phantom^Cine"
+    assert fields["Modality"] == "MR"
+    assert fields["SeriesDescription"] == "cine"
+    assert "TransferSyntaxUID" in fields
+
+
+def test_the_header_leaves_out_tags_the_file_does_not_carry(tmp_path):
+    """A sparse header should read as a short table, not as blank rows."""
+    write_cine_series(tmp_path, slices=2, phases=2)
+
+    fields = dicom.header(dicom.select_instances(tmp_path)[0])
+
+    assert "ProtocolName" not in fields
+    assert all(value for value in fields.values())
+
+
 def test_enhanced_multiframe_is_refused_clearly(tmp_path):
     write_cine_series(tmp_path, slices=1, phases=1)
     path = next(tmp_path.glob("*.dcm"))

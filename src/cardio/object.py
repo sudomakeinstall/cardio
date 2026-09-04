@@ -7,6 +7,7 @@ import typing as ty
 import pydantic as pc
 import vtk
 
+from .orientation import Source
 from .utils import calculate_combined_bounds
 
 
@@ -46,6 +47,14 @@ class Object(pc.BaseModel):
         default=True, description="Whether object is initially visible"
     )
     clipping_enabled: bool = pc.Field(default=True)
+
+    # The header the first path was read with; None for objects with no image.
+    _source: Source | None = pc.PrivateAttr(default=None)
+
+    @property
+    def source(self) -> Source | None:
+        """How this object's images arrived, or None for a mesh."""
+        return self._source
 
     @pc.field_validator("label")
     @classmethod

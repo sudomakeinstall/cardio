@@ -54,6 +54,7 @@ theme = "dark"
 camera_lock = "free"                     # free, UL, LL, or LR
 drawer_sections = ["playback", "tiles"]  # playback, appearance, orientation, tiles, export
 help_visible = false
+metadata_visible = false
 
 # Where the playback controls start.  BPM and beats per rotation describe the
 # acquisition rather than a preference, so they belong with the dataset.

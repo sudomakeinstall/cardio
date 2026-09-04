@@ -11,6 +11,7 @@ from .common import TILE_ACTIVE, drawer_styles, section
 from .help import help_dialog
 from .interaction import Interaction
 from .layout import toolbar, viewports
+from .metadata import metadata_dialog
 from .panels import (
     appearance_panel,
     capture_panel,
@@ -37,6 +38,7 @@ class UI:
         self.interaction = Interaction(server, logic)
 
         self.server.state.help_overlay_visible = scene.view.help_visible
+        self.server.state.metadata_overlay_visible = scene.view.metadata_visible
         self.server.state.maximized_view = scene.view.layout.state_value
         self.server.state.rotations_saved_at = None
         self.server.state.rotations_stale = False
@@ -72,6 +74,7 @@ class UI:
                     self._update_all_mpr_views,
                 )
                 help_dialog(self.scene)
+                metadata_dialog(self.scene)
 
             with layout.drawer as drawer:
                 drawer.width = DRAWER_WIDTH

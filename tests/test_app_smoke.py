@@ -783,3 +783,29 @@ def test_the_help_dialog_can_open_with_the_app(tmp_path):
 def test_the_help_dialog_is_closed_by_default(tmp_path):
     server, _, _, _ = build_ready(tmp_path)
     assert server.state.help_overlay_visible is False
+
+
+def test_the_metadata_sheet_can_open_with_the_app(tmp_path):
+    server, _, _, _ = build_ready(tmp_path, view={"metadata_visible": True})
+    assert server.state.metadata_overlay_visible is True
+
+
+def test_the_metadata_sheet_is_closed_by_default(tmp_path):
+    server, _, _, _ = build_ready(tmp_path)
+    assert server.state.metadata_overlay_visible is False
+
+
+def test_the_toolbar_opens_both_reference_sheets(read_only_app):
+    """The buttons toggle in the browser, so a misspelled key fails silently."""
+    _, _, _, ui = read_only_app
+
+    assert "metadata_overlay_visible = !metadata_overlay_visible" in ui.layout.html
+    assert "help_overlay_visible = !help_overlay_visible" in ui.layout.html
+
+
+def test_the_metadata_sheet_holds_a_page_for_every_object(read_only_app):
+    """One dropdown branch per renderable; a missed kind shows as a missing key."""
+    _, scene, _, ui = read_only_app
+
+    for obj in scene.renderables:
+        assert f"metadata_object === '{obj.kind}:{obj.label}'" in ui.layout.html

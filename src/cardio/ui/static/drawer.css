@@ -24,3 +24,17 @@
 .cardio-subpanel .v-expansion-panel-text__wrapper {
     padding-inline: 0;
 }
+
+/* The reference sheets sit over the render views, so they are held slightly
+   translucent -- but off the theme's surface colour rather than a fixed dark,
+   which left them unreadable in light mode. A sheet long enough to overflow
+   scrolls inside its card, so the page itself never grows one. */
+
+.cardio-sheet {
+    background: rgba(var(--v-theme-surface), 0.95);
+}
+
+.cardio-sheet-body {
+    max-height: 70vh;
+    overflow-y: auto;
+}

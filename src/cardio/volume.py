@@ -6,7 +6,7 @@ import pydantic as pc
 import vtk
 
 from .object import Object
-from .orientation import AngleUnits, read_frames
+from .orientation import AngleUnits, read_source
 from .reslice import ResliceSet
 from .volume_property_presets import load_volume_property_preset
 
@@ -34,7 +34,12 @@ class Volume(Object):
     def initialize_volume(self):
         """Generate VTK volume actors for all frames."""
         for path in self.path_list:
-            for image in read_frames(path, self.series_uid):
+            frames, source = read_source(path, self.series_uid)
+            # A file-per-frame series is one acquisition, so the first path's
+            # header describes all of them.
+            self._source = self._source or source
+
+            for image in frames:
                 logging.info(f"{self.label}: Loading frame {len(self._actors)}.")
 
                 image = itk.vtk_image_from_image(image)

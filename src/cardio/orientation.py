@@ -1,4 +1,6 @@
+import dataclasses as dc
 import enum
+import pathlib as pl
 
 import itk
 import numpy as np
@@ -32,6 +34,28 @@ AXCODE_VECTORS = {
     "S": (0, 0, 1),
     "I": (0, 0, -1),
 }
+
+
+def axcode_from_direction(direction: np.ndarray) -> str:
+    """The letters the image's index axes point toward, in LPS.
+
+    Each column of an ITK direction matrix is where one index axis points in
+    world space; the letter reported for it is the canonical direction that
+    column lies closest to, so an oblique acquisition is described by the axes
+    it most nearly runs along rather than refused.
+    """
+    direction = np.asarray(direction, dtype=np.float64)
+
+    letters = []
+    for column in range(3):
+        axis = direction[:, column]
+        letters.append(
+            max(
+                AXCODE_VECTORS,
+                key=lambda code: float(np.array(AXCODE_VECTORS[code]) @ axis),
+            )
+        )
+    return "".join(letters)
 
 
 def is_valid_axcode(axcode: str) -> bool:
@@ -334,18 +358,130 @@ def ensure_right_handed(image):
     return output
 
 
-def read_frames(path, series_uid: str | None = None) -> list:
-    """Read a path as 3D frames: a DICOM series directory, or an image file.
+def is_right_handed(image) -> bool:
+    """Whether the image's direction matrix has a positive determinant."""
+    return bool(np.linalg.det(itk.array_from_matrix(image.GetDirection())) > 0)
+
+
+def file_format(path: pl.Path) -> str:
+    """What to call the file's format on the metadata sheet."""
+    suffixes = "".join(path.suffixes[-2:]).lower()
+    if suffixes.endswith((".nii", ".nii.gz")):
+        return "NIfTI"
+    if suffixes.endswith((".mha", ".mhd")):
+        return "MetaImage"
+    if suffixes.endswith((".nrrd", ".nhdr")):
+        return "NRRD"
+    return path.suffix.lstrip(".").upper() or "image"
+
+
+def image_header(image) -> dict[str, str]:
+    """An ITK image's metadata dictionary, as strings.
+
+    This is where a format's own header survives: NIfTI's ``descrip``,
+    ``qform_code`` and ``srow_*`` all arrive here.  It has to be read from the
+    image ``itk.imread`` returned, because splitting a 4D file or correcting
+    the handedness rebuilds the image and leaves the dictionary behind.
+
+    Entries whose type has no python conversion raise rather than convert, and
+    are skipped: a header nobody can read is not worth failing a load over.
+    """
+    dictionary = image.GetMetaDataDictionary()
+
+    fields = {}
+    for key in dictionary.GetKeys():
+        try:
+            fields[key] = str(dictionary[key])
+        except (RuntimeError, TypeError, KeyError):
+            continue
+    return fields
+
+
+@dc.dataclass(frozen=True)
+class Geometry:
+    """Where an image sits and how finely it is sampled, as it is rendered."""
+
+    size: tuple[int, int, int]
+    spacing: tuple[float, float, float]
+    origin: tuple[float, float, float]
+    direction: np.ndarray
+    voxel_type: str
+    intensity_range: tuple[float, float]
+
+    @property
+    def axcode(self) -> str:
+        return axcode_from_direction(self.direction)
+
+    @property
+    def extent(self) -> tuple[float, float, float]:
+        """The image's span in millimetres along each index axis."""
+        return tuple(float(n * s) for n, s in zip(self.size, self.spacing))
+
+
+def geometry_of(image) -> Geometry:
+    """One ITK image's geometry, read out into plain python."""
+    array = itk.array_view_from_image(image)
+    return Geometry(
+        size=tuple(int(n) for n in image.GetLargestPossibleRegion().GetSize()),
+        spacing=tuple(float(s) for s in image.GetSpacing()),
+        origin=tuple(float(o) for o in image.GetOrigin()),
+        direction=itk.array_from_matrix(image.GetDirection()),
+        voxel_type=str(array.dtype),
+        intensity_range=(float(array.min()), float(array.max())),
+    )
+
+
+@dc.dataclass(frozen=True)
+class Source:
+    """Where an object's images came from, and what they came with.
+
+    The header is the only record of how the image was written -- both readers
+    discard it on the way to VTK -- so it is captured at the one moment it
+    exists rather than recovered later.  The frames themselves are not kept:
+    the caller converts them to VTK straight away, and holding both would
+    double the memory a series costs.
+    """
+
+    format: str
+    header: dict[str, str]
+    right_handed_correction: bool
+    frame_count: int
+    geometry: Geometry
+
+
+def read_source(path, series_uid: str | None = None) -> tuple[list, Source]:
+    """Read a path as 3D frames, with a description of where they came from.
 
     A 4D file is split along time, so a directory of DICOM, a file per frame
     and a single 4D file all reach the caller as a list of 3D frames.
     """
     if path.is_dir():
-        frames = dicom.read_series(path, series_uid)
+        instances = dicom.select_instances(path, series_uid)
+        frames = dicom.read_instances(instances)
+        source_format = "DICOM series"
+        fields = dicom.header(instances[0])
     else:
-        frames = temporal_frames(itk.imread(path))
+        image = itk.imread(path)
+        frames = temporal_frames(image)
+        source_format = file_format(pl.Path(path))
+        fields = image_header(image)
 
-    return [ensure_right_handed(frame) for frame in frames]
+    corrected = any(not is_right_handed(frame) for frame in frames)
+    frames = [ensure_right_handed(frame) for frame in frames]
+
+    source = Source(
+        format=source_format,
+        header=fields,
+        right_handed_correction=corrected,
+        frame_count=len(frames),
+        geometry=geometry_of(frames[0]),
+    )
+    return frames, source
+
+
+def read_frames(path, series_uid: str | None = None) -> list:
+    """Read a path as 3D frames: a DICOM series directory, or an image file."""
+    return read_source(path, series_uid)[0]
 
 
 def create_vtk_reslice_matrix(transform_3x3, origin):

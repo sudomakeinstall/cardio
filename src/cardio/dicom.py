@@ -45,6 +45,44 @@ HEADER_TAGS = [
     "SliceThickness",
 ]
 
+# What the metadata sheet shows, in the order it shows it.  Kept apart from
+# HEADER_TAGS, which every file in the series is read with: these are read once,
+# from one representative file, so the list can be generous.
+DISPLAY_TAGS = [
+    "PatientName",
+    "PatientID",
+    "PatientBirthDate",
+    "PatientSex",
+    "StudyDate",
+    "StudyTime",
+    "StudyDescription",
+    "AccessionNumber",
+    "StudyInstanceUID",
+    "Modality",
+    "SeriesNumber",
+    "SeriesDescription",
+    "SeriesInstanceUID",
+    "ProtocolName",
+    "BodyPartExamined",
+    "Manufacturer",
+    "ManufacturerModelName",
+    "MagneticFieldStrength",
+    "RepetitionTime",
+    "EchoTime",
+    "FlipAngle",
+    "KVP",
+    "XRayTubeCurrent",
+    "HeartRate",
+    "SliceThickness",
+    "SpacingBetweenSlices",
+    "Rows",
+    "Columns",
+    "PixelSpacing",
+    "BitsAllocated",
+    "RescaleSlope",
+    "RescaleIntercept",
+]
+
 
 @dc.dataclass(frozen=True)
 class Instance:
@@ -249,18 +287,55 @@ def _read_frame(frame: list[Instance]):
     return volume
 
 
-def read_series(directory: pl.Path, series_uid: str | None = None) -> list:
-    """A DICOM series directory as a list of 3D ITK images, one per frame."""
+def header(instance: Instance) -> dict[str, str]:
+    """The display tags of one file, for the metadata sheet.
+
+    Read from a single representative image of the series rather than from
+    every one of them: the tags here describe the patient, the study and the
+    acquisition, which the whole series shares.  Absent tags are left out,
+    so a sparse header shows as a short table rather than as blank rows.
+    """
+    dataset = pd.dcmread(
+        instance.path, stop_before_pixels=True, specific_tags=DISPLAY_TAGS
+    )
+
+    fields = {}
+    for tag in DISPLAY_TAGS:
+        value = getattr(dataset, tag, None)
+        if value is None or value == "":
+            continue
+        fields[tag] = str(value)
+
+    transfer_syntax = getattr(dataset.file_meta, "TransferSyntaxUID", None)
+    if transfer_syntax is not None:
+        fields["TransferSyntaxUID"] = str(transfer_syntax.name or transfer_syntax)
+
+    return fields
+
+
+def select_instances(
+    directory: pl.Path, series_uid: str | None = None
+) -> list[Instance]:
+    """The instances of the one series to load, scanned from ``directory``."""
     instances = scan(directory)
     if not instances:
         raise ValueError(f"No DICOM images found in {directory}")
 
-    selected = select_series(instances, series_uid)
-    frames = frame_instances(selected)
+    return select_series(instances, series_uid)
+
+
+def read_instances(instances: list[Instance]) -> list:
+    """The 3D frames a series' instances describe, one per phase."""
+    frames = frame_instances(instances)
 
     logging.info(
-        f"{directory}: {len(frames)} frame(s) of {len(frames[0])} slice(s) "
-        f"from series {selected[0].series_uid}."
+        f"{len(frames)} frame(s) of {len(frames[0])} slice(s) "
+        f"from series {instances[0].series_uid}."
     )
 
     return [_read_frame(frame) for frame in frames]
+
+
+def read_series(directory: pl.Path, series_uid: str | None = None) -> list:
+    """A DICOM series directory as a list of 3D ITK images, one per frame."""
+    return read_instances(select_instances(directory, series_uid))

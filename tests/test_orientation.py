@@ -15,6 +15,7 @@ from cardio.orientation import (
     minimal_rotation,
     quaternion_to_rotation_matrix,
     read_frames,
+    read_source,
     temporal_frames,
 )
 
@@ -270,6 +271,49 @@ def test_read_frames_single_frame_from_3d_file(tmp_path):
     np.testing.assert_array_equal(
         itk.array_from_image(frames[0]), np.full((30, 20, 10), 7, dtype=np.float32)
     )
+
+
+def test_read_source_returns_the_frames_read_frames_does(tmp_path):
+    path = tmp_path / "4d.nii.gz"
+    itk.imwrite(make_4d_image(size=(10, 20, 30, 4)), str(path))
+
+    frames, source = read_source(path)
+
+    assert len(frames) == len(read_frames(path))
+    assert source.frame_count == 4
+    assert source.format == "NIfTI"
+
+
+def test_a_nifti_file_keeps_the_header_the_rebuild_would_drop(tmp_path):
+    """Splitting a 4D file rebuilds each frame, which empties its dictionary."""
+    path = tmp_path / "4d.nii.gz"
+    itk.imwrite(make_4d_image(size=(10, 20, 30, 4)), str(path))
+
+    _, source = read_source(path)
+
+    assert source.header
+    assert "qform_code" in source.header
+
+
+def test_a_left_handed_file_records_that_it_was_corrected(tmp_path):
+    left_handed = np.diag([1.0, 1.0, -1.0])
+    path = tmp_path / "flipped.nii.gz"
+    itk.imwrite(
+        make_4d_image(size=(10, 20, 30, 2), spatial_direction=left_handed), str(path)
+    )
+
+    _, source = read_source(path)
+
+    assert source.right_handed_correction is True
+
+
+def test_a_right_handed_file_records_no_correction(tmp_path):
+    path = tmp_path / "plain.nii.gz"
+    itk.imwrite(make_4d_image(size=(10, 20, 30, 2)), str(path))
+
+    _, source = read_source(path)
+
+    assert source.right_handed_correction is False
 
 
 def test_axis_convention_enum():

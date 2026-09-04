@@ -11,7 +11,7 @@ from .object import Object
 from .orientation import (
     AngleUnits,
     minimal_rotation,
-    read_frames,
+    read_source,
     slerp_rotation_matrices,
 )
 from .property_config import vtkPropertyConfig
@@ -213,7 +213,12 @@ class Segmentation(Object):
     def initialize_segmentation(self):
         """Generate VTK actors for all frames using SurfaceNets3D."""
         for path in self.path_list:
-            for image in read_frames(path, self.series_uid):
+            frames, source = read_source(path, self.series_uid)
+            # A file-per-frame series is one acquisition, so the first path's
+            # header describes all of them.
+            self._source = self._source or source
+
+            for image in frames:
                 logging.info(
                     f"{self.label}: Loading segmentation frame {len(self._actors)}."
                 )

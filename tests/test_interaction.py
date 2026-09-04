@@ -63,6 +63,7 @@ def interaction():
             "state": FakeState(
                 mpr_crosshairs_enabled=True,
                 help_overlay_visible=False,
+                metadata_overlay_visible=False,
                 maximized_view="",
                 mpr_window_level_preset=None,
             )
@@ -133,6 +134,14 @@ def test_l_toggles_crosshairs_and_h_toggles_help(interaction):
 
     press(interaction, "h")
     assert interaction.server.state.help_overlay_visible is True
+
+
+def test_i_toggles_the_metadata_sheet(interaction):
+    press(interaction, "i")
+    assert interaction.server.state.metadata_overlay_visible is True
+
+    press(interaction, "i")
+    assert interaction.server.state.metadata_overlay_visible is False
 
 
 def test_digit_keys_select_a_window_level_preset(interaction):

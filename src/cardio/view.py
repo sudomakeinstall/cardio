@@ -106,6 +106,10 @@ class View(pc.BaseModel):
     help_visible: bool = pc.Field(
         default=False, description="Open with the keyboard shortcut dialog showing"
     )
+    metadata_visible: bool = pc.Field(
+        default=False,
+        description="Open with the scene metadata dialog showing. CLI usage: --view.metadata_visible true",
+    )
 
     @property
     def open_sections(self) -> list[str]:

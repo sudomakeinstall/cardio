@@ -26,6 +26,25 @@ def toolbar(server, scene, layout):
             style="max-width: 150px;",
         )
 
+        # The two reference sheets, which the `i` and `h` keys also toggle
+        vuetify.VCheckbox(
+            value=False,
+            true_icon="mdi-information-outline",
+            false_icon="mdi-information-outline",
+            label="Scene Metadata",
+            click="metadata_overlay_visible = !metadata_overlay_visible",
+            readonly=True,
+        )
+
+        vuetify.VCheckbox(
+            value=False,
+            true_icon="mdi-help-circle-outline",
+            false_icon="mdi-help-circle-outline",
+            label="Help",
+            click="help_overlay_visible = !help_overlay_visible",
+            readonly=True,
+        )
+
         # Close button
         vuetify.VCheckbox(
             value=False,

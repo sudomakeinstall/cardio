@@ -41,6 +41,7 @@ CONFIGURED = {
     "incrementing": "playback.incrementing",
     "index_order": "mpr_rotation_sequence.metadata.index_order",
     "maximized_view": "view.layout",
+    "metadata_overlay_visible": "view.metadata_visible",
     "mpr_segmentation_opacity": "mpr_segmentation_opacity",
     "playback_quality": "playback.quality",
     "playback_resolution": "playback.resolution",
@@ -58,6 +59,7 @@ CONFIGURED = {
 # belongs above instead.
 SESSION_LOCAL = {
     "clip_depth": "derived from the camera's clipping range at build time",
+    "metadata_object": "which object's metadata sheet is showing is browsing state",
     "playing": "starting playback on launch is a behaviour, not view state",
     "rotations_saved_at": "written when a save happens",
     "rotations_stale": "derived from edits since the last save",
@@ -75,6 +77,7 @@ PER_OBJECT = {
 }
 
 COMPUTED_KEYS = {
+    "visible_key": "the shared sheet dialog's v-model; both sheets are named in CONFIGURED",
     "f'screenshot_viewport_{key}'": "Scene.screenshot_viewports, via the widget default",
     "key": "clip bounds, derived from each object's geometry",
     "keys.clip_panel": "whether a clip subpanel is expanded is browsing state",

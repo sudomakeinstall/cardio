@@ -39,6 +39,39 @@ SLIDER_CLASS = "cardio-slider"
 
 SUBPANEL_CLASS = "cardio-subpanel"
 
+SHEET_CLASS = "cardio-sheet"
+
+SHEET_BODY_CLASS = "cardio-sheet-body"
+
+
+@cl.contextmanager
+def sheet_dialog(visible_key: str, title: str, initial: bool):
+    """A full-page reference sheet, opened by a key and closed by a button.
+
+    The help reference and the metadata sheet are the same object with
+    different contents, so the chrome is spelled once here: whichever of them
+    grows a scrollbar or changes its card, both do.
+    """
+    with vuetify.VDialog(
+        v_model=(visible_key, initial),
+        max_width="700px",
+        scrim="rgba(0, 0, 0, 0.7)",
+    ):
+        with vuetify.VCard(classes=f"pa-6 {SHEET_CLASS}"):
+            vuetify.VCardTitle(title, classes="text-h5 mb-4")
+
+            with vuetify.VCardText(classes=SHEET_BODY_CLASS):
+                yield
+
+            with vuetify.VCardActions():
+                vuetify.VSpacer()
+                vuetify.VBtn(
+                    "Close",
+                    click=f"{visible_key} = false",
+                    variant="text",
+                )
+
+
 STATIC = pl.Path(__file__).parent / "static"
 
 
