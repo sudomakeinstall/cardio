@@ -7,7 +7,7 @@ import math
 import numpy as np
 
 # Internal
-from ..reslice import VIEW_TRANSFORMS
+from ..reslice import VIEW_TRANSFORMS, ResliceSet
 from ..state import ObjectState
 from ..view import CameraLock, Layout
 from ..window_level import presets
@@ -156,34 +156,7 @@ class MPRController(Controller):
         if not active_volume:
             return
 
-        # Get or create MPR actors for the new frame
-        mpr_actors = active_volume.get_mpr_actors_for_frame(frame)
-
-        # CRITICAL: Sync slice positions IMMEDIATELY after creation
-        # This ensures actors have correct origin before being added to renderers
-
-        origin = self.server.state.mpr_origin
-        rotation_sequence, rotation_angles = self.app.rotations.visible_rotation_data()
-
-        origin = self.convention.point_to_itk(origin)
-
-        active_volume.update_slice_positions(
-            frame,
-            origin,
-            rotation_sequence,
-            rotation_angles,
-            self.scene.mpr_rotation_sequence.metadata.angle_units,
-        )
-
-        for seg in self.scene.segmentations:
-            if self.server.state[ObjectState.of(seg).mpr_overlay]:
-                seg.update_slice_positions(
-                    frame,
-                    origin,
-                    rotation_sequence,
-                    rotation_angles,
-                    self.scene.mpr_rotation_sequence.metadata.angle_units,
-                )
+        mpr_actors = self._reslices(active_volume, frame)
 
         views = self.scene.mpr_views
         if views is not None:
@@ -239,9 +212,7 @@ class MPRController(Controller):
             self._missed_volume_change = True
             return
 
-        # Create MPR actors for current frame
-        current_frame = getattr(self.server.state, "frame", 0)
-        mpr_actors = active_volume.get_mpr_actors_for_frame(current_frame)
+        mpr_actors = self._reslices(active_volume, current_frame)
 
         # Create crosshair actors
         crosshairs = active_volume.create_crosshair_actors(
@@ -281,34 +252,12 @@ class MPRController(Controller):
         if not active_volume:
             return
 
-        # Get current origin
-        origin = self.server.state.mpr_origin
-        rotation_sequence, rotation_angles = self.app.rotations.visible_rotation_data()
-
-        origin = self.convention.point_to_itk(origin)
-
-        # CRITICAL FIX: Update ALL cached frames, not just current frame
-        # This ensures all frames use the same global origin when switching
-        for frame in active_volume._mpr_actors:
-            active_volume.update_slice_positions(
-                frame,
-                origin,
-                rotation_sequence,
-                rotation_angles,
-                self.scene.mpr_rotation_sequence.metadata.angle_units,
-            )
-
-        # Update segmentation overlay positions for all cached frames
-        for seg in self.scene.segmentations:
-            if self.server.state[ObjectState.of(seg).mpr_overlay]:
-                for frame in seg._mpr_actors:
-                    seg.update_slice_positions(
-                        frame,
-                        origin,
-                        rotation_sequence,
-                        rotation_angles,
-                        self.scene.mpr_rotation_sequence.metadata.angle_units,
-                    )
+        # Every cut already built, not just the current frame's, so that
+        # stepping between frames lands on the same origin.
+        pose = self._current_pose()
+        for obj in [active_volume, *self._overlaid_segmentations()]:
+            for reslices in obj._mpr_actors.values():
+                reslices.set_pose(*pose)
 
         self.server.controller.view_update()
 
@@ -389,33 +338,10 @@ class MPRController(Controller):
         if not active_volume:
             return
 
-        # Get current origin and frame
-        origin = self.server.state.mpr_origin
         current_frame = getattr(self.server.state, "frame", 0)
 
-        rotation_sequence, rotation_angles = self.app.rotations.visible_rotation_data()
-
-        origin = self.convention.point_to_itk(origin)
-
-        # Update slice positions with rotation
-        active_volume.update_slice_positions(
-            current_frame,
-            origin,
-            rotation_sequence,
-            rotation_angles,
-            self.scene.mpr_rotation_sequence.metadata.angle_units,
-        )
-
-        # Update segmentation overlay positions
-        for seg in self.scene.segmentations:
-            if self.server.state[ObjectState.of(seg).mpr_overlay]:
-                seg.update_slice_positions(
-                    current_frame,
-                    origin,
-                    rotation_sequence,
-                    rotation_angles,
-                    self.scene.mpr_rotation_sequence.metadata.angle_units,
-                )
+        for obj in [active_volume, *self._overlaid_segmentations()]:
+            self._reslices(obj, current_frame)
 
         self._sync_vr_camera_to_mpr()
         self.server.controller.view_update()
@@ -531,26 +457,32 @@ class MPRController(Controller):
         # Apply loaded rotation data to MPR views
         self.update_mpr_rotation()
 
+    def _current_pose(self):
+        """The origin and rotation the cuts are aimed by, both in ITK."""
+        return (
+            self.convention.point_to_itk(self.server.state.mpr_origin),
+            self.app.rotations.rotation_matrix(),
+        )
+
+    def _reslices(self, obj, frame: int) -> ResliceSet:
+        """``obj``'s cuts for ``frame``, aimed where the views are looking.
+
+        Building and aiming are one step, so the class has no way to hold a
+        set nothing has posed: a fresh pipeline is centred on its own image and
+        unrotated, which is what it would draw.
+        """
+        reslices = obj.get_mpr_actors_for_frame(frame)
+        reslices.set_pose(*self._current_pose())
+        return reslices
+
     def _add_segmentation_overlays_to_mpr(self, frame: int):
         """Pose and add the enabled segmentation overlays on top of the views."""
         views = self.scene.mpr_views
         opacity = self.server.state.mpr_segmentation_opacity
-        origin = self.convention.point_to_itk(self.server.state.mpr_origin)
-        rotation_sequence, rotation_angles = self.app.rotations.visible_rotation_data()
 
-        for seg in self.scene.segmentations:
-            if not self.server.state[ObjectState.of(seg).mpr_overlay]:
-                continue
-
-            overlay = seg.get_mpr_actors_for_frame(frame)
+        for seg in self._overlaid_segmentations():
+            overlay = self._reslices(seg, frame)
             seg.update_mpr_opacity(frame, opacity)
-            seg.update_slice_positions(
-                frame,
-                origin,
-                rotation_sequence,
-                rotation_angles,
-                self.scene.mpr_rotation_sequence.metadata.angle_units,
-            )
 
             if views is not None:
                 views.add_overlay(overlay)
@@ -569,7 +501,7 @@ class MPRController(Controller):
 
         views.clear()
         if active_volume:
-            views.set_image(active_volume.get_mpr_actors_for_frame(current_frame))
+            views.set_image(self._reslices(active_volume, current_frame))
             views.add_crosshairs(
                 active_volume.crosshair_actors,
                 self.server.state.mpr_crosshairs_enabled,
@@ -729,8 +661,7 @@ class MPRController(Controller):
         current_frame = self.server.state.frame
         opacity = self.server.state.mpr_segmentation_opacity
 
-        for seg in self.scene.segmentations:
-            if self.server.state[ObjectState.of(seg).mpr_overlay]:
-                seg.update_mpr_opacity(current_frame, opacity)
+        for seg in self._overlaid_segmentations():
+            seg.update_mpr_opacity(current_frame, opacity)
 
         self.server.controller.view_update()

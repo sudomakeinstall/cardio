@@ -19,13 +19,26 @@ import vtk
 # Internal
 from cardio.logic import ALIGN_STEP_NAME, Logic
 from cardio.orientation import AngleUnits
+from cardio.reslice import VIEW_TRANSFORMS
 from cardio.rotation import RotationMetadata
 from cardio.scene import Scene
 from cardio.state import ObjectState
 from cardio.ui import UI
 from cardio.view import Theme
+from tests.geometry import matrix_array
 
 _server_names = itertools.count()
+
+# Three stacked labels, so the traverse path has an interface at either end.
+TRAVERSE_SNAP = {
+    "mode": "traverse",
+    "labels_a": [1],
+    "labels_b": [2],
+    "labels_c": [3],
+    "traverse": 50,
+    "locked": True,
+    "orientation_locked": True,
+}
 
 
 def write_volume(path):
@@ -577,18 +590,7 @@ def test_configured_snap_survives_startup(tmp_path):
     ``snap_seg_label`` listener actually fire, which is what used to clear the
     groups out from under the config.
     """
-    server, _, _, _ = build_ready(
-        tmp_path,
-        snap={
-            "mode": "traverse",
-            "labels_a": [1],
-            "labels_b": [2],
-            "labels_c": [3],
-            "traverse": 50,
-            "locked": True,
-            "orientation_locked": True,
-        },
-    )
+    server, _, _, _ = build_ready(tmp_path, snap=TRAVERSE_SNAP)
 
     assert server.state.snap_mode == "traverse"
     assert server.state.snap_labels_a == [1]
@@ -684,12 +686,15 @@ def drawn(scene) -> dict[str, int]:
     }
 
 
-def slice_origin(scene, view: str = "axial") -> list[float]:
+def reslice_matrix(obj, view: str = "axial", frame: int = 0) -> np.ndarray:
+    """The 4x4 an object's reslice for ``view`` is cutting under."""
+    reslice = obj.get_mpr_actors_for_frame(frame)[view]["reslice"]
+    return matrix_array(reslice.GetResliceAxes())
+
+
+def slice_origin(obj, view: str = "axial") -> list[float]:
     """Where a view's reslice is currently aimed, in ITK coordinates."""
-    axes = (
-        scene.volumes[0].get_mpr_actors_for_frame(0)[view]["reslice"].GetResliceAxes()
-    )
-    return [axes.GetElement(row, 3) for row in range(3)]
+    return list(reslice_matrix(obj, view)[:3, 3])
 
 
 @pytest.mark.parametrize("layout", ["volume", "tile"])
@@ -729,7 +734,7 @@ def test_the_views_come_back_at_the_origin_they_missed(tmp_path):
             server.state[key] = value
         server.state.flush()
 
-    assert slice_origin(scene) != pytest.approx(
+    assert slice_origin(scene.volumes[0]) != pytest.approx(
         logic.mpr.convention.point_to_itk(moved)
     )
 
@@ -737,7 +742,49 @@ def test_the_views_come_back_at_the_origin_they_missed(tmp_path):
         server.state.maximized_view = ""
     server.state.flush()
 
-    assert slice_origin(scene) == pytest.approx(
+    assert slice_origin(scene.volumes[0]) == pytest.approx(
+        logic.mpr.convention.point_to_itk(moved)
+    )
+
+
+@pytest.mark.parametrize("layout", ["tile", "volume"])
+def test_leaving_a_hidden_layout_poses_the_volume_like_its_overlay(tmp_path, layout):
+    """A layout that hides the slices is where the active volume is first picked.
+
+    The catch-up on the way out used to pose the overlays and leave the volume
+    on the unrotated cut its pipelines were built with, so the grayscale and
+    the segmentation drawn over it disagreed until the frame changed.
+    """
+    server, scene, _, _ = build_ready(
+        tmp_path,
+        view={"layout": layout},
+        snap=TRAVERSE_SNAP,
+        segmentation_overrides={"mpr_overlay": True},
+    )
+
+    with server.state:
+        server.state.maximized_view = ""
+    server.state.flush()
+
+    pose = reslice_matrix(scene.volumes[0])
+    assert pose == pytest.approx(reslice_matrix(scene.segmentations[0]))
+    # And to the traversed plane, rather than both sitting on the plain cut
+    assert not np.allclose(pose[:3, :3], VIEW_TRANSFORMS["axial"])
+
+
+def test_a_freshly_built_volume_is_posed_where_the_views_are(tmp_path):
+    """Picking a volume builds its reslices, which nothing else will pose."""
+    server, scene, logic, _ = build_ready(tmp_path)
+    moved = [3.0, -2.0, 1.0]
+
+    with server.state:
+        server.state.mpr_origin = moved
+    server.state.flush()
+
+    scene.volumes[0]._mpr_actors.clear()
+    logic.mpr.sync_active_volume(server.state.active_volume_label)
+
+    assert slice_origin(scene.volumes[0]) == pytest.approx(
         logic.mpr.convention.point_to_itk(moved)
     )
 

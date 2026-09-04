@@ -9,7 +9,6 @@ import vtk.util.numpy_support as vtk_np
 
 from .object import Object
 from .orientation import (
-    AngleUnits,
     minimal_rotation,
     read_source,
     slerp_rotation_matrices,
@@ -396,25 +395,6 @@ class Segmentation(Object):
         if frame not in self._mpr_actors:
             return self.create_mpr_actors(frame)
         return self._mpr_actors[frame]
-
-    def update_slice_positions(
-        self,
-        frame: int,
-        origin: list,
-        rotation_sequence=None,
-        rotation_angles=None,
-        angle_units: AngleUnits = None,
-    ):
-        """Aim a frame's MPR overlays at ``origin`` under the given rotation.
-
-        Takes the same pose as the volume it overlays, in LPS (ITK) coordinates.
-        """
-        if frame not in self._mpr_actors:
-            return
-
-        self._mpr_actors[frame].set_pose_from_sequence(
-            origin, rotation_sequence, rotation_angles, angle_units
-        )
 
     def get_labels(self, frame: int = 0) -> list[int]:
         if frame >= len(self._label_images):

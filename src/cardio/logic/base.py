@@ -2,6 +2,7 @@
 
 # Internal
 from ..convention import Convention
+from ..state import ObjectState
 
 
 class Controller:
@@ -40,3 +41,11 @@ class Controller:
         """The volume the MPR views are showing, or None if there isn't one."""
         label = self.server.state.active_volume_label
         return next((v for v in self.scene.volumes if v.label == label), None)
+
+    def _overlaid_segmentations(self):
+        """The segmentations switched on over the slices."""
+        return [
+            seg
+            for seg in self.scene.segmentations
+            if self.server.state[ObjectState.of(seg).mpr_overlay]
+        ]

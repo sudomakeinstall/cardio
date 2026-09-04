@@ -6,7 +6,7 @@ import pydantic as pc
 import vtk
 
 from .object import Object
-from .orientation import AngleUnits, read_source
+from .orientation import read_source
 from .reslice import ResliceSet
 from .volume_property_presets import load_volume_property_preset
 
@@ -194,25 +194,6 @@ class Volume(Object):
         for view_crosshairs in self._crosshair_actors.values():
             for line_data in view_crosshairs.values():
                 line_data["actor"].SetVisibility(visible)
-
-    def update_slice_positions(
-        self,
-        frame: int,
-        origin: list,
-        rotation_sequence: list | None = None,
-        rotation_angles: dict | None = None,
-        angle_units: AngleUnits | None = None,
-    ):
-        """Aim a frame's MPR views at ``origin`` under the given rotation.
-
-        ``origin`` and the rotation sequence are both in LPS (ITK) coordinates.
-        """
-        if frame not in self._mpr_actors:
-            return
-
-        self._mpr_actors[frame].set_pose_from_sequence(
-            origin, rotation_sequence, rotation_angles, angle_units
-        )
 
     def update_mpr_window_level(self, frame: int, window: float, level: float):
         """Update window/level properties for MPR actors."""
