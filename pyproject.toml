@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "cardio"
-version = "2026.5.9"
+version = "2026.9.3"
 authors = [
     {name = "Davis Marc Vigneault", email = "davis.vigneault@gmail.com"}
 ]
