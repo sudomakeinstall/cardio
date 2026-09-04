@@ -9,7 +9,12 @@ from ..view import Theme
 
 
 def toolbar(server, scene, layout):
-    """Theme switch, close button and the busy indicator."""
+    """Theme switch, the reference sheets, close button and busy indicator.
+
+    Each control is its icon alone, and says what it does on hover: the labels
+    were most of the toolbar's width, for four buttons whose icons already name
+    them.
+    """
     with layout.toolbar as bar:
         bar.dense = True
 
@@ -19,11 +24,10 @@ def toolbar(server, scene, layout):
             v_model=("theme_mode", scene.view.theme.value),
             true_value=Theme.DARK.value,
             false_value=Theme.LIGHT.value,
-            label="Dark Mode",
+            title="Dark/Light Mode",
             true_icon="mdi-lightbulb-off-outline",
             false_icon="mdi-lightbulb-outline",
             density="compact",
-            style="max-width: 150px;",
         )
 
         # The two reference sheets, which the `i` and `h` keys also toggle
@@ -31,7 +35,7 @@ def toolbar(server, scene, layout):
             value=False,
             true_icon="mdi-information-outline",
             false_icon="mdi-information-outline",
-            label="Scene Metadata",
+            title="Scene Metadata (i)",
             click="metadata_overlay_visible = !metadata_overlay_visible",
             readonly=True,
         )
@@ -40,7 +44,7 @@ def toolbar(server, scene, layout):
             value=False,
             true_icon="mdi-help-circle-outline",
             false_icon="mdi-help-circle-outline",
-            label="Help",
+            title="Help (h)",
             click="help_overlay_visible = !help_overlay_visible",
             readonly=True,
         )
@@ -50,7 +54,7 @@ def toolbar(server, scene, layout):
             value=False,
             true_icon="mdi-close-circle",
             false_icon="mdi-close-circle",
-            label="Close Application",
+            title="Close Cardio",
             click=server.controller.close_application,
             readonly=True,
         )
