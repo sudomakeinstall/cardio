@@ -299,3 +299,21 @@ def test_a_mesh_directory_is_not_read_as_dicom(tmp_path):
 
     with pytest.raises(Exception, match="No files matching"):
         Mesh(label="mesh", directory=tmp_path)
+
+
+def test_a_left_handed_series_is_corrected(tmp_path):
+    """A series whose slices run against the normal still reaches the app usable."""
+    write_cine_series(
+        tmp_path,
+        slices=4,
+        phases=2,
+        direction=oblique_direction() @ np.diag([1, 1, -1]),
+    )
+
+    volume = Volume(label="cine", directory=tmp_path)
+
+    matrix = volume.mpr_image_data(0).GetDirectionMatrix()
+    direction = np.array(
+        [[matrix.GetElement(i, j) for j in range(3)] for i in range(3)]
+    )
+    assert np.linalg.det(direction) > 0

@@ -297,6 +297,43 @@ def temporal_frames(image) -> list:
     return frames
 
 
+def ensure_right_handed(image):
+    """An equivalent image whose direction matrix is right-handed.
+
+    A left-handed direction is perfectly legal -- NIfTI writes one whenever
+    qfac is negative, and a DICOM series does whenever its slices run against
+    the normal -- but ``vtkGPUVolumeRayCastMapper`` draws nothing for one.
+
+    Reversing the slice axis and negating the matching direction column trades
+    the handedness for a flip, which is exact: it renumbers voxels rather than
+    resampling them, and every voxel keeps the world position it had.
+    """
+    direction = itk.array_from_matrix(image.GetDirection())
+    if np.linalg.det(direction) > 0:
+        return image
+
+    size = np.array(image.GetLargestPossibleRegion().GetSize())
+    spacing = np.array(image.GetSpacing())
+    origin = np.array(image.GetOrigin())
+
+    # The far end of the slice axis becomes the near end.
+    flipped_axis = 2
+    new_origin = origin + direction[:, flipped_axis] * (
+        (size[flipped_axis] - 1) * spacing[flipped_axis]
+    )
+    new_direction = direction.copy()
+    new_direction[:, flipped_axis] *= -1.0
+
+    # ITK axis 2 is the slowest-varying numpy axis.
+    pixel_array = np.flip(itk.array_from_image(image), axis=0)
+
+    output = itk.image_from_array(np.ascontiguousarray(pixel_array))
+    output.SetOrigin(new_origin)
+    output.SetSpacing(spacing)
+    output.SetDirection(itk.matrix_from_array(new_direction))
+    return output
+
+
 def read_frames(path, series_uid: str | None = None) -> list:
     """Read a path as 3D frames: a DICOM series directory, or an image file.
 
@@ -304,8 +341,11 @@ def read_frames(path, series_uid: str | None = None) -> list:
     and a single 4D file all reach the caller as a list of 3D frames.
     """
     if path.is_dir():
-        return dicom.read_series(path, series_uid)
-    return temporal_frames(itk.imread(path))
+        frames = dicom.read_series(path, series_uid)
+    else:
+        frames = temporal_frames(itk.imread(path))
+
+    return [ensure_right_handed(frame) for frame in frames]
 
 
 def create_vtk_reslice_matrix(transform_3x3, origin):

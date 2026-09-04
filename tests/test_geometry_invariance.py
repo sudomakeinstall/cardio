@@ -11,10 +11,13 @@ inherits the acquisition's rotation and this fails.
 # Third Party
 import itk
 import numpy as np
+import pytest
 import vtk.util.numpy_support as vtk_np
 
 # Internal
+from cardio.orientation import ensure_right_handed
 from cardio.reslice import VIEW_TRANSFORMS, VIEWS, ResliceSet
+from cardio.volume import Volume
 
 CENTRE = np.array([4.0, -3.0, 12.0])
 SIZE = np.array([48, 48, 48])
@@ -150,3 +153,101 @@ def test_cut_matches_the_analytic_field():
             assert difference < TOLERANCE * field(CENTRE[None])[0], (
                 f"{name} {view}: cut differs from the field by {difference:.2f}"
             )
+
+
+# --- handedness ---------------------------------------------------------------
+
+LEFT_HANDED = {
+    "flipped x": np.diag([-1.0, 1.0, 1.0]),
+    "flipped z": np.diag([1.0, 1.0, -1.0]),
+    "swapped axes": np.array([[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]),
+    "oblique": oblique_direction() @ np.diag([1.0, 1.0, -1.0]),
+}
+
+
+def itk_image(direction, size=(5, 6, 7), spacing=(0.8, 1.5, 2.5)):
+    array = np.arange(np.prod(size[::-1]), dtype=np.float32).reshape(size[::-1])
+    image = itk.image_from_array(np.ascontiguousarray(array))
+    image.SetOrigin([-11.0, 7.0, 3.0])
+    image.SetSpacing(list(spacing))
+    image.SetDirection(itk.matrix_from_array(np.asarray(direction, dtype=np.float64)))
+    return image
+
+
+@pytest.mark.parametrize("name", sorted(LEFT_HANDED))
+def test_left_handed_directions_are_made_right_handed(name):
+    image = itk_image(LEFT_HANDED[name])
+    assert np.linalg.det(itk.array_from_matrix(image.GetDirection())) < 0
+
+    corrected = ensure_right_handed(image)
+
+    assert np.linalg.det(itk.array_from_matrix(corrected.GetDirection())) > 0
+
+
+@pytest.mark.parametrize("name", sorted(LEFT_HANDED))
+def test_every_voxel_keeps_its_world_position_and_value(name):
+    """The correction renumbers voxels; it must not move or resample them."""
+    image = itk_image(LEFT_HANDED[name])
+    corrected = ensure_right_handed(image)
+
+    size = list(corrected.GetLargestPossibleRegion().GetSize())
+    for i in range(size[0]):
+        for j in range(size[1]):
+            for k in range(size[2]):
+                index = itk.Index[3]([i, j, k])
+                point = corrected.TransformIndexToPhysicalPoint(index)
+                source = image.TransformPhysicalPointToIndex(point)
+
+                assert corrected.GetPixel(index) == image.GetPixel(source)
+                np.testing.assert_allclose(
+                    list(image.TransformIndexToPhysicalPoint(source)), list(point)
+                )
+
+
+def test_right_handed_images_pass_through_untouched():
+    image = itk_image(np.eye(3))
+
+    assert ensure_right_handed(image) is image
+
+
+def test_left_handed_input_still_cuts_correctly():
+    """The whole point: a left-handed image must reslice like any other."""
+    direction = oblique_direction() @ np.diag([1.0, 1.0, -1.0])
+    origin = CENTRE - direction @ (SPACING * (SIZE - 1) / 2.0)
+
+    kk, jj, ii = np.meshgrid(*[np.arange(s) for s in SIZE[::-1]], indexing="ij")
+    index = np.stack([ii, jj, kk], axis=-1).astype(np.float64)
+    image = itk.image_from_array(
+        np.ascontiguousarray(
+            field(origin + (index * SPACING) @ direction.T).astype(np.float32)
+        )
+    )
+    image.SetOrigin(origin.tolist())
+    image.SetSpacing(SPACING.tolist())
+    image.SetDirection(itk.matrix_from_array(direction))
+
+    image_data = itk.vtk_image_from_image(ensure_right_handed(image))
+    offsets = in_plane_offsets()
+
+    for view in VIEWS:
+        sampled = sample_cut(cut(image_data, view, CENTRE), offsets)
+        expected = field(world_points(view, offsets, CENTRE))
+        assert np.abs(sampled - expected).max() < TOLERANCE * field(CENTRE[None])[0]
+
+
+def test_volume_actors_are_never_left_handed(tmp_path):
+    """What the volume mapper is handed, since it draws nothing for left-handed input.
+
+    No rendering here -- this is the property that failure reduces to, and it
+    holds without a GL context.
+    """
+    image = itk_image(oblique_direction() @ np.diag([1.0, 1.0, -1.0]), size=(8, 8, 8))
+    itk.imwrite(image, str(tmp_path / "0.nii.gz"))
+
+    volume = Volume(label="v", directory=tmp_path)
+
+    matrix = volume.mpr_image_data(0).GetDirectionMatrix()
+    direction = np.array(
+        [[matrix.GetElement(i, j) for j in range(3)] for i in range(3)]
+    )
+    assert np.linalg.det(direction) > 0
