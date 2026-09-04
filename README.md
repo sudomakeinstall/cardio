@@ -117,6 +117,61 @@ The `volume` and `tile` layouts do not draw the three MPR views, so the slices
 behind them are not resampled while either is on screen; they are brought up to
 date on the way back.
 
+### Capturing what is on screen
+
+The Export panel writes the ticked viewports to
+`<serialization_directory>/screenshots/<timestamp>/`.  With the playback
+controls incrementing or rotating, a capture runs the whole cine; otherwise it
+takes a single frame.  When it finishes it says which viewports it wrote and
+into which folder, counted from the files that actually landed.
+
+**A viewport is captured only while the layout is showing it.**  The quad view
+shows the three cuts and the volume rendering; every maximized layout shows one
+thing.  Anything else is a window holding whichever frame was last drawn into
+it, and a capture of that is indistinguishable from one that worked -- so the
+checkboxes for viewports that are not on screen grey out.  They stay ticked, so
+a trip through another layout does not lose the selection.
+
+```toml
+serialization_directory = "./data"
+capture_format = "dicom-data"                          # png (default), jpeg, gif, mp4,
+screenshot_viewports = ["axial", "coronal", "tile"]    # dicom-rendered, dicom-data
+```
+
+```bash
+$ cardio --capture-format mp4 --screenshot-viewports '["vr"]'
+```
+
+| Format | Written as | Holds |
+| --- | --- | --- |
+| `png`, `jpeg` | `<viewport>/<i>.<ext>` | The picture, one file per frame |
+| `gif`, `mp4` | `<viewport>.<ext>` | The picture, one animation at the configured BPM |
+| `dicom-rendered` | `<viewport>/<i>.dcm` | The picture, as an RGB Secondary Capture series |
+| `dicom-data` | `<viewport>/<i>.dcm` | The pixels behind it, in greyscale |
+
+`dicom-data` is the one that keeps the measurements.  For the MPR views it
+writes the resliced plane itself: the original values, so a viewer reads the
+same numbers the volume holds, with the window and level as `WindowWidth` and
+`WindowCenter` tags rather than applied to the pixels, and the true
+`ImageOrientationPatient`, `ImagePositionPatient` and `PixelSpacing` of the cut.
+Such a series reads straight back into `cardio`.
+
+What it does not carry is anything drawn on top -- crosshairs, segmentation
+overlays, the transfer function -- because none of those are pixel values.
+`dicom-rendered` is for that: it records the viewport as it looked.
+
+The tile grid is a special case in `dicom-data`.  Its tiles are cuts taken at
+different poses, so the composed image has a scale but no place in the patient:
+it is written with `PixelSpacing`, so it can be windowed and measured within a
+tile, and with no position or orientation at all, so nothing tries to localize
+it.  `cardio` skips such a series when reading rather than misreading it.
+
+The 3D view has a camera rather than an image plane, so it is always recorded as
+it looked, whichever DICOM mode is chosen.
+
+When the active volume was read from DICOM, the capture inherits its patient and
+study, so a derived series lands in the study it came from.
+
 ### Developing
 
 Ensuring you have all required dependencies:

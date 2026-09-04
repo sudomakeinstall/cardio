@@ -7,6 +7,7 @@ import pydantic as pc
 import pydantic_settings as ps
 import vtk
 
+from .capture import CaptureFormat
 from .mesh import Mesh
 from .mpr_views import MPRViews
 from .playback import Playback
@@ -17,6 +18,9 @@ from .tile_views import TileViews
 from .types import RGBColor
 from .view import View
 from .volume import Volume
+
+logger = logging.getLogger(__name__)
+
 
 MeshListAdapter = pc.TypeAdapter(list[Mesh])
 VolumeListAdapter = pc.TypeAdapter(list[Volume])
@@ -166,6 +170,14 @@ class Scene(ps.BaseSettings):
     screenshot_viewports: list[str] = pc.Field(
         default=["vr", "axial", "coronal", "sagittal", "tile"],
         description="Viewports to capture in screenshots. Options: vr, axial, coronal, sagittal, tile",
+    )
+    capture_format: CaptureFormat = pc.Field(
+        default=CaptureFormat.PNG,
+        description=(
+            "Format a capture is written in. Options: "
+            + ", ".join(CaptureFormat)
+            + ". CLI usage: --capture-format jpeg"
+        ),
     )
     playback: Playback = pc.Field(
         default_factory=Playback,
@@ -359,12 +371,12 @@ class Scene(ps.BaseSettings):
     def nframes(self) -> int:
         ns = [len(obj.actors) for obj in self.renderables]
         if not len(ns) > 0:
-            logging.warning("No objects were found to display.")
+            logger.warning("No objects were found to display.")
             return 1
         result = int(max(ns))
         ns = np.array(ns)
         if not np.all(ns == ns[0]):
-            logging.warning(f"Unequal number of frames: {ns}.")
+            logger.warning(f"Unequal number of frames: {ns}.")
         return result
 
     def setup_pipeline(self):

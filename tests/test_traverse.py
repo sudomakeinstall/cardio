@@ -1,6 +1,8 @@
 """Test traversal between the two interface planes of three label groups."""
 
 # Third Party
+import itertools as it
+
 import numpy as np
 import pytest
 
@@ -165,7 +167,7 @@ def test_traversal_is_continuous(tmp_path):
             float(np.linalg.norm(b[0] - a[0])),
             angle_between(a[1], b[1]),
         )
-        for a, b in zip(poses, poses[1:])
+        for a, b in it.pairwise(poses)
     ]
     for distance, turn in steps:
         assert distance == pytest.approx(steps[0][0], abs=1e-6)
@@ -305,7 +307,7 @@ def test_locked_traverse_tracks_the_frame(tmp_path):
         origins.append(np.array(logic.server.state.mpr_origin))
 
     assert not logic.server.state.snap_no_interface
-    for earlier, later in zip(origins, origins[1:]):
+    for earlier, later in it.pairwise(origins):
         assert later[0] - earlier[0] == pytest.approx(2.0, abs=0.3)
 
 

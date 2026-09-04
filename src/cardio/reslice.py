@@ -33,17 +33,13 @@ OutputFilter = ty.Callable[
 ]
 
 
-def build_pipeline(
-    image_data,
-    interpolation: str,
-    background_level: float,
-    output_filter: OutputFilter | None = None,
-) -> dict[str, ty.Any]:
-    """One reslice and the actor showing it, unposed and hidden.
+def configure_reslice(
+    image_data, interpolation: str, background_level: float
+) -> vtk.vtkImageReslice:
+    """An unposed 2D reslice of ``image_data``.
 
-    Volumes and segmentations differ only in what sits between the reslice and
-    the actor -- a segmentation maps labels through a lookup table -- which is
-    what ``output_filter`` supplies, along with any parts it wants kept alive.
+    Every cut the app takes is set up this way, whether it ends up on screen or
+    in a file, so the settings live here rather than once per caller.
     """
     reslice = vtk.vtkImageReslice()
     reslice.SetInputData(image_data)
@@ -60,6 +56,22 @@ def build_pipeline(
     # The output otherwise inherits the input's direction, and a cut through an
     # obliquely acquired image would not lie flat in the view plane.
     reslice.SetOutputDirection(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
+    return reslice
+
+
+def build_pipeline(
+    image_data,
+    interpolation: str,
+    background_level: float,
+    output_filter: OutputFilter | None = None,
+) -> dict[str, ty.Any]:
+    """One reslice and the actor showing it, unposed and hidden.
+
+    Volumes and segmentations differ only in what sits between the reslice and
+    the actor -- a segmentation maps labels through a lookup table -- which is
+    what ``output_filter`` supplies, along with any parts it wants kept alive.
+    """
+    reslice = configure_reslice(image_data, interpolation, background_level)
 
     if output_filter is None:
         source, extra = reslice, {}

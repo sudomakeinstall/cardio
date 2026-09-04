@@ -7,7 +7,6 @@ from .logic import Logic
 from .mesh import Mesh
 from .object import Object
 from .scene import Scene
-from .screenshot import Screenshot
 from .segmentation import Segmentation
 from .ui import UI
 from .volume import Volume
@@ -17,15 +16,14 @@ from .volume_property_presets import (
 )
 
 __all__ = [
-    "Object",
-    "Mesh",
-    "Volume",
-    "Segmentation",
-    "Scene",
-    "Screenshot",
     "UI",
     "Logic",
-    "load_volume_property_preset",
+    "Mesh",
+    "Object",
+    "Scene",
+    "Segmentation",
+    "Volume",
     "list_volume_property_presets",
+    "load_volume_property_preset",
     "window_level",
 ]

@@ -18,11 +18,11 @@ from .tiles import TileController
 from .visibility import VisibilityController
 
 __all__ = [
-    "Logic",
     "ALIGN_STEP_NAME",
-    "Controller",
     "CaptureController",
     "ClippingController",
+    "Controller",
+    "Logic",
     "MPRController",
     "PlaybackController",
     "RotationController",

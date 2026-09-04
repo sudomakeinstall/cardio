@@ -47,6 +47,24 @@ class Layout(str, enum.Enum):
         """
         return self not in (Layout.VOLUME, Layout.TILE)
 
+    @property
+    def on_screen(self) -> frozenset["Layout"]:
+        """The layouts whose view this one actually draws.
+
+        Every viewport's container is built at startup and hidden with ``v_if``,
+        so the render windows all exist whatever is showing; this is the only
+        thing that says which of them anybody can see.
+
+        Deliberately not ``shows_slices``, which means "this layout resamples
+        the cuts": that is true of a maximized axial view for all three cuts,
+        only one of which is on screen.
+        """
+        if self is Layout.QUAD:
+            return frozenset(
+                {Layout.AXIAL, Layout.CORONAL, Layout.SAGITTAL, Layout.VOLUME}
+            )
+        return frozenset({self})
+
 
 class CameraLock(str, enum.Enum):
     """Which MPR view the volume rendering's camera is tied to, if any."""

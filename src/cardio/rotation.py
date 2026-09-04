@@ -68,7 +68,9 @@ class RotationMetadata(pc.BaseModel):
     coordinate_system: ty.Literal["LPS"] = "LPS"
     index_order: IndexOrder = IndexOrder.ITK
     angle_units: AngleUnits = AngleUnits.RADIANS
-    timestamp: str = pc.Field(default_factory=lambda: dt.datetime.now().isoformat())
+    timestamp: str = pc.Field(
+        default_factory=lambda: dt.datetime.now().astimezone().isoformat()
+    )
     volume_label: str = ""
     deletable: bool = True
 

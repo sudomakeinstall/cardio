@@ -7,6 +7,8 @@ import logging
 # Third Party
 import pydantic as pc
 
+logger = logging.getLogger(__name__)
+
 
 class SnapMode(str, enum.Enum):
     """Which feature of a segmentation the MPR views snap to.
@@ -83,7 +85,9 @@ class Snap(pc.BaseModel):
             return False
         if self.mode in PLANAR_MODES and not self.labels_b:
             return False
-        if self.mode is SnapMode.TRAVERSE and not self.labels_c:
+        # Kept as a third guard rather than folded into the return, which would
+        # turn "traverse needs C" into a double negative and break the parallel.
+        if self.mode is SnapMode.TRAVERSE and not self.labels_c:  # noqa: SIM103
             return False
         return True
 
@@ -96,11 +100,11 @@ class Snap(pc.BaseModel):
         error.
         """
         if (self.locked or self.orientation_locked) and not self.required_groups_chosen:
-            logging.warning(
+            logger.warning(
                 f"Snap lock requested, but {self.mode.value} mode's label groups are incomplete."
             )
         if self.orientation_locked and self.mode not in PLANAR_MODES:
-            logging.warning(
+            logger.warning(
                 f"Snap orientation lock requested, but {self.mode.value} mode does not fit a plane."
             )
         return self

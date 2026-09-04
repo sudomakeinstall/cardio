@@ -26,6 +26,9 @@ import itk
 import numpy as np
 import pydicom as pd
 
+logger = logging.getLogger(__name__)
+
+
 # Distinct slice positions closer together than this are treated as one slice,
 # absorbing the rounding in a writer's ImagePositionPatient.
 POSITION_TOLERANCE = 1e-3
@@ -328,7 +331,7 @@ def read_instances(instances: list[Instance]) -> list:
     """The 3D frames a series' instances describe, one per phase."""
     frames = frame_instances(instances)
 
-    logging.info(
+    logger.info(
         f"{len(frames)} frame(s) of {len(frames[0])} slice(s) "
         f"from series {instances[0].series_uid}."
     )

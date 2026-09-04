@@ -156,6 +156,32 @@ def test_only_the_layouts_with_slices_in_them_want_the_reslice(layout, shows):
     assert layout.shows_slices is shows
 
 
+@pytest.mark.parametrize(
+    "layout,drawn",
+    [
+        (Layout.QUAD, {Layout.AXIAL, Layout.CORONAL, Layout.SAGITTAL, Layout.VOLUME}),
+        (Layout.VOLUME, {Layout.VOLUME}),
+        (Layout.AXIAL, {Layout.AXIAL}),
+        (Layout.CORONAL, {Layout.CORONAL}),
+        (Layout.SAGITTAL, {Layout.SAGITTAL}),
+        (Layout.TILE, {Layout.TILE}),
+    ],
+)
+def test_a_layout_draws_only_what_it_shows(layout, drawn):
+    assert layout.on_screen == drawn
+
+
+def test_a_maximized_cut_is_alone_on_screen_though_all_three_are_resliced():
+    """The distinction ``shows_slices`` cannot make, and a capture needs.
+
+    A maximized axial view still resamples the coronal and sagittal cuts, so
+    their windows are current -- but nobody can see them, and capturing them
+    would be writing a view the user never chose.
+    """
+    assert Layout.AXIAL.shows_slices
+    assert Layout.AXIAL.on_screen == {Layout.AXIAL}
+
+
 def test_unknown_layout_is_rejected():
     with pytest.raises(pc.ValidationError):
         View(layout="quadrant")

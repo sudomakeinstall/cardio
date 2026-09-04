@@ -8,6 +8,8 @@ import vtk
 from .object import Object
 from .property_config import Representation, vtkPropertyConfig
 
+logger = logging.getLogger(__name__)
+
 
 class SurfaceType(enum.Enum):
     """Surface coloring types for mesh rendering."""
@@ -65,7 +67,7 @@ class Mesh(Object):
         # Pass 1: Load all frames and determine topology consistency
         frame_data = []
         for frame, path in enumerate(self.path_list):
-            logging.info(f"{self.label}: Loading frame {frame}.")
+            logger.info(f"{self.label}: Loading frame {frame}.")
             reader = vtk.vtkOBJReader()
             reader.SetFileName(path)
             reader.Update()
@@ -126,11 +128,11 @@ class Mesh(Object):
     def _log_squeez_fallback(self):
         """Log warning when falling back from SQUEEZ to solid coloring."""
         if self.properties.representation != Representation.Surface:
-            logging.warning(
+            logger.warning(
                 f"SQUEEZ coloring requested for {self.label} but representation is not Surface, falling back to solid coloring"
             )
         else:
-            logging.warning(
+            logger.warning(
                 f"SQUEEZ coloring requested for {self.label} but topology inconsistent across frames, falling back to solid coloring"
             )
 

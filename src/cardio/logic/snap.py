@@ -16,6 +16,9 @@ from ..segmentation import interpolate_planes
 from ..snap import PLANAR_MODES, SnapMode
 from .base import Controller
 
+logger = logging.getLogger(__name__)
+
+
 ALIGN_STEP_NAME = "Interface plane"
 
 # The two interfaces traverse mode travels between: A|B, then B|C.
@@ -159,7 +162,7 @@ class SnapController(Controller):
 
         missing = sorted({lv for group in snap.groups for lv in group} - present)
         if missing:
-            logging.warning(
+            logger.warning(
                 f"Snap labels not present in '{seg.label}' at frame {frame}: {missing}"
             )
 

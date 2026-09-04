@@ -121,21 +121,21 @@ def snap_state(**overrides) -> dict:
     Returned fresh each call: the values are mutable and the controllers write
     through them, so two apps must not share one.
     """
-    state = dict(
-        snap_seg_label="s",
-        snap_mode="interface",
-        snap_labels_a=[1],
-        snap_labels_b=[2],
-        snap_labels_c=[],
-        snap_traverse=0,
-        snap_locked=False,
-        snap_orientation_locked=False,
-        snap_no_interface=False,
-        interface_flatness=0.0,
-        frame=0,
-        mpr_origin=[0.0, 0.0, 0.0],
-        mpr_rotation_data={"angles_list": []},
-    )
+    state = {
+        "snap_seg_label": "s",
+        "snap_mode": "interface",
+        "snap_labels_a": [1],
+        "snap_labels_b": [2],
+        "snap_labels_c": [],
+        "snap_traverse": 0,
+        "snap_locked": False,
+        "snap_orientation_locked": False,
+        "snap_no_interface": False,
+        "interface_flatness": 0.0,
+        "frame": 0,
+        "mpr_origin": [0.0, 0.0, 0.0],
+        "mpr_rotation_data": {"angles_list": []},
+    }
     state.update(overrides)
     return state
 

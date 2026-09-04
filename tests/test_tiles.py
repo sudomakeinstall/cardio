@@ -1,5 +1,7 @@
 """Test the tile grid: several cuts sampled along the traverse path."""
 
+import itertools as it
+
 import numpy as np
 import pytest
 import vtk
@@ -123,7 +125,7 @@ def test_consecutive_tiles_only_tilt(tmp_path):
     logic = traverse_logic(stacked_segmentation(tmp_path))
     bases = [logic.snap.traverse_pose(0, f)[1] for f in sample_fractions(6)]
 
-    for before, after in zip(bases, bases[1:]):
+    for before, after in it.pairwise(bases):
         carried = minimal_rotation(before[:, 2], after[:, 2]) @ before
         assert after == pytest.approx(carried, abs=1e-9)
 

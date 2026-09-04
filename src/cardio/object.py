@@ -10,6 +10,8 @@ import vtk
 from .orientation import Source
 from .utils import calculate_combined_bounds
 
+logger = logging.getLogger(__name__)
+
 
 class Object(pc.BaseModel):
     """Base class for renderable objects with validated configuration.
@@ -93,7 +95,7 @@ class Object(pc.BaseModel):
         if self.pattern is None and self.file_paths is None:
             raise ValueError("Either pattern or file_paths must be provided")
         if self.pattern is not None and self.file_paths is not None:
-            logging.info("Both pattern and file_paths specified; using file_paths.")
+            logger.info("Both pattern and file_paths specified; using file_paths.")
 
         if not self.path_list:
             raise ValueError(f"No files matching '{self.pattern}' in {self.directory}.")

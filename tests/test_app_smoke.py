@@ -372,7 +372,7 @@ def traverse_selection(server):
 
 
 def test_traverse_walks_the_origin_between_the_interfaces(app):
-    server, _, logic, _ = app
+    server, _, _, _ = app
     traverse_selection(server)
 
     server.controller.align_to_interface()
@@ -391,7 +391,7 @@ def test_traverse_walks_the_origin_between_the_interfaces(app):
 
 def test_traverse_slider_listener_is_wired(app):
     """The slider must move the views on its own, without pressing Align."""
-    server, _, logic, _ = app
+    server, _, _, _ = app
     traverse_selection(server)
 
     with server.state:

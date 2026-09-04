@@ -3,7 +3,7 @@ import functools as ft
 import pydantic as pc
 
 
-@pc.dataclasses.dataclass(config=dict(frozen=True))
+@pc.dataclasses.dataclass(config={"frozen": True})
 class WindowLevel:
     name: str
     window: float

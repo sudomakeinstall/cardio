@@ -289,7 +289,7 @@ class MPRController(Controller):
 
         # CRITICAL FIX: Update ALL cached frames, not just current frame
         # This ensures all frames use the same global origin when switching
-        for frame in active_volume._mpr_actors.keys():
+        for frame in active_volume._mpr_actors:
             active_volume.update_slice_positions(
                 frame,
                 origin,
@@ -301,7 +301,7 @@ class MPRController(Controller):
         # Update segmentation overlay positions for all cached frames
         for seg in self.scene.segmentations:
             if self.server.state[ObjectState.of(seg).mpr_overlay]:
-                for frame in seg._mpr_actors.keys():
+                for frame in seg._mpr_actors:
                     seg.update_slice_positions(
                         frame,
                         origin,

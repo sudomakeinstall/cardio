@@ -10,6 +10,8 @@ from .orientation import AngleUnits, read_source
 from .reslice import ResliceSet
 from .volume_property_presets import load_volume_property_preset
 
+logger = logging.getLogger(__name__)
+
 
 class Volume(Object):
     """Volume object with transfer functions and clipping support."""
@@ -40,7 +42,7 @@ class Volume(Object):
             self._source = self._source or source
 
             for image in frames:
-                logging.info(f"{self.label}: Loading frame {len(self._actors)}.")
+                logger.info(f"{self.label}: Loading frame {len(self._actors)}.")
 
                 image = itk.vtk_image_from_image(image)
 
@@ -197,9 +199,9 @@ class Volume(Object):
         self,
         frame: int,
         origin: list,
-        rotation_sequence: list = None,
-        rotation_angles: dict = None,
-        angle_units: AngleUnits = None,
+        rotation_sequence: list | None = None,
+        rotation_angles: dict | None = None,
+        angle_units: AngleUnits | None = None,
     ):
         """Aim a frame's MPR views at ``origin`` under the given rotation.
 

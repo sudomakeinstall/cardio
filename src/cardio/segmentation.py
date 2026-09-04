@@ -18,6 +18,9 @@ from .property_config import vtkPropertyConfig
 from .reslice import ResliceSet
 from .utils import label_color
 
+logger = logging.getLogger(__name__)
+
+
 _MARKER_ARRAY = "_snap_marker"
 
 
@@ -219,7 +222,7 @@ class Segmentation(Object):
             self._source = self._source or source
 
             for image in frames:
-                logging.info(
+                logger.info(
                     f"{self.label}: Loading segmentation frame {len(self._actors)}."
                 )
 

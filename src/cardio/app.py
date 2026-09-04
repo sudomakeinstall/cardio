@@ -32,7 +32,7 @@ class CardioApp:
             Scene, root_parser=self.server.cli, cli_parse_args=True
         )
 
-        args, unknown = self.server.cli.parse_known_args()
+        args, _unknown = self.server.cli.parse_known_args()
         config_file = getattr(args, "cfg_file", None)
 
         Scene._cli_source = cli_settings

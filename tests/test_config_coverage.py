@@ -35,6 +35,7 @@ CONFIGURED = {
     "bpm": "playback.bpm",
     "bpr": "playback.bpr",
     "camera_lock": "view.camera_lock",
+    "capture_format": "capture_format",
     "drawer_sections": "view.drawer_sections",
     "frame": "current_frame",
     "help_overlay_visible": "view.help_visible",

@@ -283,10 +283,7 @@ def is_axis_aligned(image) -> bool:
 
     # Check non-zero entries are ±1
     non_zero_values = direction[direction != 0]
-    if not np.allclose(np.abs(non_zero_values), 1.0):
-        return False
-
-    return True
+    return bool(np.allclose(np.abs(non_zero_values), 1.0))
 
 
 def temporal_frames(image) -> list:

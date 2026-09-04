@@ -37,6 +37,8 @@ dependencies = [
     "roma>=1.5.6",
     "torch",
     "trame-server>=3.12.0",
+    "pillow>=11.3.0",
+    "imageio-ffmpeg>=0.6.0",
 ]
 description = "A simple web-based viewer for 3D and 4D ('cine') medical imaging data."
 keywords = ["Medical", "Imaging", "3D", "4D", "Visualization"]
@@ -49,7 +51,7 @@ requires-python = ">=3.12"
 
 [project.optional-dependencies]
 dev = [
- "ruff>=0.12.10",
+ "ruff>=0.16.6",
  "pytest>=8.4.1",
  "coverage>=7.10.4",
 ]
@@ -70,5 +72,15 @@ explicit = true
 
 [tool.ruff.lint]
 extend-select = ["I"]
-extend-ignore = ["F841"]
+extend-ignore = [
+    "F841",
+    # Pydantic turns a ValueError raised in a field validator into a
+    # ValidationError; a TypeError escapes it as a crash instead.
+    "TRY004",
+    # The nesting of the trame widgets is the layout tree. Collapsing two
+    # context managers onto one line hides which element contains which.
+    "SIM117",
+    # `import package as pkg` is this project's import convention.
+    "PLR0402",
+]
 

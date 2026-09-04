@@ -2,11 +2,11 @@ import typing
 
 import pydantic as pc
 
-ScalarComponent: typing.TypeAlias = typing.Annotated[
+type ScalarComponent = typing.Annotated[
     float, pc.Field(ge=0.0, le=1.0, validate_default=True)
 ]
 
-RGBColor: typing.TypeAlias = typing.Annotated[
+type RGBColor = typing.Annotated[
     tuple[
         ScalarComponent,
         ScalarComponent,

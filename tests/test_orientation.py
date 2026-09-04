@@ -170,8 +170,10 @@ def test_is_axis_aligned():
     assert is_axis_aligned(permuted_image) is True
 
 
-def make_4d_image(size=(10, 20, 30, 4), spatial_direction=np.eye(3)):
+def make_4d_image(size=(10, 20, 30, 4), spatial_direction=None):
     """Build a 4D ITK image whose voxels encode their temporal index."""
+    if spatial_direction is None:
+        spatial_direction = np.eye(3)
     image = itk.Image[itk.F, 4].New()
     image.SetRegions(itk.Size[4](list(size)))
     image.Allocate()
