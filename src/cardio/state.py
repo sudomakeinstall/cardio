@@ -69,3 +69,34 @@ class ObjectState:
     @property
     def mpr_overlay(self) -> str:
         return f"mpr_segmentation_overlay_{self.label}"
+
+    @property
+    def document_keys(self) -> list[str]:
+        """The keys describing what this object is showing.
+
+        Saved with a session and restored from one; ``registry.OBJECT_SOURCES``
+        says which field on the object model seeds each. The clip bounds come
+        from the object's geometry rather than from a field, but they are still
+        part of what is on screen.
+        """
+        return [
+            self.visibility,
+            self.clipping,
+            *self.clip_bounds,
+            self.preset,
+            self.mpr_overlay,
+        ]
+
+    @property
+    def session_keys(self) -> list[str]:
+        """Whether this object's subpanels are expanded, which is browsing state."""
+        return [self.clip_panel, self.preset_panel]
+
+
+def screenshot_viewport(viewport: str) -> str:
+    """Whether ``viewport`` is ticked for capture.
+
+    Not an ``ObjectState`` key: a viewport is a place to look from, not
+    something in the scene. It is spelled here for the same reason as the rest.
+    """
+    return f"screenshot_viewport_{viewport}"

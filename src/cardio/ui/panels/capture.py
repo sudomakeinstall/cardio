@@ -7,6 +7,7 @@ from trame.widgets import vuetify3 as vuetify
 # Internal
 from ...capture import CaptureFormat
 from ...logic.capture import VIEWPORTS
+from ...state import screenshot_viewport
 
 VIEWPORT_LABELS = {
     "vr": "3D",
@@ -36,7 +37,7 @@ FORMAT_ITEMS = [
 # showing stays ticked and greys out, so switching layout and back keeps the
 # selection.
 ANY_AVAILABLE = " || ".join(
-    f"(screenshot_viewport_{name} && capture_available.includes('{name}'))"
+    f"({screenshot_viewport(name)} && capture_available.includes('{name}'))"
     for name in VIEWPORTS
 )
 
@@ -60,7 +61,7 @@ def capture_panel(server, scene):
         for key in VIEWPORTS:
             vuetify.VCheckbox(
                 v_model=(
-                    f"screenshot_viewport_{key}",
+                    screenshot_viewport(key),
                     key in scene.screenshot_viewports,
                 ),
                 label=VIEWPORT_LABELS[key],

@@ -1,13 +1,17 @@
-"""Every control the UI binds has a decided config story.
+"""Every state variable the app declares has a decided config story.
 
 The gap this guards: a state variable reached the UI, defaulted to a literal
 nobody could override, and no test noticed -- the config surface grew by
 accident rather than by decision. Adding a control now fails here until it is
 either wired to a ``Scene`` field or declared session-local, with a reason.
 
-This checks that the decision was *made*, not that the wiring works. That the
-configured value actually reaches the running app is what the startup tests in
-test_app_smoke.py assert, one field at a time.
+The decisions themselves live in ``cardio.registry``, where the application can
+read them. What is checked here is that the registry and the source still
+describe the same app: every key the UI binds and every key the logic writes or
+listens to is declared, and nothing is declared that has stopped being used.
+
+That the configured value actually reaches the running app is what the startup
+tests in test_app_smoke.py assert, one field at a time.
 """
 
 # System
@@ -20,70 +24,34 @@ import pydantic as pc
 import pytest
 
 # Internal
+import cardio.registry as registry
 from cardio.object import Object
 from cardio.scene import Scene
 from cardio.segmentation import Segmentation
 from cardio.view import DrawerSection
 from cardio.volume import Volume
 
-UI_DIR = pl.Path(__file__).parent.parent / "src" / "cardio" / "ui"
-
-# Keys the UI binds by a literal name, and the Scene field each is seeded from.
-CONFIGURED = {
-    "active_volume_label": "active_volume_label",
-    "angle_units": "mpr_rotation_sequence.metadata.angle_units",
-    "bpm": "playback.bpm",
-    "bpr": "playback.bpr",
-    "camera_lock": "view.camera_lock",
-    "capture_format": "capture_format",
-    "drawer_sections": "view.drawer_sections",
-    "frame": "current_frame",
-    "help_overlay_visible": "view.help_visible",
-    "incrementing": "playback.incrementing",
-    "index_order": "mpr_rotation_sequence.metadata.index_order",
-    "maximized_view": "view.layout",
-    "metadata_overlay_visible": "view.metadata_visible",
-    "mpr_segmentation_opacity": "mpr_segmentation_opacity",
-    "playback_quality": "playback.quality",
-    "playback_resolution": "playback.resolution",
-    "rotating": "playback.rotating",
-    "snap_locked": "snap.locked",
-    "snap_mode": "snap.mode",
-    "snap_orientation_locked": "snap.orientation_locked",
-    "snap_seg_label": "snap.segmentation_label",
-    "snap_traverse": "snap.traverse",
-    "theme_mode": "view.theme",
-}
-
-# Keys that deliberately start fresh every session, and why. A reason here is a
-# decision, not an excuse: anything a user would want to open the app in
-# belongs above instead.
-SESSION_LOCAL = {
-    "clip_depth": "derived from the camera's clipping range at build time",
-    "metadata_object": "which object's metadata sheet is showing is browsing state",
-    "playing": "starting playback on launch is a behaviour, not view state",
-    "rotations_saved_at": "written when a save happens",
-    "rotations_stale": "derived from edits since the last save",
-    "trame__title": "trame's own, set from the version",
-}
+SRC_DIR = pl.Path(__file__).parent.parent / "src" / "cardio"
+UI_DIR = SRC_DIR / "ui"
 
 # Bindings whose key is computed rather than named. Listed as source text so a
 # new one shows up here rather than passing unnoticed; the value says which
-# per-object field configures it, or why nothing does.
+# per-object field configures it, by the ``ObjectState`` property that spells
+# the key.
 PER_OBJECT = {
     "ObjectState.of(seg).mpr_overlay": (Segmentation, "mpr_overlay"),
-    "keys.clipping": (Object, "clipping_enabled"),
-    "keys.preset": (Volume, "transfer_function_preset"),
-    "keys.visibility": (Object, "visible"),
+    "keys.clipping": (Object, "clipping"),
+    "keys.preset": (Volume, "preset"),
+    "keys.visibility": (Object, "visibility"),
 }
 
 COMPUTED_KEYS = {
-    "visible_key": "the shared sheet dialog's v-model; both sheets are named in CONFIGURED",
-    "f'screenshot_viewport_{key}'": "Scene.screenshot_viewports, via the widget default",
+    "visible_key": "the shared sheet dialog's v-model; both sheets are in the registry",
+    "screenshot_viewport(key)": "Scene.screenshot_viewports, via the widget default",
     "key": "clip bounds, derived from each object's geometry",
     "keys.clip_panel": "whether a clip subpanel is expanded is browsing state",
     "keys.preset_panel": "whether a preset subpanel is expanded is browsing state",
-    "variable": "the snap group and tile size loops, named in CONFIGURED",
+    "variable": "the snap group and tile size loops, all named in the registry",
     "f'mpr_rotation_data.angles_list[{i}].angle'": "a step within the sequence",
     "f'mpr_rotation_data.angles_list[{i}].axis'": "a step within the sequence",
     "f'mpr_rotation_data.angles_list[{i}].name'": "a step within the sequence",
@@ -91,34 +59,89 @@ COMPUTED_KEYS = {
 }
 
 
-def _state_bindings() -> tuple[set[str], set[str]]:
+def _is_state(node) -> bool:
+    """Whether ``node`` is the trame state, however it was reached."""
+    return (isinstance(node, ast.Name) and node.id == "state") or (
+        isinstance(node, ast.Attribute) and node.attr == "state"
+    )
+
+
+def _binding_target(node: ast.keyword):
+    """The key a widget keyword binds, or None if it binds no state.
+
+    A binding is either ``key=("name", default)`` or, for ``v_model`` alone, a
+    bare expression. Anything else -- a vue expression over state, a literal --
+    is not a declaration and is left to the other checks.
+    """
+    if isinstance(node.value, ast.Tuple) and node.value.elts:
+        return node.value.elts[0]
+    if node.arg == "v_model":
+        return node.value
+    return None
+
+
+def _ui_bindings() -> tuple[set[str], set[str]]:
     """Every state key the UI binds, as (literal names, computed expressions).
 
-    Covers both halves of how a control reaches state: a ``v_model`` on a
-    widget, and a direct write to ``server.state`` while building the page.
+    Covers both halves of how a control reaches state: a binding on a widget,
+    and a direct write to ``server.state`` while building the page. A literal
+    that is not an identifier is a vue expression rather than a key.
     """
     named, computed = set(), set()
 
     for path in sorted(UI_DIR.rglob("*.py")):
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
-            if isinstance(node, ast.keyword) and node.arg == "v_model":
-                value = node.value
-                target = value.elts[0] if isinstance(value, ast.Tuple) else value
+            if isinstance(node, ast.keyword):
+                target = _binding_target(node)
+                if target is None:
+                    continue
                 if isinstance(target, ast.Constant) and isinstance(target.value, str):
-                    named.add(target.value)
-                else:
+                    if target.value.isidentifier():
+                        named.add(target.value)
+                elif node.arg == "v_model":
                     computed.add(ast.unparse(target))
             elif isinstance(node, ast.Assign):
                 for assigned in node.targets:
-                    if (
-                        isinstance(assigned, ast.Attribute)
-                        and isinstance(assigned.value, ast.Attribute)
-                        and assigned.value.attr == "state"
+                    if isinstance(assigned, ast.Attribute) and _is_state(
+                        assigned.value
                     ):
                         named.add(assigned.attr)
 
     return named, computed
+
+
+def _source_keys() -> tuple[set[str], set[str]]:
+    """Every literal key the source writes, and every one it listens to."""
+    written, listened = set(), set()
+
+    for path in sorted(SRC_DIR.rglob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for assigned in node.targets:
+                    if isinstance(assigned, ast.Attribute) and _is_state(
+                        assigned.value
+                    ):
+                        written.add(assigned.attr)
+                    elif (
+                        isinstance(assigned, ast.Subscript)
+                        and _is_state(assigned.value)
+                        and isinstance(assigned.slice, ast.Constant)
+                        and isinstance(assigned.slice.value, str)
+                    ):
+                        written.add(assigned.slice.value)
+            elif (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "change"
+                and _is_state(node.func.value)
+            ):
+                for arg in node.args:
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        listened.add(arg.value)
+
+    return written, listened
 
 
 def _resolve(model: type[pc.BaseModel], path: str):
@@ -133,21 +156,45 @@ def _resolve(model: type[pc.BaseModel], path: str):
     return field
 
 
-def test_every_ui_key_is_configured_or_declared_session_local():
-    named, _ = _state_bindings()
-    decided = set(CONFIGURED) | set(SESSION_LOCAL)
+def test_every_ui_key_is_declared():
+    named, _ = _ui_bindings()
+    undeclared = named - set(registry.VARIABLES)
 
-    assert named - decided == set(), (
-        "UI controls with no config decision -- wire them to a Scene field in "
-        f"CONFIGURED, or declare them in SESSION_LOCAL with a reason: {sorted(named - decided)}"
+    assert undeclared == set(), (
+        "UI controls with no config decision -- give them a Scene field in "
+        f"registry.DOCUMENT, or a reason in registry.SESSION: {sorted(undeclared)}"
     )
-    assert decided - named == set(), (
-        f"declared but no longer bound by the UI: {sorted(decided - named)}"
+
+
+def test_every_key_the_source_writes_is_declared():
+    written, _ = _source_keys()
+    undeclared = written - set(registry.VARIABLES)
+
+    assert undeclared == set(), (
+        f"state written but not declared in cardio.registry: {sorted(undeclared)}"
     )
+
+
+def test_every_key_the_source_listens_to_is_declared():
+    """A listener on an undeclared key is a listener on nothing."""
+    _, listened = _source_keys()
+    undeclared = listened - set(registry.VARIABLES)
+
+    assert undeclared == set(), (
+        f"listened to but not declared in cardio.registry: {sorted(undeclared)}"
+    )
+
+
+def test_nothing_is_declared_that_the_app_no_longer_uses():
+    named, _ = _ui_bindings()
+    written, _ = _source_keys()
+    stale = set(registry.VARIABLES) - named - written
+
+    assert stale == set(), f"declared but neither bound nor written: {sorted(stale)}"
 
 
 def test_every_computed_binding_is_accounted_for():
-    _, computed = _state_bindings()
+    _, computed = _ui_bindings()
     declared = set(PER_OBJECT) | set(COMPUTED_KEYS)
 
     assert computed == declared, (
@@ -157,25 +204,40 @@ def test_every_computed_binding_is_accounted_for():
     )
 
 
-@pytest.mark.parametrize("key,path", sorted(CONFIGURED.items()))
-def test_configured_keys_name_a_real_scene_field(key, path):
-    assert _resolve(Scene, path) is not None
+@pytest.mark.parametrize("key", registry.keys(registry.Scope.DOCUMENT))
+def test_document_keys_name_a_real_scene_field(key):
+    assert _resolve(Scene, registry.source_of(key)) is not None
 
 
 @pytest.mark.parametrize("expression,target", sorted(PER_OBJECT.items()))
 def test_per_object_keys_name_a_real_object_field(expression, target):
-    model, field = target
+    model, prop = target
+    field = registry.OBJECT_SOURCES[prop]
     assert field in model.model_fields, f"{model.__name__} has no field '{field}'"
 
 
-def test_session_local_keys_carry_a_reason():
-    assert all(reason.strip() for reason in SESSION_LOCAL.values())
+def test_object_sources_name_real_object_state_keys():
+    """A source for a key ObjectState does not spell configures nothing."""
+    from cardio.state import ObjectState
+
+    for prop in registry.OBJECT_SOURCES:
+        assert isinstance(getattr(ObjectState, prop, None), property), (
+            f"ObjectState has no '{prop}' key"
+        )
+
+
+def test_session_and_items_keys_carry_a_reason():
+    for scope in (registry.Scope.SESSION, registry.Scope.ITEMS):
+        for key in registry.keys(scope):
+            assert registry.VARIABLES[key].reason.strip()
 
 
 def test_the_scan_finds_the_ui():
     """Guards the guard: a broken walk would pass everything vacuously."""
-    named, computed = _state_bindings()
+    named, computed = _ui_bindings()
+    written, listened = _source_keys()
     assert len(named) > 20 and len(computed) > 5
+    assert len(written) > 20 and len(listened) > 20
 
 
 def test_the_drawer_sections_the_config_names_are_the_ones_the_ui_builds():

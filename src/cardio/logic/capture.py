@@ -21,6 +21,7 @@ from ..capture.dicom import IDENTITY_TAGS
 from ..capture.geometry import plane_from_reslice
 from ..capture.mosaic import compose
 from ..reslice import VIEW_TRANSFORMS
+from ..state import screenshot_viewport
 from ..view import Layout
 from .base import Controller
 
@@ -74,7 +75,7 @@ class CaptureController(Controller):
         state = self.server.state
 
         for viewport in VIEWPORTS:
-            state[f"screenshot_viewport_{viewport}"] = (
+            state[screenshot_viewport(viewport)] = (
                 viewport in self.scene.screenshot_viewports
             )
 
@@ -136,7 +137,7 @@ class CaptureController(Controller):
             for name in VIEWPORTS
             if name in available
             and windows.get(name) is not None
-            and getattr(self.server.state, f"screenshot_viewport_{name}", True)
+            and getattr(self.server.state, screenshot_viewport(name), True)
         }
 
     def frame_duration(self) -> float:
