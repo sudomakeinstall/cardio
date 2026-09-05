@@ -37,12 +37,6 @@ class UI:
         self.scene = scene
         self.interaction = Interaction(server, logic)
 
-        self.server.state.help_overlay_visible = scene.view.help_visible
-        self.server.state.metadata_overlay_visible = scene.view.metadata_visible
-        self.server.state.maximized_view = scene.view.layout.state_value
-        self.server.state.rotations_saved_at = None
-        self.server.state.rotations_stale = False
-
         self.setup()
 
     @property
@@ -53,12 +47,9 @@ class UI:
         return self.interaction.listeners_for_view(view_name)
 
     def setup(self):
-        self.server.state.trame__title = f"cardio v{__version__}"
         drawer_styles(self.server)
 
-        with SinglePageWithDrawerLayout(
-            self.server, theme=("theme_mode", self.scene.view.theme.value)
-        ) as layout:
+        with SinglePageWithDrawerLayout(self.server, theme=("theme_mode",)) as layout:
             self.layout = layout
             layout.icon.click = self.server.controller.view_reset_camera
             layout.title.set_text(f"cardio v{__version__}")
@@ -73,7 +64,7 @@ class UI:
                     self.handled_events,
                     self._update_all_mpr_views,
                 )
-                help_dialog(self.scene)
+                help_dialog()
                 metadata_dialog(self.scene)
 
             with layout.drawer as drawer:
@@ -85,7 +76,7 @@ class UI:
         volume_panel(self.server, self.scene)
 
         with vuetify.VExpansionPanels(
-            v_model=("drawer_sections", self.scene.view.open_sections),
+            v_model=("drawer_sections",),
             multiple=True,
             variant="accordion",
             flat=True,

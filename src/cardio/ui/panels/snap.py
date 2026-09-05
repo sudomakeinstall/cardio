@@ -35,8 +35,8 @@ def volume_panel(server, scene):
                 "(!maximized_view || maximized_view === 'volume'"
                 f" || {TILE_ACTIVE}) && volume_items.length >= 2"
             ),
-            v_model=("active_volume_label", ""),
-            items=("volume_items", []),
+            v_model=("active_volume_label",),
+            items=("volume_items",),
             item_title="text",
             item_value="value",
             label="Active Volume",
@@ -55,8 +55,8 @@ def snap_panel(server, scene):
         )
         vuetify.VSelect(
             v_if=f"{RESLICE_ACTIVE} && snap_seg_items.length >= 2",
-            v_model=("snap_seg_label", ""),
-            items=("snap_seg_items", []),
+            v_model=("snap_seg_label",),
+            items=("snap_seg_items",),
             item_title="title",
             item_value="value",
             label="Segmentation",
@@ -65,7 +65,7 @@ def snap_panel(server, scene):
         )
         with vuetify.VBtnToggle(
             v_if=RESLICE_ACTIVE,
-            v_model=("snap_mode", "label"),
+            v_model=("snap_mode",),
             mandatory=True,
             classes="mb-2",
         ):
@@ -93,8 +93,8 @@ def snap_panel(server, scene):
         ):
             vuetify.VSelect(
                 v_if=shown,
-                v_model=(variable, []),
-                items=("snap_available_labels", []),
+                v_model=(variable,),
+                items=("snap_available_labels",),
                 item_title="title",
                 item_value="value",
                 label=label,
@@ -108,7 +108,7 @@ def snap_panel(server, scene):
         # its tiles already span the whole path.
         vuetify.VSlider(
             v_if=f"{RESLICE_ACTIVE} && snap_mode === 'traverse' && {NOT_TILE_ACTIVE}",
-            v_model=("snap_traverse", 0),
+            v_model=("snap_traverse",),
             label="Traverse",
             title="Travel from the A|B interface to the B|C interface",
             classes=f"{SLIDER_CLASS} mb-2",
@@ -142,7 +142,7 @@ def snap_panel(server, scene):
                 )
             with vuetify.VCol(cols="auto", classes="ps-1"):
                 vuetify.VCheckbox(
-                    v_model=("snap_locked", False),
+                    v_model=("snap_locked",),
                     true_icon="mdi-lock",
                     false_icon="mdi-lock-open-variant",
                     color="primary",
@@ -168,7 +168,7 @@ def snap_panel(server, scene):
                 )
             with vuetify.VCol(cols="auto", classes="ps-1"):
                 vuetify.VCheckbox(
-                    v_model=("snap_orientation_locked", False),
+                    v_model=("snap_orientation_locked",),
                     true_icon="mdi-lock",
                     false_icon="mdi-lock-open-variant",
                     color="primary",

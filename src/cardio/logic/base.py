@@ -8,9 +8,10 @@ from ..state import ObjectState
 class Controller:
     """One concern of the application logic.
 
-    Each controller owns a slice of trame state: it registers its own variables,
-    change listeners and controller functions in ``register()``. Siblings are
-    reached through ``self.app``, which is the Logic facade that composes them.
+    Each controller owns a slice of trame state: it declares its listeners and
+    controller functions in ``register()`` and writes the state itself in
+    ``seed()``. Siblings are reached through ``self.app``, which is the Logic
+    facade that composes them.
     """
 
     def __init__(self, app):
@@ -19,7 +20,16 @@ class Controller:
         self.scene = app.scene
 
     def register(self):
-        """Declare this controller's state, listeners and controller functions."""
+        """Declare this controller's listeners and controller functions."""
+
+    def seed(self):
+        """Write this controller's state, as the scene configures it.
+
+        Split from ``register`` so that opening a config, restoring a saved
+        session and resetting to what the config asks for are one pass rather
+        than three: every controller's ``seed`` runs together, in one order, on
+        a server whose listeners are already in place.
+        """
 
     @property
     def convention(self) -> Convention:
@@ -28,14 +38,8 @@ class Controller:
 
     @property
     def _frame(self) -> int:
-        """The frame being shown.
-
-        ``frame`` reaches state only when the playback slider is built, which
-        happens after Logic; until then the scene's configured frame is the one
-        that will be shown.
-        """
-        frame = getattr(self.server.state, "frame", None)
-        return self.scene.current_frame if frame is None else frame
+        """The frame being shown."""
+        return self.server.state.frame
 
     def _active_volume(self):
         """The volume the MPR views are showing, or None if there isn't one."""

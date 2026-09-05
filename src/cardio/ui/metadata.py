@@ -18,11 +18,7 @@ def metadata_dialog(scene):
     """
     entries = describe_scene(scene)
 
-    with sheet_dialog(
-        "metadata_overlay_visible",
-        "Scene Metadata",
-        scene.view.metadata_visible,
-    ):
+    with sheet_dialog("metadata_overlay_visible", "Scene Metadata"):
         if not entries:
             html.P("No objects in the scene.", classes="text-caption")
             return
@@ -31,13 +27,8 @@ def metadata_dialog(scene):
 
         if several:
             vuetify.VSelect(
-                v_model=("metadata_object", entries[0].key),
-                # A list prop has to arrive as state; passed inline, trame reads
-                # it as a (name, default) pair and chokes on the dicts.
-                items=(
-                    "metadata_pages",
-                    [{"title": entry.title, "value": entry.key} for entry in entries],
-                ),
+                v_model=("metadata_object",),
+                items=("metadata_pages",),
                 label="Object",
                 density="compact",
                 hide_details=True,

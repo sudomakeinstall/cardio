@@ -31,7 +31,6 @@ class PlaybackController(Controller):
 
     def register(self):
         state = self.server.state
-        self._publish_configured_playback()
         state.change("frame")(self.update_frame)
         state.change("playing")(self._handle_playing_change)
         state.change("playback_quality", "playback_resolution")(
@@ -44,10 +43,12 @@ class PlaybackController(Controller):
         controller.reset_all = self.reset_all
         controller.close_application = self.close_application
 
-    def _publish_configured_playback(self):
-        """Write the configured playback controls to state."""
+    def seed(self):
+        """Put the frame and the playback controls where the config starts them."""
         state = self.server.state
         playback = self.scene.playback
+        state.frame = self.scene.current_frame
+        state.playing = False
         state.bpm = playback.bpm
         state.bpr = playback.bpr
         state.incrementing = playback.incrementing
@@ -250,12 +251,11 @@ class PlaybackController(Controller):
     def reset_all(self):
         """Put playback back where the config starts it.
 
-        The controls used to be reset to literals that had drifted from the
-        ones the widgets open with; there is now one source for both.
+        Which is what seeding does, so it is what this does: the controls used
+        to be reset to literals that had drifted from the ones the app opens
+        with.
         """
-        self.server.state.frame = self.scene.current_frame
-        self.server.state.playing = False
-        self._publish_configured_playback()
+        self.seed()
         self.server.controller.view_update()
 
     @asynchronous.task

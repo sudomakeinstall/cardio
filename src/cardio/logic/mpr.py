@@ -56,7 +56,6 @@ class MPRController(Controller):
 
     def __init__(self, app):
         super().__init__(app)
-        self._updating_from_preset = False
         self._pending_active_volume = None
         self._missed_volume_change = False
 
@@ -74,19 +73,6 @@ class MPRController(Controller):
 
     def register(self):
         state = self.server.state
-        state.mpr_presets = []
-        state.volume_items = [
-            {"text": volume.label, "value": volume.label}
-            for volume in self.scene.volumes
-        ]
-        state.camera_lock = self.scene.view.camera_lock.value
-        state.camera_lock_items = [
-            {"title": CAMERA_LOCK_TITLES[lock], "value": lock.value}
-            for lock in CameraLock
-        ]
-        state.mpr_origin = [0.0, 0.0, 0.0]
-        state.mpr_crosshairs_enabled = self.scene.mpr_crosshairs_enabled
-
         state.change("active_volume_label")(self.sync_active_volume)
         state.change("mpr_origin")(self.update_slice_positions)
         state.change("mpr_crosshairs_enabled")(self.sync_crosshairs_visibility)
@@ -101,39 +87,33 @@ class MPRController(Controller):
                 self.sync_segmentation_overlays
             )
 
-        for seg in self.scene.segmentations:
-            state[ObjectState.of(seg).mpr_overlay] = seg.mpr_overlay
-        state.mpr_segmentation_opacity = self.scene.mpr_segmentation_opacity
-
         self.server.controller.reset_mpr_origin = self.reset_mpr_origin
         self.server.controller.finalize_mpr_initialization = (
             self.finalize_mpr_initialization
         )
 
-    def register_initial_view(self):
-        """Seed the MPR view state, once the other controllers have registered.
-
-        ``active_volume_label`` is deliberately left empty until the UI is up;
-        finalize_mpr_initialization sets it, avoiding a race with trame's
-        listener bookkeeping.
-        """
+    def seed(self):
+        """The cuts' pose, their window and level, and the pickers' contents."""
         state = self.server.state
-        state.active_volume_label = ""
-        self._pending_active_volume = (
-            self.scene.volumes[0].label
-            if self.scene.volumes and not self.scene.active_volume_label
-            else self.scene.active_volume_label
-        )
-        state.mpr_origin = list(self.scene.mpr_origin)
-        state.mpr_window = self.scene.mpr_window
-        state.mpr_level = self.scene.mpr_level
-        state.mpr_window_level_preset = self.scene.mpr_window_level_preset
 
-        self.app.rotations.publish(self.scene.mpr_rotation_sequence)
-
+        state.volume_items = [
+            {"text": volume.label, "value": volume.label}
+            for volume in self.scene.volumes
+        ]
+        state.camera_lock = self.scene.view.camera_lock.value
+        state.camera_lock_items = [
+            {"title": CAMERA_LOCK_TITLES[lock], "value": lock.value}
+            for lock in CameraLock
+        ]
         state.mpr_presets = [{"text": "Select W/L...", "value": None}] + [
             {"text": preset.name, "value": key} for key, preset in presets.items()
         ]
+
+        state.mpr_origin = list(self.scene.mpr_origin)
+        state.mpr_crosshairs_enabled = self.scene.mpr_crosshairs_enabled
+        state.mpr_window = self.scene.mpr_window
+        state.mpr_level = self.scene.mpr_level
+        state.mpr_window_level_preset = self.scene.mpr_window_level_preset
 
         # Set the values the preset implies without driving the views, which
         # may not exist yet.
@@ -141,6 +121,34 @@ class MPRController(Controller):
             preset = presets[self.scene.mpr_window_level_preset]
             state.mpr_window = preset.window
             state.mpr_level = preset.level
+
+        state.mpr_segmentation_opacity = self.scene.mpr_segmentation_opacity
+        for seg in self.scene.segmentations:
+            state[ObjectState.of(seg).mpr_overlay] = seg.mpr_overlay
+
+        self._seed_active_volume()
+
+    def _seed_active_volume(self):
+        """Choose the volume the cuts are taken from, now or when the UI is up.
+
+        Before the server is ready nothing flushes, and ``state.initial`` moves
+        the write through to the client without firing a listener -- so a label
+        written now would arrive already applied, and the views would never be
+        built for it. It waits for ``finalize_mpr_initialization`` instead.
+        Seeding a running server has no such problem and no reason to wait.
+        """
+        label = (
+            self.scene.volumes[0].label
+            if self.scene.volumes and not self.scene.active_volume_label
+            else self.scene.active_volume_label
+        )
+
+        if getattr(self.server.state, "is_ready", False):
+            self.server.state.active_volume_label = label
+            return
+
+        self.server.state.active_volume_label = ""
+        self._pending_active_volume = label
 
     def update_mpr_frame(self, frame):
         """Update MPR views to show the specified frame."""
@@ -192,7 +200,7 @@ class MPRController(Controller):
 
         # Initialize origin to volume center (in LPS coordinates)
         try:
-            current_frame = getattr(self.server.state, "frame", 0)
+            current_frame = self._frame
             volume_actor = active_volume.actors[current_frame]
             image_data = volume_actor.GetMapper().GetInput()
             center = image_data.GetCenter()
@@ -279,21 +287,29 @@ class MPRController(Controller):
         # Get current window/level values
         window = self.server.state.mpr_window
         level = self.server.state.mpr_level
-        current_frame = getattr(self.server.state, "frame", 0)
+        current_frame = self._frame
 
-        # Check if this change is from manual adjustment (not from preset)
-        # by checking if we're not in the middle of a preset update
-        if not getattr(self, "_updating_from_preset", False):
-            # Reset preset selection when manually adjusting window/level
-            current_preset = self.server.state.mpr_window_level_preset
-            if current_preset is not None:
-                self.server.state.mpr_window_level_preset = None
+        self._clear_preset_if_departed(window, level)
 
         # Update window/level for MPR actors
         active_volume.update_mpr_window_level(current_frame, window, level)
 
         # Update all views
         self.server.controller.view_update()
+
+    def _clear_preset_if_departed(self, window, level):
+        """Drop the preset selection once the values stop matching it.
+
+        Window and level are dragged, but they are also written by the preset
+        itself and by seeding, neither of which is a departure from the preset.
+        Comparing against what the preset implies tells those apart without
+        anyone having to announce which kind of write they are -- which a flag
+        could not do anyway, this being a listener that runs at the flush
+        rather than at the write.
+        """
+        preset = presets.get(self.server.state.mpr_window_level_preset)
+        if preset is not None and (window, level) != (preset.window, preset.level):
+            self.server.state.mpr_window_level_preset = None
 
     def update_mpr_preset(self, mpr_window_level_preset, **kwargs):
         """Update MPR window/level when preset changes."""
@@ -303,18 +319,9 @@ class MPRController(Controller):
 
         if mpr_window_level_preset in presets:
             preset = presets[mpr_window_level_preset]
-
-            # Set flag to indicate we're updating from preset
-            self._updating_from_preset = True
-            try:
-                self.server.state.mpr_window = preset.window
-                self.server.state.mpr_level = preset.level
-
-                # Update the actual MPR views with new window/level
-                self.update_mpr_window_level()
-            finally:
-                # Always clear the flag
-                self._updating_from_preset = False
+            self.server.state.mpr_window = preset.window
+            self.server.state.mpr_level = preset.level
+            self.update_mpr_window_level()
 
     def update_mpr_rotation(self, **kwargs):
         """Update MPR views when rotation changes."""
@@ -338,7 +345,7 @@ class MPRController(Controller):
         if not active_volume:
             return
 
-        current_frame = getattr(self.server.state, "frame", 0)
+        current_frame = self._frame
 
         for obj in [active_volume, *self._overlaid_segmentations()]:
             self._reslices(obj, current_frame)
@@ -432,7 +439,7 @@ class MPRController(Controller):
         active_volume = self._active_volume()
         if not active_volume:
             return
-        current_frame = getattr(self.server.state, "frame", 0)
+        current_frame = self._frame
         image_data = active_volume.actors[current_frame].GetMapper().GetInput()
         self.server.state.mpr_origin = self.convention.point_from_itk(
             image_data.GetCenter()

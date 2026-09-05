@@ -33,6 +33,21 @@ VIEWPORT_FOR_LAYOUT = {Layout.VOLUME: "vr"}
 
 MPR_VIEWPORTS = ("axial", "coronal", "sagittal")
 
+# What each format is, in the terms that decide between them: a still per
+# frame, one animation, or a series a DICOM viewer can open.
+FORMAT_LABELS = {
+    CaptureFormat.PNG: "PNG stills",
+    CaptureFormat.JPEG: "JPEG stills",
+    CaptureFormat.GIF: "GIF animation",
+    CaptureFormat.MP4: "MP4 animation",
+    CaptureFormat.DICOM_RENDERED: "DICOM (as shown)",
+    CaptureFormat.DICOM_DATA: "DICOM (image data)",
+}
+
+FORMAT_ITEMS = [
+    {"title": FORMAT_LABELS[fmt], "value": fmt.value} for fmt in CaptureFormat
+]
+
 
 def viewport_of(layout: Layout) -> str:
     """What a capture calls the view ``layout`` shows."""
@@ -72,6 +87,15 @@ class CaptureController(Controller):
     """Cine capture and rotation serialisation."""
 
     def register(self):
+        # The layout decides which viewports can be captured, and the drawer
+        # greys out the rest; publishing it is what keeps that rule in one place
+        # rather than restated as a vue expression.
+        self.server.state.change("maximized_view")(self.sync_available)
+
+        self.server.controller.screenshot = self.screenshot
+        self.server.controller.save_rotation_angles = self.save_rotation_angles
+
+    def seed(self):
         state = self.server.state
 
         for viewport in VIEWPORTS:
@@ -83,19 +107,17 @@ class CaptureController(Controller):
         state.capture_available = sorted(
             viewport_of(shown) for shown in self.scene.view.layout.on_screen
         )
+        state.capture_formats = FORMAT_ITEMS
         state.capture_running = False
         state.capture_progress = 0
         state.capture_saved_at = None
         state.capture_summary = ""
         state.capture_ok = True
 
-        # The layout decides which viewports can be captured, and the drawer
-        # greys out the rest; publishing it is what keeps that rule in one place
-        # rather than restated as a vue expression.
-        state.change("maximized_view")(self.sync_available)
-
-        self.server.controller.screenshot = self.screenshot
-        self.server.controller.save_rotation_angles = self.save_rotation_angles
+        # Written here rather than by the rotations panel that shows them: a
+        # freshly seeded scene has saved nothing and edited nothing.
+        state.rotations_saved_at = None
+        state.rotations_stale = False
 
     @property
     def capture_format(self) -> CaptureFormat:

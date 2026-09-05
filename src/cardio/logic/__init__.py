@@ -15,6 +15,7 @@ from .playback import PlaybackController
 from .rotations import RotationController
 from .snap import ALIGN_STEP_NAME, SnapController
 from .tiles import TileController
+from .view import ViewController
 from .visibility import VisibilityController
 
 __all__ = [
@@ -28,6 +29,7 @@ __all__ = [
     "RotationController",
     "SnapController",
     "TileController",
+    "ViewController",
     "VisibilityController",
 ]
 
@@ -35,16 +37,21 @@ __all__ = [
 class Logic:
     """Composes the controllers and wires them to the server.
 
-    Registration order matters: trame fires a change listener only for writes
-    that happen after it is registered, so each controller registers its
-    listeners and its defaults together, in the order the original constructor
-    established.
+    Declaring and seeding are two passes rather than one. Every controller
+    registers its listeners and controller functions first; only then does
+    ``apply_scene`` write the state the scene configures. Trame looks its
+    change callbacks up at flush time and nothing here flushes, so the order
+    the two are interleaved in never mattered to the listeners. What it does
+    decide is whether a controller reading a sibling's state finds it written
+    yet -- ``snap`` snaps against the MPR origin, the tiles are cut along the
+    snap path -- and one ordered pass is where that can be seen.
     """
 
     def __init__(self, server, scene: Scene):
         self.server = server
         self.scene = scene
 
+        self.view = ViewController(self)
         self.rotations = RotationController(self)
         self.mpr = MPRController(self)
         self.snap = SnapController(self)
@@ -57,20 +64,34 @@ class Logic:
         for controller in self.controllers:
             controller.register()
 
-        # Depends on every controller's listeners already being in place
-        self.mpr.register_initial_view()
-        self.clipping._initialize_clipping_state()
-        self.snap.register_initial_labels()
+        self.apply_scene()
+
+    def apply_scene(self):
+        """Write every state variable the scene configures.
+
+        The one way state is put where a ``Scene`` says it should be, whether
+        that scene came from a config file at startup or from somewhere else
+        later.
+        """
+        for controller in self.controllers:
+            controller.seed()
 
     @property
     def controllers(self) -> list[Controller]:
+        """The controllers, in the order they register and then seed.
+
+        ``snap`` is last because a configured lock snaps the moment it is
+        seeded, which reads the origin, the rotation and the frame that the
+        controllers above it write.
+        """
         return [
+            self.view,
             self.rotations,
             self.mpr,
             self.playback,
             self.visibility,
             self.clipping,
-            self.snap,
             self.tiles,
             self.capture,
+            self.snap,
         ]

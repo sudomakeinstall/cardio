@@ -138,8 +138,8 @@ def rotations_panel(server, scene):
             vuetify.VLabel("Units:")
         with vuetify.VCol(cols="8"):
             vuetify.VSelect(
-                v_model=("angle_units", "radians"),
-                items=("angle_units_items", []),
+                v_model=("angle_units",),
+                items=("angle_units_items",),
                 item_title="text",
                 item_value="value",
                 hide_details=True,
@@ -155,8 +155,8 @@ def rotations_panel(server, scene):
             vuetify.VLabel("Convention:")
         with vuetify.VCol(cols="8"):
             vuetify.VSelect(
-                v_model=("index_order", "itk"),
-                items=("index_order_items", []),
+                v_model=("index_order",),
+                items=("index_order_items",),
                 item_title="text",
                 item_value="value",
                 hide_details=True,
@@ -172,8 +172,8 @@ def rotations_panel(server, scene):
             vuetify.VLabel("Lock Camera:")
         with vuetify.VCol(cols="8"):
             vuetify.VSelect(
-                v_model=("camera_lock", "free"),
-                items=("camera_lock_items", []),
+                v_model=("camera_lock",),
+                items=("camera_lock_items",),
                 item_title="title",
                 item_value="value",
                 hide_details=True,

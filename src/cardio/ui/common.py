@@ -45,7 +45,7 @@ SHEET_BODY_CLASS = "cardio-sheet-body"
 
 
 @cl.contextmanager
-def sheet_dialog(visible_key: str, title: str, initial: bool):
+def sheet_dialog(visible_key: str, title: str):
     """A full-page reference sheet, opened by a key and closed by a button.
 
     The help reference and the metadata sheet are the same object with
@@ -53,7 +53,7 @@ def sheet_dialog(visible_key: str, title: str, initial: bool):
     grows a scrollbar or changes its card, both do.
     """
     with vuetify.VDialog(
-        v_model=(visible_key, initial),
+        v_model=(visible_key,),
         max_width="700px",
         scrim="rgba(0, 0, 0, 0.7)",
     ):

@@ -94,6 +94,15 @@ class FlushingState:
     def __setitem__(self, key, value):
         setattr(self, key, value)
 
+    def reset(self, **values):
+        """Put the state back to ``values`` without anything pending.
+
+        The state a test starts from, once bootstrap has run: seeding writes
+        before the app can flush, so nothing a seed wrote is waiting to fire.
+        """
+        self.__dict__["_data"].update(values)
+        self.__dict__["_pending"].clear()
+
     def change(self, *keys):
         def register(func):
             for key in keys:
@@ -257,6 +266,10 @@ class PlaybackApp:
         self.server = FakeServer(FlushingState(**state_values), controller)
         self.playback = PlaybackController(self)
         self.playback.register()
+        self.playback.seed()
+        # Seeding is the first thing Logic does, before anything can flush, so
+        # the state the test asked to start from is what is left afterwards.
+        self.server.state.reset(**state_values)
 
     @property
     def renders(self):

@@ -38,7 +38,7 @@ def playback_panel(server, scene):
         vuetify.VSpacer()
 
         vuetify.VCheckbox(
-            v_model=("playing", False),
+            v_model=("playing",),
             true_icon="mdi-pause-circle",
             false_icon="mdi-play-circle",
             title="Play/Pause",
@@ -48,7 +48,7 @@ def playback_panel(server, scene):
         vuetify.VSpacer()
 
         vuetify.VCheckbox(
-            v_model=("incrementing", scene.playback.incrementing),
+            v_model=("incrementing",),
             true_icon="mdi-movie-open-outline",
             false_icon="mdi-movie-open-off-outline",
             hide_details=True,
@@ -58,7 +58,7 @@ def playback_panel(server, scene):
         vuetify.VSpacer()
 
         vuetify.VCheckbox(
-            v_model=("rotating", scene.playback.rotating),
+            v_model=("rotating",),
             true_icon="mdi-autorenew",
             false_icon="mdi-autorenew-off",
             hide_details=True,
@@ -66,7 +66,7 @@ def playback_panel(server, scene):
         )
 
     vuetify.VSlider(
-        v_model=("frame", scene.current_frame),
+        v_model=("frame",),
         label="Phase",
         title="Frame index within the cardiac cycle",
         classes=SLIDER_CLASS,
@@ -79,7 +79,7 @@ def playback_panel(server, scene):
     )
 
     vuetify.VSlider(
-        v_model=("bpm", scene.playback.bpm),
+        v_model=("bpm",),
         label="BPM",
         title="Playback speed, in beats per minute",
         classes=SLIDER_CLASS,
@@ -92,7 +92,7 @@ def playback_panel(server, scene):
     )
 
     vuetify.VSlider(
-        v_model=("bpr", scene.playback.bpr),
+        v_model=("bpr",),
         label="Beats/rot",
         title="Cardiac cycles per full rotation of the camera",
         classes=SLIDER_CLASS,
@@ -105,7 +105,7 @@ def playback_panel(server, scene):
     )
 
     vuetify.VSlider(
-        v_model=("playback_quality", scene.playback.quality),
+        v_model=("playback_quality",),
         label="Quality",
         title="JPEG encode quality while playing; 100 is full quality",
         classes=SLIDER_CLASS,
@@ -118,7 +118,7 @@ def playback_panel(server, scene):
     )
 
     vuetify.VSlider(
-        v_model=("playback_resolution", scene.playback.resolution),
+        v_model=("playback_resolution",),
         label="Res",
         title="Render resolution while playing, as a percent of full",
         classes=SLIDER_CLASS,

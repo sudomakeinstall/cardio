@@ -21,7 +21,7 @@ def toolbar(server, scene, layout):
         vuetify.VSpacer()
 
         vuetify.VCheckbox(
-            v_model=("theme_mode", scene.view.theme.value),
+            v_model=("theme_mode",),
             true_value=Theme.DARK.value,
             false_value=Theme.LIGHT.value,
             title="Dark/Light Mode",

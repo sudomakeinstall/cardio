@@ -62,10 +62,6 @@ class TileController(Controller):
 
     def register(self):
         state = self.server.state
-        state.tile_rows = self.scene.tile_rows
-        state.tile_cols = self.scene.tile_cols
-        state.tile_sizes = list(range(1, MAX_ROWS + 1))
-
         state.change("tile_rows", "tile_cols")(self.refresh)
         state.change("active_volume_label")(self._on_volume_changed)
         state.change("maximized_view")(self.refresh)
@@ -82,6 +78,12 @@ class TileController(Controller):
             state.change(ObjectState.of(seg).mpr_overlay)(self.refresh)
 
         self.server.controller.reset_tile_cameras = self.reset_cameras
+
+    def seed(self):
+        state = self.server.state
+        state.tile_rows = self.scene.tile_rows
+        state.tile_cols = self.scene.tile_cols
+        state.tile_sizes = list(range(1, MAX_ROWS + 1))
 
     @property
     def active(self) -> bool:
@@ -159,7 +161,7 @@ class TileController(Controller):
 
     def refresh(self, **kwargs):
         """Re-tile at the current frame, for any change that alters the cuts."""
-        self.update_tiles(getattr(self.server.state, "frame", 0))
+        self.update_tiles(self._frame)
 
     def zoom_tiles(self, factor: float):
         """Zoom the whole grid, leaving the fit that put the tiles on one scale."""
@@ -176,7 +178,7 @@ class TileController(Controller):
         Frame changes deliberately do not refit -- a cine would pulse -- so
         this is also the way out if a fit ever goes stale.
         """
-        self.update_tiles(getattr(self.server.state, "frame", 0), reset_cameras=True)
+        self.update_tiles(self._frame, reset_cameras=True)
 
     def _on_path_changed(self, **kwargs):
         """A different path cuts a different shape, so refit to it."""

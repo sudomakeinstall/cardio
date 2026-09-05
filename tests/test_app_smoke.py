@@ -374,6 +374,55 @@ def connect(server):
     server.controller.finalize_mpr_initialization()
 
 
+def test_apply_scene_puts_the_configured_values_back(app):
+    """Re-seeding a running app returns it to what the config asks for.
+
+    The property the whole two-pass split is for: opening a config, restoring
+    a session and resetting to defaults are the same call, so that call has to
+    work on a server that is already up and not only on one being built.
+    """
+    server, scene, logic, _ = app
+    connect(server)
+
+    with server.state:
+        server.state.theme_mode = Theme.LIGHT.value
+        server.state.bpm = scene.playback.bpm + 37
+        server.state.snap_traverse = 77
+        server.state.tile_rows = scene.tile_rows + 2
+        server.state.mpr_segmentation_opacity = 0.123
+
+    logic.apply_scene()
+
+    assert server.state.theme_mode == scene.view.theme.value
+    assert server.state.bpm == scene.playback.bpm
+    assert server.state.snap_traverse == scene.snap.traverse
+    assert server.state.tile_rows == scene.tile_rows
+    assert server.state.mpr_segmentation_opacity == scene.mpr_segmentation_opacity
+
+
+def test_a_re_seeded_window_level_preset_survives_the_flush(app):
+    """Seeding writes the window and level the preset implies.
+
+    Which the manual-adjustment listener must not read as a drag away from the
+    preset. It used to, and startup got away with it only because that listener
+    returns early while no volume is active yet -- so it showed up the first
+    time the same pass ran against a server that was already up.
+    """
+    server, scene, logic, _ = app
+    connect(server)
+
+    with server.state:
+        server.state.mpr_window = 1234.0
+        server.state.mpr_level = 567.0
+
+    assert server.state.mpr_window_level_preset is None, "a drag clears the preset"
+
+    with server.state:
+        logic.apply_scene()
+
+    assert server.state.mpr_window_level_preset == scene.mpr_window_level_preset
+
+
 def traverse_selection(server):
     """Select the three stacked labels the smoke segmentation carries."""
     connect(server)

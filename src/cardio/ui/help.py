@@ -9,13 +9,9 @@ from ..window_level import presets
 from .common import sheet_dialog
 
 
-def help_dialog(scene):
+def help_dialog():
     """The shortcut reference, toggled with the `h` key."""
-    with sheet_dialog(
-        "help_overlay_visible",
-        "Keyboard Shortcuts & Controls",
-        scene.view.help_visible,
-    ):
+    with sheet_dialog("help_overlay_visible", "Keyboard Shortcuts & Controls"):
         html.H3("Keyboard Shortcuts", classes="text-h6 mb-3")
         with vuetify.VTable(density="compact", classes="mb-4"):
             with html.Thead():

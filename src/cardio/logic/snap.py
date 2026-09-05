@@ -62,6 +62,22 @@ class SnapController(Controller):
         state.change("snap_locked")(self._on_snap_lock_changed)
         state.change("snap_orientation_locked")(self._on_snap_orientation_lock_changed)
 
+        self.server.controller.snap_to_centroid = self.snap_to_centroid
+        self.server.controller.align_to_interface = self.align_to_interface
+        self.server.controller.swap_snap_groups = self.swap_groups
+        self.server.controller.reset_snap = self.reset
+
+    def seed(self):
+        """The selection, the pickers it is filtered against, and the locks.
+
+        Seeded last of all the controllers: a configured lock snaps as it is
+        applied, against the origin, the rotation and the frame the others have
+        just written.
+        """
+        if not self.scene.segmentations:
+            return
+
+        state = self.server.state
         self._publish_configured_selection()
         state.snap_available_labels = []
         state.snap_seg_items = [
@@ -72,20 +88,6 @@ class SnapController(Controller):
         state.interface_flatness = 0.0
         state.snap_orientation_locked = False
 
-        self.server.controller.snap_to_centroid = self.snap_to_centroid
-        self.server.controller.align_to_interface = self.align_to_interface
-        self.server.controller.swap_snap_groups = self.swap_groups
-        self.server.controller.reset_snap = self.reset
-
-    def register_initial_labels(self):
-        """Populate the pickers and apply the configured selection.
-
-        Called once every controller has registered and the MPR view exists,
-        which is what the configured groups have to be validated against and
-        what a configured lock has to snap against.
-        """
-        if not self.scene.segmentations:
-            return
         seg = self._selected_segmentation()
         if seg is None:
             return
@@ -119,9 +121,9 @@ class SnapController(Controller):
     def _publish_configured_selection(self):
         """Write the configured mode, segmentation and groups to state.
 
-        The groups are written unfiltered here: the pickers are not populated
-        until ``register_initial_labels``, which filters them against the
-        labels the segmentation actually holds.
+        The groups are written unfiltered here: the pickers are populated
+        later in the same pass, which filters them against the labels the
+        segmentation actually holds.
         """
         state = self.server.state
         snap = self.scene.snap

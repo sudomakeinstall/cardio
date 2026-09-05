@@ -12,7 +12,6 @@ class ClippingController(Controller):
         state = self.server.state
 
         camera = self.scene.renderer.GetActiveCamera()
-        state.clip_depth = list(camera.GetClippingRange())
 
         def reapply_clip(obj, event):
             near, far = state.clip_depth
@@ -24,9 +23,6 @@ class ClippingController(Controller):
         self.scene.renderWindow.AddObserver("StartEvent", self._clip_observer)
 
         state.change("clip_depth")(self.sync_clip_depth)
-
-        for obj in self.scene.renderables:
-            state[ObjectState.of(obj).clipping] = obj.clipping_enabled
 
         clipping_keys = [
             key
@@ -61,20 +57,31 @@ class ClippingController(Controller):
         self.scene.renderer.GetActiveCamera().SetClippingRange(near, far)
         self.server.controller.view_update()
 
-    def _initialize_clipping_state(self):
-        """Seed the clip panels and range sliders from each object's bounds."""
+    def seed(self):
+        """The depth range, each object's toggle, and its bounds from geometry.
+
+        The depth range has no ``Scene`` field: it is where the camera's own
+        clipping range sits once the pipeline is built, which is the only
+        sensible place for the slider to open.
+        """
+        state = self.server.state
+        state.clip_depth = list(
+            self.scene.renderer.GetActiveCamera().GetClippingRange()
+        )
+
         for obj in self.scene.renderables:
             keys = ObjectState.of(obj)
-            self.server.state[keys.clip_panel] = []
+            state[keys.clipping] = obj.clipping_enabled
+            state[keys.clip_panel] = []
 
             if not obj.actors:
                 continue
 
             bounds = obj.combined_bounds
             for key, low in zip(keys.clip_bounds, (0, 2, 4)):
-                self.server.state[key] = [bounds[low], bounds[low + 1]]
+                state[key] = [bounds[low], bounds[low + 1]]
 
         for volume in self.scene.volumes:
             keys = ObjectState.of(volume)
-            self.server.state[keys.preset] = volume.transfer_function_preset
-            self.server.state[keys.preset_panel] = []
+            state[keys.preset] = volume.transfer_function_preset
+            state[keys.preset_panel] = []

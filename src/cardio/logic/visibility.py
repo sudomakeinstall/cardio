@@ -12,12 +12,7 @@ class VisibilityController(Controller):
 
     def register(self):
         state = self.server.state
-        state.theme_mode = self.scene.view.theme.value
         state.change("theme_mode")(self.sync_background_color)
-        self.apply_background_color(state.theme_mode)
-
-        for obj in self.scene.renderables:
-            state[ObjectState.of(obj).visibility] = obj.visible
 
         visibility_keys = [
             ObjectState.of(obj).visibility for obj in self.scene.renderables
@@ -28,6 +23,14 @@ class VisibilityController(Controller):
         preset_keys = [ObjectState.of(v).preset for v in self.scene.volumes]
         if preset_keys:
             state.change(*preset_keys)(self.sync_volume_presets)
+
+    def seed(self):
+        state = self.server.state
+        state.theme_mode = self.scene.view.theme.value
+        self.apply_background_color(state.theme_mode)
+
+        for obj in self.scene.renderables:
+            state[ObjectState.of(obj).visibility] = obj.visible
 
     def sync_visibility(self, **kwargs):
         """Show or hide each object's current frame, per its visibility toggle."""

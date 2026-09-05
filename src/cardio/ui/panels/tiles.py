@@ -7,8 +7,6 @@ from trame.widgets import vuetify3 as vuetify
 from ..common import TILE_ACTIVE
 from .snap import TRAVERSE_READY
 
-GRID_SIZES = [1, 2, 3, 4, 5, 6]
-
 
 def tiles_panel(server, scene):
     """Entering tile mode, and the shape of the grid once there."""
@@ -37,8 +35,8 @@ def tiles_panel(server, scene):
         for variable, label in (("tile_rows", "Rows"), ("tile_cols", "Columns")):
             with vuetify.VCol(classes="pe-1"):
                 vuetify.VSelect(
-                    v_model=(variable, 3),
-                    items=("tile_sizes", GRID_SIZES),
+                    v_model=(variable,),
+                    items=("tile_sizes",),
                     label=label,
                     hide_details=True,
                     density="compact",

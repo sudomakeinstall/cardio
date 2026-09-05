@@ -33,6 +33,7 @@ from cardio.volume import Volume
 
 SRC_DIR = pl.Path(__file__).parent.parent / "src" / "cardio"
 UI_DIR = SRC_DIR / "ui"
+LOGIC_DIR = SRC_DIR / "logic"
 
 # Bindings whose key is computed rather than named. Listed as source text so a
 # new one shows up here rather than passing unnoticed; the value says which
@@ -230,6 +231,37 @@ def test_session_and_items_keys_carry_a_reason():
     for scope in (registry.Scope.SESSION, registry.Scope.ITEMS):
         for key in registry.keys(scope):
             assert registry.VARIABLES[key].reason.strip()
+
+
+def test_registering_writes_no_state():
+    """The two passes stay two.
+
+    ``register`` declares listeners and controller functions; ``seed`` writes
+    the state. A write that creeps back into ``register`` is state the app
+    would set before the pass that is supposed to set all of it, which is what
+    ``Logic.apply_scene`` exists to rule out -- and it would not fail anywhere
+    else, because at startup the two run one after the other regardless.
+    """
+    offenders = []
+
+    for path in sorted(LOGIC_DIR.rglob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.FunctionDef) and node.name == "register"):
+                continue
+            for inner in ast.walk(node):
+                if not isinstance(inner, ast.Assign):
+                    continue
+                for assigned in inner.targets:
+                    written = isinstance(assigned, (ast.Attribute, ast.Subscript))
+                    if written and _is_state(assigned.value):
+                        offenders.append(
+                            f"{path.name}:{inner.lineno} {ast.unparse(assigned)}"
+                        )
+
+    assert offenders == [], (
+        f"state written from register(); it belongs in seed(): {offenders}"
+    )
 
 
 def test_the_scan_finds_the_ui():

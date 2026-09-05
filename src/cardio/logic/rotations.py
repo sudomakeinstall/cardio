@@ -21,15 +21,6 @@ class RotationController(Controller):
 
     def register(self):
         state = self.server.state
-        state.angle_units_items = [
-            {"text": "Degrees", "value": "degrees"},
-            {"text": "Radians", "value": "radians"},
-        ]
-        state.index_order_items = [
-            {"text": "ITK (X=L, Y=P, Z=S)", "value": "itk"},
-            {"text": "Roma (X=S, Y=P, Z=L)", "value": "roma"},
-        ]
-
         state.change("angle_units")(self.sync_angle_units)
         state.change("index_order")(self.sync_index_order)
 
@@ -40,6 +31,18 @@ class RotationController(Controller):
         controller.remove_rotation_event = self.remove_mpr_rotation
         controller.reset_rotation_angle = self.reset_rotation_angle
         controller.reset_rotations = self.reset_mpr_rotations
+
+    def seed(self):
+        state = self.server.state
+        state.angle_units_items = [
+            {"text": "Degrees", "value": "degrees"},
+            {"text": "Radians", "value": "radians"},
+        ]
+        state.index_order_items = [
+            {"text": "ITK (X=L, Y=P, Z=S)", "value": "itk"},
+            {"text": "Roma (X=S, Y=P, Z=L)", "value": "roma"},
+        ]
+        self.publish(self.scene.mpr_rotation_sequence)
 
     def rotation_sequence(self) -> RotationSequence:
         """The rotation state as its model, validated on the way in.

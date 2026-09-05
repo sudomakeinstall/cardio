@@ -5,7 +5,6 @@ from trame.widgets import html
 from trame.widgets import vuetify3 as vuetify
 
 # Internal
-from ...capture import CaptureFormat
 from ...logic.capture import VIEWPORTS
 from ...state import screenshot_viewport
 
@@ -16,21 +15,6 @@ VIEWPORT_LABELS = {
     "sagittal": "Sagittal",
     "tile": "Tiles",
 }
-
-# What each format is, in the terms that decide between them: a still per
-# frame, one animation, or a series a DICOM viewer can open.
-FORMAT_LABELS = {
-    CaptureFormat.PNG: "PNG stills",
-    CaptureFormat.JPEG: "JPEG stills",
-    CaptureFormat.GIF: "GIF animation",
-    CaptureFormat.MP4: "MP4 animation",
-    CaptureFormat.DICOM_RENDERED: "DICOM (as shown)",
-    CaptureFormat.DICOM_DATA: "DICOM (image data)",
-}
-
-FORMAT_ITEMS = [
-    {"title": FORMAT_LABELS[fmt], "value": fmt.value} for fmt in CaptureFormat
-]
 
 # A viewport can only be captured while the layout is drawing it, so a capture
 # needs one that is both ticked and on screen. A ticked viewport that is not
@@ -49,8 +33,8 @@ def capture_panel(server, scene):
     vuetify.VListSubheader("Format")
     with vuetify.VRow(classes="mx-1 mb-1"):
         vuetify.VSelect(
-            v_model=("capture_format", scene.capture_format.value),
-            items=("capture_formats", FORMAT_ITEMS),
+            v_model=("capture_format",),
+            items=("capture_formats",),
             density="compact",
             hide_details=True,
             classes="mx-1",
@@ -60,10 +44,7 @@ def capture_panel(server, scene):
     with vuetify.VRow(classes="mx-1 mb-1"):
         for key in VIEWPORTS:
             vuetify.VCheckbox(
-                v_model=(
-                    screenshot_viewport(key),
-                    key in scene.screenshot_viewports,
-                ),
+                v_model=(screenshot_viewport(key),),
                 label=VIEWPORT_LABELS[key],
                 hide_details=True,
                 classes="mx-1",
@@ -84,7 +65,7 @@ def capture_panel(server, scene):
 
     vuetify.VProgressLinear(
         v_if="capture_running",
-        model_value=("capture_progress", 0),
+        model_value=("capture_progress",),
         color="info",
         height="6",
         rounded=True,

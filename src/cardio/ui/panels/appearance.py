@@ -18,12 +18,12 @@ CLIP_ICONS = {
 
 def clip_depth_panel(server, scene):
     """The camera's shared near/far range."""
-    near, far = scene.renderer.GetActiveCamera().GetClippingRange()
+    _, far = scene.renderer.GetActiveCamera().GetClippingRange()
 
     vuetify.VListSubheader("Camera Depth Range")
 
     vuetify.VRangeSlider(
-        v_model=("clip_depth", [near, far]),
+        v_model=("clip_depth",),
         label="Near / Far",
         title="Near and far clipping planes of the shared camera",
         classes=SLIDER_CLASS,
@@ -71,7 +71,7 @@ def object_panel(obj, clip_icons):
 
     on_icon, off_icon = clip_icons
     vuetify.VCheckbox(
-        v_model=(keys.clipping, obj.clipping_enabled),
+        v_model=(keys.clipping,),
         on_icon=on_icon,
         off_icon=off_icon,
         classes="mx-1 ml-4",
@@ -115,7 +115,7 @@ def clip_bounds_panel(keys, bounds):
                 for key, axis, low in zip(keys.clip_bounds, "XYZ", (0, 2, 4)):
                     minimum, maximum = bounds[low], bounds[low + 1]
                     vuetify.VRangeSlider(
-                        v_model=(key, [minimum, maximum]),
+                        v_model=(key,),
                         label=f"{axis} Range",
                         classes=SLIDER_CLASS,
                         min=minimum,

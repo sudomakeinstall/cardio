@@ -247,7 +247,7 @@ class TestConfiguredSelection:
         """A controller taken through registration, as Logic takes it."""
         logic = make_logic(segmentation, snap=snap, active_volume_label="")
         logic.snap.register()
-        logic.snap.register_initial_labels()
+        logic.snap.seed()
         return logic
 
     def test_mode_groups_and_slider_are_seeded(self, moving_segmentation):
