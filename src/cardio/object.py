@@ -49,6 +49,12 @@ class Object(pc.BaseModel):
         default=True, description="Whether object is initially visible"
     )
     clipping_enabled: bool = pc.Field(default=True)
+    crop: list[float] | None = pc.Field(
+        default=None,
+        description=(
+            "Crop box as [x0, x1, y0, y1, z0, z1]; the object's own extent when unset"
+        ),
+    )
 
     # The header the first path was read with; None for objects with no image.
     _source: Source | None = pc.PrivateAttr(default=None)
@@ -71,6 +77,20 @@ class Object(pc.BaseModel):
                 "Labels must contain only letters, numbers, and underscores."
             )
 
+        return v
+
+    @pc.field_validator("crop")
+    @classmethod
+    def validate_crop(cls, v: list[float] | None) -> list[float] | None:
+        """A crop box is a low and a high for each of the three axes."""
+        if v is None:
+            return v
+        if len(v) != 6:
+            raise ValueError(
+                f"crop takes 6 bounds, [x0, x1, y0, y1, z0, z1]; got {len(v)}"
+            )
+        if any(low > high for low, high in zip(v[::2], v[1::2])):
+            raise ValueError(f"crop bounds are out of order: {v}")
         return v
 
     @pc.field_validator("pattern")

@@ -77,7 +77,9 @@ class ClippingController(Controller):
             if not obj.actors:
                 continue
 
-            bounds = obj.combined_bounds
+            # The configured crop if there is one, else the object's own extent,
+            # which is the whole of it and so crops nothing.
+            bounds = obj.crop or obj.combined_bounds
             for key, low in zip(keys.clip_bounds, (0, 2, 4)):
                 state[key] = [bounds[low], bounds[low + 1]]
 

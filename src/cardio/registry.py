@@ -17,6 +17,7 @@ import enum
 
 # Internal
 from .state import ObjectState
+from .view import Layout
 
 
 class Scope(enum.StrEnum):
@@ -159,6 +160,18 @@ VARIABLES: dict[str, Variable] = {
 def keys_in_scope(scope: Scope) -> list[str]:
     """Every literal key in ``scope``, sorted."""
     return sorted(key for key, var in VARIABLES.items() if var.scope is scope)
+
+
+# The keys a config and the running state spell differently, and the way back.
+# ``maximized_view`` is the only one: it carries an empty string for the quad
+# view, which a config calls by its name like any other layout.
+TO_CONFIG = {"maximized_view": lambda value: Layout.from_state(value).value}
+
+
+def to_config(key: str, value):
+    """``value`` as the ``Scene`` field behind ``key`` spells it."""
+    convert = TO_CONFIG.get(key)
+    return convert(value) if convert else value
 
 
 def source_of(key: str) -> str:

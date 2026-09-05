@@ -16,6 +16,7 @@ import trame as tm
 import trame.app
 
 # Internal
+from .document import scene_from_state, to_toml
 from .logic import Logic
 from .scene import Scene
 
@@ -89,10 +90,33 @@ class Session:
         self.server.state.ready()
         self.server.controller.finalize_mpr_initialization()
 
+    def scene_now(self) -> Scene:
+        """The scene as the session currently stands, ready to be reopened."""
+        self.logic.camera.publish()
+        return scene_from_state(self.server.state, self.scene)
+
+    def save(self, path) -> pl.Path:
+        """Write the session out as a config file, and say where it went."""
+        path = pl.Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(to_toml(self.scene_now()), encoding="utf-8")
+        return path
+
     def do(self, name: str, **arguments):
-        """Ask for one action, and wait for whatever it started."""
+        """Ask for one action, and wait for whatever it started.
+
+        Inside a state block, as a browser's call arrives: an action mostly
+        writes state, and it is the flush that turns those writes into slices
+        resampled and a preset dropped. Without one the action would go through
+        and almost nothing would come of it.
+        """
         self.ready()
-        until_settled(lambda: self.logic.dispatch(name, **arguments))
+
+        def act():
+            with self.server.state:
+                self.logic.dispatch(name, **arguments)
+
+        until_settled(act)
 
     def run(self, actions) -> None:
         """Ask for a sequence of ``(name, arguments)`` in order.

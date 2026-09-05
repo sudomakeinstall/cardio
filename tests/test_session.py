@@ -84,6 +84,18 @@ def test_the_view_functions_may_have_no_implementation(session):
         assert getattr(session.server.controller, name)() is None
 
 
+def test_an_action_sets_off_the_listeners_it_would_from_a_button(session):
+    """An action mostly writes state; the flush is what comes of it.
+
+    Dragging the window away from a preset is the listener's cue to drop the
+    selection. Without a flush the write would land and nothing would follow
+    it -- no slice resampled, no preset dropped.
+    """
+    session.do("adjust_window_level", window_delta=40.0, level_delta=-10.0)
+
+    assert session.server.state.mpr_window_level_preset is None
+
+
 def test_an_action_reaches_the_state_it_would_from_a_button(session):
     session.do("adjust_window_level", window_delta=10.0, level_delta=-5.0)
 
