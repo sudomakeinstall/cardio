@@ -8,6 +8,7 @@ import time
 from trame.app import asynchronous
 
 # Internal
+from ..action import action, background
 from ..image_quality import (
     FULL_QUALITY,
     FULL_RESOLUTION,
@@ -36,12 +37,6 @@ class PlaybackController(Controller):
         state.change("playback_quality", "playback_resolution")(
             self.sync_playback_image
         )
-
-        controller = self.server.controller
-        controller.increment_frame = self.increment_frame
-        controller.decrement_frame = self.decrement_frame
-        controller.reset_all = self.reset_all
-        controller.close_application = self.close_application
 
     def seed(self):
         """Put the frame and the playback controls where the config starts them."""
@@ -238,16 +233,19 @@ class PlaybackController(Controller):
             self._last_target_frame = None
             self._is_rendering = False
 
+    @action("increment_frame")
     def increment_frame(self):
         if not self.server.state.playing:
             self.server.state.frame = (self.server.state.frame + 1) % self.scene.nframes
             self.server.controller.view_update()
 
+    @action("decrement_frame")
     def decrement_frame(self):
         if not self.server.state.playing:
             self.server.state.frame = (self.server.state.frame - 1) % self.scene.nframes
             self.server.controller.view_update()
 
+    @action("reset_all")
     def reset_all(self):
         """Put playback back where the config starts it.
 
@@ -258,7 +256,8 @@ class PlaybackController(Controller):
         self.seed()
         self.server.controller.view_update()
 
-    @asynchronous.task
+    @action("close_application")
+    @background
     async def close_application(self):
         """Close the application by stopping the server."""
         await self.server.stop()

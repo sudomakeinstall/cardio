@@ -12,6 +12,7 @@ import re
 # Third Party
 import itk
 import numpy as np
+import pydantic as pc
 import pytest
 import trame.app
 import vtk
@@ -166,33 +167,91 @@ def test_volume_and_segmentation_specific_keys_are_registered(read_only_app):
         assert hasattr(server.state, ObjectState.of(seg).mpr_overlay)
 
 
-def test_controller_entry_points_the_ui_binds_all_exist(read_only_app):
-    server, _, _, _ = read_only_app
+# Everything the app can be asked to do. Pinned rather than derived: this is
+# the list a script writes against and a saved action journal reads back, so a
+# name changing is a decision rather than a diff nobody sees.
+ACTIONS = {
+    "add_rotation",
+    "adjust_window_level",
+    "align_to_interface",
+    "close_application",
+    "decrement_frame",
+    "increment_frame",
+    "pan_view",
+    "remove_rotation",
+    "reset_all",
+    "reset_mpr_origin",
+    "reset_rotation_angle",
+    "reset_rotations",
+    "reset_snap",
+    "reset_tile_cameras",
+    "rotate_view",
+    "save_rotation_angles",
+    "screenshot",
+    "scroll_slice",
+    "set_window_level_preset",
+    "snap_to_centroid",
+    "swap_snap_groups",
+    "toggle_crosshairs",
+    "toggle_help",
+    "toggle_maximized",
+    "toggle_metadata",
+    "zoom_tiles",
+    "zoom_views",
+}
 
-    for name in (
-        "increment_frame",
-        "decrement_frame",
-        "screenshot",
-        "save_rotation_angles",
-        "reset_all",
-        "close_application",
-        "finalize_mpr_initialization",
-        "add_x_rotation",
-        "add_y_rotation",
-        "add_z_rotation",
-        "remove_rotation_event",
-        "reset_rotation_angle",
-        "reset_rotations",
-        "reset_mpr_origin",
-        "snap_to_centroid",
-        "align_to_interface",
-        "swap_snap_groups",
-        "reset_snap",
-        "reset_tile_cameras",
-        "view_update",
-        "view_reset_camera",
-    ):
-        assert getattr(server.controller, name) is not None, name
+
+def test_the_registry_holds_every_action(read_only_app):
+    _, _, logic, _ = read_only_app
+    assert set(logic.actions.names) == ACTIONS
+
+
+def test_every_action_is_published_on_the_controller(read_only_app):
+    """Which is what a ``click=`` on a widget reaches for."""
+    server, _, logic, _ = read_only_app
+
+    for name in logic.actions.names:
+        assert callable(getattr(server.controller, name)), name
+
+
+def test_dispatch_checks_its_arguments(read_only_app):
+    _, _, logic, _ = read_only_app
+
+    with pytest.raises(KeyError):
+        logic.dispatch("no_such_action")
+
+    with pytest.raises(pc.ValidationError):
+        logic.dispatch("add_rotation")
+
+    with pytest.raises(pc.ValidationError):
+        logic.dispatch("toggle_maximized", nonsense="axial")
+
+
+def test_an_action_reads_its_arguments_by_name(app):
+    """A gesture dispatched by name does what calling the method would."""
+    server, _, logic, _ = app
+    connect(server)
+
+    with server.state:
+        logic.dispatch("adjust_window_level", window_delta=10.0, level_delta=-5.0)
+
+    assert server.state.mpr_window == pytest.approx(810.0)
+    assert server.state.mpr_level == pytest.approx(195.0)
+
+
+def test_maximizing_a_view_toggles_and_switches(app):
+    """The half of the keyboard shortcut that only the state can decide."""
+    server, _, logic, _ = app
+    connect(server)
+
+    logic.dispatch("toggle_maximized", view="axial")
+    assert server.state.maximized_view == "axial"
+
+    logic.dispatch("toggle_maximized", view="coronal")
+    assert server.state.maximized_view == "coronal"
+
+    logic.dispatch("toggle_maximized", view="coronal")
+    assert server.state.maximized_view == ""
 
 
 def test_mpr_views_are_built_and_shared_with_the_scene(read_only_app):

@@ -7,6 +7,7 @@ import typing as ty
 import numpy as np
 
 # Internal
+from ..action import action
 from ..reslice import TileSet
 from ..segmentation import set_label_opacity
 from ..state import ObjectState
@@ -76,8 +77,6 @@ class TileController(Controller):
         )(self._on_path_changed)
         for seg in self.scene.segmentations:
             state.change(ObjectState.of(seg).mpr_overlay)(self.refresh)
-
-        self.server.controller.reset_tile_cameras = self.reset_cameras
 
     def seed(self):
         state = self.server.state
@@ -163,6 +162,7 @@ class TileController(Controller):
         """Re-tile at the current frame, for any change that alters the cuts."""
         self.update_tiles(self._frame)
 
+    @action("zoom_tiles")
     def zoom_tiles(self, factor: float):
         """Zoom the whole grid, leaving the fit that put the tiles on one scale."""
         views = self.scene.tile_views
@@ -172,6 +172,7 @@ class TileController(Controller):
         views.zoom(factor)
         self.server.controller.view_update()
 
+    @action("reset_tile_cameras")
     def reset_cameras(self, **kwargs):
         """Refit every tile, on demand.
 

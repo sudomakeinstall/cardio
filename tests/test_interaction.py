@@ -1,8 +1,9 @@
-"""Test that view events become the right controller calls.
+"""Test that view events become the right named actions.
 
 This logic sat inside ui.py's 1050-line setup() and had no coverage; the
-arithmetic it used to do now lives on the MPR controller, so the handlers can
-be driven against a recording double.
+arithmetic it used to do now lives on the MPR controller, and which controller
+that is is no longer Interaction's business either -- it names an action and
+dispatches it.
 """
 
 # System
@@ -13,7 +14,6 @@ import pytest
 
 # Internal
 from cardio.ui.interaction import HANDLED_EVENTS, Interaction
-from tests.fakes import FakeState
 
 
 class RecordingMPR:
@@ -49,27 +49,38 @@ class RecordingTiles:
 
 
 class FakeLogic:
+    """Interaction's whole view of Logic: ``dispatch``, and nothing else.
+
+    Every call is recorded by name. A gesture is also played into the recorder
+    that owns it, and the recorders keep the real methods' parameter names --
+    so dispatching an argument an action does not take fails here rather than
+    passing quietly.
+    """
+
     def __init__(self):
         self.mpr = RecordingMPR()
         self.tiles = RecordingTiles()
+        self.calls = []
+
+    def dispatch(self, name, **arguments):
+        self.calls.append((name, arguments))
+        for recorder in (self.mpr, self.tiles):
+            method = getattr(recorder, name, None)
+            if method is not None:
+                method(**arguments)
+
+    @property
+    def names(self):
+        return [name for name, _ in self.calls]
+
+    def arguments(self, name):
+        """What each call to ``name`` was made with, in order."""
+        return [arguments for called, arguments in self.calls if called == name]
 
 
 @pytest.fixture
 def interaction():
-    server = type(
-        "Server",
-        (),
-        {
-            "state": FakeState(
-                mpr_crosshairs_enabled=True,
-                help_overlay_visible=False,
-                metadata_overlay_visible=False,
-                maximized_view="",
-                mpr_window_level_preset=None,
-            )
-        },
-    )()
-    return Interaction(server, FakeLogic())
+    return Interaction(FakeLogic())
 
 
 def press(interaction, key):
@@ -114,51 +125,38 @@ def test_listeners_cover_every_handled_event(interaction):
         ("t", "tile"),
     ],
 )
-def test_maximize_keys_toggle(interaction, key, view):
+def test_maximize_keys_name_the_view_they_maximize(interaction, key, view):
+    """Whether a second press maximizes or restores is the action's business."""
     press(interaction, key)
-    assert interaction.server.state.maximized_view == view
-
-    press(interaction, key)
-    assert interaction.server.state.maximized_view == ""
-
-
-def test_switching_directly_between_maximized_views(interaction):
-    press(interaction, "a")
-    press(interaction, "c")
-    assert interaction.server.state.maximized_view == "coronal"
+    assert interaction.logic.arguments("toggle_maximized") == [{"view": view}]
 
 
 def test_l_toggles_crosshairs_and_h_toggles_help(interaction):
     press(interaction, "l")
-    assert interaction.server.state.mpr_crosshairs_enabled is False
-
     press(interaction, "h")
-    assert interaction.server.state.help_overlay_visible is True
+    assert interaction.logic.names == ["toggle_crosshairs", "toggle_help"]
 
 
 def test_i_toggles_the_metadata_sheet(interaction):
     press(interaction, "i")
-    assert interaction.server.state.metadata_overlay_visible is True
-
-    press(interaction, "i")
-    assert interaction.server.state.metadata_overlay_visible is False
+    assert interaction.logic.arguments("toggle_metadata") == [{}]
 
 
 def test_digit_keys_select_a_window_level_preset(interaction):
     press(interaction, "1")
-    assert interaction.server.state.mpr_window_level_preset == 1
+    assert interaction.logic.arguments("set_window_level_preset") == [{"preset": 1}]
 
 
 def test_a_digit_with_no_preset_is_ignored(interaction):
     """Presets are keyed 1-9; 0 names nothing."""
     press(interaction, "0")
-    assert interaction.server.state.mpr_window_level_preset is None
+    assert interaction.logic.calls == []
 
 
 def test_repeated_keys_are_debounced(interaction):
     interaction.on_event({"type": "KeyPress", "key": "a"})
     interaction.on_event({"type": "KeyPress", "key": "a"})
-    assert interaction.server.state.maximized_view == "axial"
+    assert interaction.logic.arguments("toggle_maximized") == [{"view": "axial"}]
 
 
 def test_left_drag_adjusts_window_and_level(interaction):

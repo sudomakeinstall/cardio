@@ -35,7 +35,7 @@ class UI:
     def __init__(self, server, scene: Scene, logic):
         self.server = server
         self.scene = scene
-        self.interaction = Interaction(server, logic)
+        self.interaction = Interaction(logic)
 
         self.setup()
 

@@ -6,9 +6,9 @@ import datetime as dt
 
 # Third Party
 import pydicom as pd
-from trame.app import asynchronous
 
 # Internal
+from ..action import action, background
 from ..capture import (
     CaptureFormat,
     Context,
@@ -91,9 +91,6 @@ class CaptureController(Controller):
         # greys out the rest; publishing it is what keeps that rule in one place
         # rather than restated as a vue expression.
         self.server.state.change("maximized_view")(self.sync_available)
-
-        self.server.controller.screenshot = self.screenshot
-        self.server.controller.save_rotation_angles = self.save_rotation_angles
 
     def seed(self):
         state = self.server.state
@@ -246,7 +243,8 @@ class CaptureController(Controller):
             state.capture_summary = summary
             state.capture_ok = ok
 
-    @asynchronous.task
+    @action("screenshot")
+    @background
     async def screenshot(self):
         fmt = self.capture_format
         directory = self.scene.screenshot_directory / _now().strftime(
@@ -324,7 +322,8 @@ class CaptureController(Controller):
                 state.capture_running = False
                 state.capture_progress = 0
 
-    @asynchronous.task
+    @action("save_rotation_angles")
+    @background
     async def save_rotation_angles(self):
         """Save current rotation angles to TOML file."""
         timestamp = _now()

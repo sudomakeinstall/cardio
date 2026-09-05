@@ -7,6 +7,7 @@ import math
 import numpy as np
 
 # Internal
+from ..action import action
 from ..reslice import VIEW_TRANSFORMS, ResliceSet
 from ..state import ObjectState
 from ..view import CameraLock, Layout
@@ -87,7 +88,6 @@ class MPRController(Controller):
                 self.sync_segmentation_overlays
             )
 
-        self.server.controller.reset_mpr_origin = self.reset_mpr_origin
         self.server.controller.finalize_mpr_initialization = (
             self.finalize_mpr_initialization
         )
@@ -434,6 +434,7 @@ class MPRController(Controller):
         active_volume.set_crosshairs_visible(visible)
         self.server.controller.view_update()
 
+    @action("reset_mpr_origin")
     def reset_mpr_origin(self):
         active_volume_label = self.server.state.active_volume_label
         active_volume = self._active_volume()
@@ -539,6 +540,7 @@ class MPRController(Controller):
             self.convention.point_from_itk(rotation @ base_normals[view_name])
         )
 
+    @action("scroll_slice")
     def scroll_slice(self, view_name: str, distance: float):
         """Travel ``distance`` out of the plane, or along the traverse path.
 
@@ -563,7 +565,8 @@ class MPRController(Controller):
             origin[i] + distance * step[i] for i in range(3)
         ]
 
-    def rotate_view(self, view_name: str, start, end):
+    @action("rotate_view")
+    def rotate_view(self, view_name: str, start: list[float], end: list[float]):
         """Spin the slice frame by the angle the cursor sweeps about the origin.
 
         The origin sits at the centre of every reslice and the camera looks
@@ -606,6 +609,7 @@ class MPRController(Controller):
         axis, sign = _signed_axis(frame[:, 2])
         self.app.rotations.turn_mouse(axis, sign * hand * degrees)
 
+    @action("zoom_views")
     def zoom_views(self, factor: float):
         """Zoom all three MPR views by ``factor``."""
         views = self.scene.mpr_views
@@ -628,6 +632,7 @@ class MPRController(Controller):
             np.array(self.convention.point_from_itk(frame[:, axis])) for axis in (0, 1)
         )
 
+    @action("pan_view")
     def pan_view(self, view_name: str, dx: float, dy: float):
         """Slide the shared origin within ``view_name``'s own plane.
 
@@ -654,11 +659,23 @@ class MPRController(Controller):
         origin = self.server.state.mpr_origin
         self.server.state.mpr_origin = [origin[i] + step[i] for i in range(3)]
 
+    @action("adjust_window_level")
     def adjust_window_level(self, window_delta: float, level_delta: float):
         """Nudge the MPR window and level, keeping the window positive."""
         state = self.server.state
         state.mpr_window = max(1.0, state.mpr_window + window_delta)
         state.mpr_level = state.mpr_level + level_delta
+
+    @action("set_window_level_preset")
+    def set_window_level_preset(self, preset: int):
+        """Choose one of the named window/level pairs."""
+        self.server.state.mpr_window_level_preset = preset
+
+    @action("toggle_crosshairs")
+    def toggle_crosshairs(self):
+        """Show or hide the lines marking where the other two cuts fall."""
+        state = self.server.state
+        state.mpr_crosshairs_enabled = not state.mpr_crosshairs_enabled
 
     def update_segmentation_opacity(self, **kwargs):
         """Update segmentation overlay opacity."""

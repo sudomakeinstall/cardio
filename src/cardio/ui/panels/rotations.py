@@ -28,21 +28,21 @@ def rotations_panel(server, scene):
         with vuetify.VCol(cols="4"):
             vuetify.VBtn(
                 "X",
-                click=server.controller.add_x_rotation,
+                click=ft.partial(server.controller.add_rotation, "X"),
                 color="primary",
                 title="Add a rotation about X",
             )
         with vuetify.VCol(cols="4"):
             vuetify.VBtn(
                 "Y",
-                click=server.controller.add_y_rotation,
+                click=ft.partial(server.controller.add_rotation, "Y"),
                 color="primary",
                 title="Add a rotation about Y",
             )
         with vuetify.VCol(cols="4"):
             vuetify.VBtn(
                 "Z",
-                click=server.controller.add_z_rotation,
+                click=ft.partial(server.controller.add_rotation, "Z"),
                 color="primary",
                 title="Add a rotation about Z",
             )
@@ -116,10 +116,7 @@ def rotations_panel(server, scene):
                     with vuetify.VCol(cols="auto"):
                         vuetify.VBtn(
                             icon="mdi-delete",
-                            click=ft.partial(
-                                server.controller.remove_rotation_event,
-                                i,
-                            ),
+                            click=ft.partial(server.controller.remove_rotation, i),
                             color="error",
                             title="Remove this rotation",
                             disabled=(

@@ -1,6 +1,7 @@
 """The MPR rotation sequence: the single source of rotation truth."""
 
 # Internal
+from ..action import action
 from ..convention import exchange_point
 from ..orientation import (
     AngleUnits,
@@ -23,14 +24,6 @@ class RotationController(Controller):
         state = self.server.state
         state.change("angle_units")(self.sync_angle_units)
         state.change("index_order")(self.sync_index_order)
-
-        controller = self.server.controller
-        controller.add_x_rotation = lambda: self.add_mpr_rotation("X")
-        controller.add_y_rotation = lambda: self.add_mpr_rotation("Y")
-        controller.add_z_rotation = lambda: self.add_mpr_rotation("Z")
-        controller.remove_rotation_event = self.remove_mpr_rotation
-        controller.reset_rotation_angle = self.reset_rotation_angle
-        controller.reset_rotations = self.reset_mpr_rotations
 
     def seed(self):
         state = self.server.state
@@ -131,7 +124,8 @@ class RotationController(Controller):
         sequence.angles_list = steps
         self.publish(sequence)
 
-    def add_mpr_rotation(self, axis):
+    @action("add_rotation")
+    def add_mpr_rotation(self, axis: str):
         """Append a new Euler rotation about ``axis``."""
 
         def append(steps):
@@ -139,7 +133,8 @@ class RotationController(Controller):
 
         self.edit_steps(append)
 
-    def remove_mpr_rotation(self, index):
+    @action("remove_rotation")
+    def remove_mpr_rotation(self, index: int):
         """Remove the rotation at ``index``."""
 
         def without(steps):
@@ -149,7 +144,8 @@ class RotationController(Controller):
 
         self.edit_steps(without)
 
-    def reset_rotation_angle(self, index):
+    @action("reset_rotation_angle")
+    def reset_rotation_angle(self, index: int):
         """Zero the angle of the rotation at ``index``."""
 
         def zeroed(steps):
@@ -159,6 +155,7 @@ class RotationController(Controller):
 
         self.edit_steps(zeroed)
 
+    @action("reset_rotations")
     def reset_mpr_rotations(self):
         """Drop every rotation, back to a default sequence."""
         self.publish(RotationSequence())

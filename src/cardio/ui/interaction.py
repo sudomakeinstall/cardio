@@ -1,8 +1,8 @@
-"""Turning mouse and keyboard events into controller calls.
+"""Turning mouse and keyboard events into named actions.
 
 This module decides *what the user asked for*, never what it means
-geometrically: the window/level and slice-scroll arithmetic lives on the MPR
-controller, which owns that state.
+geometrically and no longer which controller answers for it: every gesture and
+every key comes out as one ``dispatch`` of an action by name.
 """
 
 # System
@@ -44,8 +44,7 @@ MAXIMIZE_KEYS = {
 class Interaction:
     """Drag and keypress handling for the render views."""
 
-    def __init__(self, server, logic):
-        self.server = server
+    def __init__(self, logic):
         self.logic = logic
 
         self.left_dragging = False
@@ -116,8 +115,10 @@ class Interaction:
                 # a system set to natural scrolling inverts spinY before us
                 spin = event.get("spinY")
                 if spin:
-                    self.logic.mpr.scroll_slice(
-                        view_name, spin * self.wheel_sensitivity
+                    self.logic.dispatch(
+                        "scroll_slice",
+                        view_name=view_name,
+                        distance=spin * self.wheel_sensitivity,
                     )
 
     def _apply_drag(self, view_name, previous, position):
@@ -132,9 +133,10 @@ class Interaction:
         dy = position[1] - previous[1]
 
         if self.left_dragging and not (self.right_dragging or self.middle_dragging):
-            self.logic.mpr.adjust_window_level(
-                -dx * self.window_sensitivity,
-                -dy * self.level_sensitivity,
+            self.logic.dispatch(
+                "adjust_window_level",
+                window_delta=-dx * self.window_sensitivity,
+                level_delta=-dy * self.level_sensitivity,
             )
             return
 
@@ -146,18 +148,24 @@ class Interaction:
             return
 
         if self.middle_dragging and self.left_dragging:
-            self.logic.mpr.rotate_view(view_name, previous, position)
+            self.logic.dispatch(
+                "rotate_view", view_name=view_name, start=previous, end=position
+            )
         elif self.middle_dragging:
-            self.logic.mpr.pan_view(view_name, dx, dy)
+            self.logic.dispatch("pan_view", view_name=view_name, dx=dx, dy=dy)
         elif self.left_dragging and self.right_dragging:
-            self.logic.mpr.scroll_slice(view_name, dy * self.slice_sensitivity)
+            self.logic.dispatch(
+                "scroll_slice",
+                view_name=view_name,
+                distance=dy * self.slice_sensitivity,
+            )
 
     def _zoom(self, view_name, factor):
         """Zoom whichever grid of views the drag is over, all of it together."""
         if view_name == "tile":
-            self.logic.tiles.zoom_tiles(factor)
+            self.logic.dispatch("zoom_tiles", factor=factor)
         elif view_name in MPR_VIEWS:
-            self.logic.mpr.zoom_views(factor)
+            self.logic.dispatch("zoom_views", factor=factor)
 
     def _on_key(self, key):
         """Apply a keyboard shortcut, ignoring repeats inside the debounce."""
@@ -166,19 +174,16 @@ class Interaction:
             return
         self.last_keypress_time[key] = now
 
-        state = self.server.state
-
         if key.isdigit() and int(key) in presets:
-            state.mpr_window_level_preset = int(key)
+            self.logic.dispatch("set_window_level_preset", preset=int(key))
         elif key == "l":
-            state.mpr_crosshairs_enabled = not state.mpr_crosshairs_enabled
+            self.logic.dispatch("toggle_crosshairs")
         elif key == "h":
-            state.help_overlay_visible = not state.help_overlay_visible
+            self.logic.dispatch("toggle_help")
         elif key == "i":
-            state.metadata_overlay_visible = not state.metadata_overlay_visible
+            self.logic.dispatch("toggle_metadata")
         elif key in MAXIMIZE_KEYS:
-            view = MAXIMIZE_KEYS[key]
-            state.maximized_view = "" if state.maximized_view == view else view
+            self.logic.dispatch("toggle_maximized", view=MAXIMIZE_KEYS[key])
 
     def _store_mouse_position(self, view_name, event):
         """Remember where a drag started, so the next move has a delta."""

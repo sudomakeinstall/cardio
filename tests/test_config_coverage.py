@@ -24,7 +24,9 @@ import pydantic as pc
 import pytest
 
 # Internal
+import cardio.logic as logic
 import cardio.registry as registry
+from cardio.action import declared_actions
 from cardio.object import Object
 from cardio.scene import Scene
 from cardio.segmentation import Segmentation
@@ -231,6 +233,69 @@ def test_session_and_items_keys_carry_a_reason():
     for scope in (registry.Scope.SESSION, registry.Scope.ITEMS):
         for key in registry.keys(scope):
             assert registry.VARIABLES[key].reason.strip()
+
+
+# Names the UI reaches for on trame's controller that are not actions: the
+# render views' own methods, which ui/layout.py assigns as it builds them, and
+# the one lifecycle hook.
+VIEW_FUNCTIONS = {
+    "axial_update",
+    "coronal_update",
+    "finalize_mpr_initialization",
+    "on_server_ready",
+    "sagittal_update",
+    "tile_update",
+    "view_reset_camera",
+    "view_update",
+    "volume_update",
+}
+
+
+def _controller_references() -> set[str]:
+    """Every ``…controller.X`` the UI names."""
+    found = set()
+    for path in sorted(UI_DIR.rglob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Attribute)
+                and node.value.attr == "controller"
+            ):
+                found.add(node.attr)
+    return found
+
+
+def _declared_action_names() -> list[str]:
+    """Every action name the controller classes declare, one entry per method."""
+    classes = [
+        value
+        for value in vars(logic).values()
+        if isinstance(value, type) and issubclass(value, logic.Controller)
+    ]
+    return [name for cls in classes for _, name in declared_actions(cls)]
+
+
+def test_every_controller_call_the_ui_makes_is_an_action():
+    """A renamed action would otherwise leave a button calling nothing.
+
+    Trame's controller answers any attribute with a callable that does nothing
+    when nothing is registered, so a stale name on a ``click=`` is silent both
+    at build time and at click time.
+    """
+    unknown = _controller_references() - set(_declared_action_names()) - VIEW_FUNCTIONS
+
+    assert unknown == set(), (
+        f"the UI calls controller functions that no action declares: {sorted(unknown)}"
+    )
+
+
+def test_every_declared_action_name_is_unique():
+    """Two controllers claiming one name would have one silently win."""
+    declared = _declared_action_names()
+    duplicates = sorted({name for name in declared if declared.count(name) > 1})
+
+    assert duplicates == [], f"actions declared more than once: {duplicates}"
 
 
 def test_registering_writes_no_state():

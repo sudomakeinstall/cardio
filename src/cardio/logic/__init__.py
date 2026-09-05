@@ -6,6 +6,7 @@ each owning its own slice of trame state.
 """
 
 # Internal
+from ..action import Registry
 from ..scene import Scene
 from .base import Controller
 from .capture import CaptureController
@@ -61,10 +62,22 @@ class Logic:
         self.tiles = TileController(self)
         self.capture = CaptureController(self)
 
+        self.actions = Registry()
         for controller in self.controllers:
             controller.register()
+            self.actions.add(controller)
+        self.actions.bind(self.server.controller)
 
         self.apply_scene()
+
+    def dispatch(self, name: str, **arguments):
+        """Do the named thing.
+
+        The one way an action is called, whichever asked for it -- a button, a
+        gesture, a script. Anything that has to happen around every action goes
+        here and nowhere else.
+        """
+        return self.actions.dispatch(name, **arguments)
 
     def apply_scene(self):
         """Write every state variable the scene configures.

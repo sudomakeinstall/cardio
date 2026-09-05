@@ -7,6 +7,7 @@ import logging
 import numpy as np
 
 # Internal
+from ..action import action
 from ..orientation import (
     axcode_transform_matrix,
     rotation_matrix_to_quaternion,
@@ -61,11 +62,6 @@ class SnapController(Controller):
         state.change("snap_traverse")(self._on_snap_traverse_changed)
         state.change("snap_locked")(self._on_snap_lock_changed)
         state.change("snap_orientation_locked")(self._on_snap_orientation_lock_changed)
-
-        self.server.controller.snap_to_centroid = self.snap_to_centroid
-        self.server.controller.align_to_interface = self.align_to_interface
-        self.server.controller.swap_snap_groups = self.swap_groups
-        self.server.controller.reset_snap = self.reset
 
     def seed(self):
         """The selection, the pickers it is filtered against, and the locks.
@@ -277,6 +273,7 @@ class SnapController(Controller):
         blend = (1.0 - fraction) * np.asarray(start) + fraction * np.asarray(end)
         return [float(v) for v in blend]
 
+    @action("snap_to_centroid")
     def snap_to_centroid(self, **kwargs):
         if self._snap_selection() is None:
             return
@@ -290,6 +287,7 @@ class SnapController(Controller):
         self.server.state.snap_no_interface = False
         self.app.mpr.set_origin(center)
 
+    @action("reset_snap")
     def reset(self, **kwargs):
         """Put the panel back the way the config asks for, and undo what it did.
 
@@ -528,6 +526,7 @@ class SnapController(Controller):
 
         self.app.rotations.edit_steps(with_alignment)
 
+    @action("swap_snap_groups")
     def swap_groups(self, **kwargs):
         """Reverse the selection, and with it the interface normal.
 
@@ -573,6 +572,7 @@ class SnapController(Controller):
             return
         self.align_to_interface()
 
+    @action("align_to_interface")
     def align_to_interface(self, **kwargs):
         """Rotate the MPR views into the plane the current selection names."""
         state = self.server.state
