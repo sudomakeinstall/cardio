@@ -111,16 +111,11 @@ class MPRController(Controller):
 
         state.mpr_origin = list(self.scene.mpr_origin)
         state.mpr_crosshairs_enabled = self.scene.mpr_crosshairs_enabled
+        # Already reconciled with the preset by the scene, so this is a copy
+        # rather than a decision, and the views need not exist to make it.
         state.mpr_window = self.scene.mpr_window
         state.mpr_level = self.scene.mpr_level
         state.mpr_window_level_preset = self.scene.mpr_window_level_preset
-
-        # Set the values the preset implies without driving the views, which
-        # may not exist yet.
-        if self.scene.mpr_window_level_preset in presets:
-            preset = presets[self.scene.mpr_window_level_preset]
-            state.mpr_window = preset.window
-            state.mpr_level = preset.level
 
         state.mpr_segmentation_opacity = self.scene.mpr_segmentation_opacity
         for seg in self.scene.segmentations:

@@ -12,17 +12,14 @@ from cardio.playback import Playback
 from cardio.scene import Scene
 from cardio.snap import Snap, SnapMode
 from cardio.view import CameraLock, DrawerSection, Layout, Theme, View
+from cardio.window_level import presets
 
 
 def scene_from_toml(tmp_path, body: str, **overrides) -> Scene:
     """A Scene loaded from a TOML file, as the ``--config`` argument loads one."""
     path = tmp_path / "cfg.toml"
     path.write_text(body)
-    Scene._config_file = path
-    try:
-        return Scene(**overrides)
-    finally:
-        del Scene._config_file
+    return Scene.load(config_file=path, **overrides)
 
 
 def test_defaults_are_an_empty_label_mode_selection():
@@ -285,3 +282,65 @@ def test_a_misspelled_object_key_is_rejected(tmp_path, kind):
             tmp_path,
             f'[[{kind}]]\nlabel = "obj"\ndirectory = "."\nmpr_overlays = true\n',
         )
+
+
+# --- the window and level -----------------------------------------------------
+#
+# A preset is a window and a level, so a config can name it or them, and used
+# to be able to name both -- with the preset winning silently, whichever the
+# author had actually meant.
+
+
+def test_the_default_preset_supplies_the_default_window_and_level():
+    scene = Scene()
+
+    assert scene.mpr_window_level_preset == 7
+    assert (scene.mpr_window, scene.mpr_level) == (
+        presets[7].window,
+        presets[7].level,
+    )
+
+
+def test_a_configured_preset_supplies_the_window_and_level(tmp_path):
+    scene = scene_from_toml(tmp_path, "mpr_window_level_preset = 4\n")
+
+    assert (scene.mpr_window, scene.mpr_level) == (
+        presets[4].window,
+        presets[4].level,
+    )
+
+
+def test_a_configured_window_and_level_are_kept(tmp_path):
+    """They used to be overwritten by the preset nobody had asked for."""
+    scene = scene_from_toml(tmp_path, "mpr_window = 1234.0\nmpr_level = 56.0\n")
+
+    assert (scene.mpr_window, scene.mpr_level) == (1234.0, 56.0)
+
+
+def test_a_configured_window_and_level_drop_the_default_preset(tmp_path):
+    """The values no longer answer to a preset, so none is selected."""
+    scene = scene_from_toml(tmp_path, "mpr_window = 1234.0\nmpr_level = 56.0\n")
+
+    assert scene.mpr_window_level_preset is None
+
+
+def test_a_window_and_level_that_match_the_preset_keep_it(tmp_path):
+    scene = scene_from_toml(
+        tmp_path,
+        f"mpr_window = {presets[7].window}\nmpr_level = {presets[7].level}\n",
+    )
+
+    assert scene.mpr_window_level_preset == 7
+
+
+def test_naming_both_and_disagreeing_is_refused(tmp_path):
+    with pytest.raises(pc.ValidationError, match="one or the other"):
+        scene_from_toml(tmp_path, "mpr_window = 1234.0\nmpr_window_level_preset = 4\n")
+
+
+def test_only_one_of_the_pair_is_enough_to_drop_the_preset(tmp_path):
+    """Half a pair still contradicts the preset that names both."""
+    scene = scene_from_toml(tmp_path, "mpr_window = 1234.0\n")
+
+    assert scene.mpr_window_level_preset is None
+    assert scene.mpr_window == 1234.0

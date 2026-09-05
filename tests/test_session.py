@@ -133,8 +133,8 @@ def test_a_config_file_is_the_scene(tmp_path):
     config.write_text(
         "\n".join(
             [
-                # Not mpr_window: the window/level preset is configured too, and
-                # seeding lets the preset have the last word.
+                "mpr_window = 1234.0",
+                "mpr_level = 56.0",
                 "mpr_segmentation_opacity = 0.25",
                 "tile_rows = 2",
                 "tile_cols = 4",
@@ -153,6 +153,8 @@ def test_a_config_file_is_the_scene(tmp_path):
     session.ready()
 
     assert session.server.state.mpr_segmentation_opacity == 0.25
+    assert session.server.state.mpr_window == 1234.0
+    assert session.server.state.mpr_level == 56.0
     assert session.server.state.tile_rows == 2
     assert session.server.state.tile_cols == 4
     assert session.server.state.theme_mode == "light"

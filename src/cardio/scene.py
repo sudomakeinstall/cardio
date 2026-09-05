@@ -18,6 +18,7 @@ from .tile_views import TileViews
 from .types import RGBColor
 from .view import View
 from .volume import Volume
+from .window_level import presets
 
 logger = logging.getLogger(__name__)
 
@@ -142,8 +143,12 @@ class Scene(ps.BaseSettings):
     mpr_level: float = pc.Field(
         default=200.0, description="Window level for MPR image display"
     )
-    mpr_window_level_preset: int = pc.Field(
-        default=7, description="Window/level preset key for MPR views"
+    mpr_window_level_preset: int | None = pc.Field(
+        default=7,
+        description=(
+            "Window/level preset key for MPR views, or none for a window and "
+            "level of their own"
+        ),
     )
     mpr_rotation_sequence: RotationSequence = pc.Field(
         default_factory=RotationSequence,
@@ -248,6 +253,41 @@ class Scene(ps.BaseSettings):
             if self.mpr_rotation_sequence.mpr_origin:
                 self.mpr_origin = list(self.mpr_rotation_sequence.mpr_origin)
 
+        return self
+
+    @pc.model_validator(mode="after")
+    def resolve_window_level(self):
+        """Reconcile the window and level with the preset that also names one.
+
+        A preset is a window and a level, so a config giving both is saying the
+        same thing twice. Given only the preset, it supplies the pair; given
+        only the pair, the selection is dropped, the values no longer answering
+        to a preset; given both, in disagreement, the config is wrong and says
+        so rather than having one quietly win -- which is what used to happen,
+        and the pair was what lost.
+        """
+        preset = presets.get(self.mpr_window_level_preset)
+        if preset is None:
+            return self
+
+        chosen = {"mpr_window", "mpr_level"} & self.model_fields_set
+        if not chosen or (self.mpr_window, self.mpr_level) == (
+            preset.window,
+            preset.level,
+        ):
+            self.mpr_window = preset.window
+            self.mpr_level = preset.level
+            return self
+
+        if "mpr_window_level_preset" in self.model_fields_set:
+            raise ValueError(
+                f"mpr_window_level_preset {self.mpr_window_level_preset} is "
+                f"{preset.name}, window {preset.window} level {preset.level}, "
+                f"but mpr_window/mpr_level say {self.mpr_window}/{self.mpr_level}. "
+                "Configure one or the other."
+            )
+
+        self.mpr_window_level_preset = None
         return self
 
     # VTK objects as private attributes
