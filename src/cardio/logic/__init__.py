@@ -6,7 +6,9 @@ each owning its own slice of trame state.
 """
 
 # Internal
-from ..action import Registry
+import cardio.registry as registry
+
+from ..action import Journal, Registry
 from ..scene import Scene
 from .base import Controller
 from .capture import CaptureController
@@ -62,13 +64,18 @@ class Logic:
         self.tiles = TileController(self)
         self.capture = CaptureController(self)
 
-        self.actions = Registry()
+        self.journal = Journal(server.state, self.document_keys)
+        self.actions = Registry(self.journal)
         for controller in self.controllers:
             controller.register()
             self.actions.add(controller)
         self.actions.bind(self.server.controller)
 
         self.apply_scene()
+
+    def document_keys(self) -> list[str]:
+        """Every state key that says what the app is showing."""
+        return registry.document_keys(self.scene)
 
     def dispatch(self, name: str, **arguments):
         """Do the named thing.

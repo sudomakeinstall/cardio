@@ -11,6 +11,8 @@ is defined, and that ``Registry`` is the one thing that calls it.
 """
 
 # System
+import contextlib as cl
+import copy
 import dataclasses as dc
 import functools as ft
 import inspect
@@ -79,14 +81,112 @@ class Action:
     call: ty.Callable
     arguments: type[pc.BaseModel]
 
-    def __call__(self, **arguments):
+    def bind(self, positional, keyword) -> dict:
+        """The call's arguments by name, checked against the model.
+
+        A widget passes them positionally and a script passes them by name, and
+        what is recorded should not depend on which. Only the positions are
+        resolved here; everything else is left to the model, which says what
+        was expected rather than merely that something was wrong.
+        """
+        names = list(self.arguments.model_fields)
+        if len(positional) > len(names):
+            raise TypeError(
+                f"{self.name} takes {len(names)} arguments, given {len(positional)}"
+            )
+
+        arguments = dict(zip(names, positional)) | dict(keyword)
         validated = self.arguments(**arguments)
-        return self.call(
-            **{
-                field: getattr(validated, field)
-                for field in self.arguments.model_fields
-            }
+        return {field: getattr(validated, field) for field in names}
+
+    def __call__(self, *positional, **keyword):
+        return self.call(**self.bind(positional, keyword))
+
+
+@dc.dataclass(frozen=True)
+class Change:
+    """What one action did: the document keys it moved, and where from.
+
+    ``before`` and ``after`` hold only the keys that actually differ. Restoring
+    ``before`` and flushing redraws the old picture, because the render follows
+    the state through the change listeners rather than being kept beside it.
+    """
+
+    action: str
+    arguments: dict
+    before: dict
+    after: dict
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.before or self.after)
+
+
+def same(one, other) -> bool:
+    """Whether two state values are the same one.
+
+    Some of them are arrays, which do not answer ``==`` with a bool.
+    """
+    if one is other:
+        return True
+    try:
+        return bool(one == other)
+    except (ValueError, TypeError):
+        return repr(one) == repr(other)
+
+
+class Journal:
+    """Watches what each action changes, for whoever wants to know.
+
+    Every action is compared with itself: the document keys before it ran, and
+    the same keys once the change listeners it set off have settled -- which is
+    why the action runs inside a state block, so that the flush happens before
+    the second look rather than after it.
+
+    While nothing is watching, no comparison is made and no state block is
+    opened: an action runs exactly as it did before there was a journal at all.
+    """
+
+    def __init__(self, state, keys: ty.Callable[[], ty.Iterable[str]]):
+        self._state = state
+        self._keys = keys
+        self._listeners: list[ty.Callable[[Change], None]] = []
+
+    @property
+    def watched(self) -> bool:
+        return bool(self._listeners)
+
+    def watch(self, listener) -> None:
+        """Be told about every action, whether or not it changed anything."""
+        self._listeners.append(listener)
+
+    def unwatch(self, listener) -> None:
+        self._listeners.remove(listener)
+
+    def snapshot(self) -> dict:
+        """The document as it stands, copied so that later writes cannot reach it."""
+        return {key: copy.deepcopy(self._state[key]) for key in self._keys()}
+
+    @cl.contextmanager
+    def record(self, name: str, arguments: dict):
+        if not self.watched:
+            yield
+            return
+
+        before = self.snapshot()
+        with self._state:
+            yield
+        after = self.snapshot()
+
+        moved = [key for key in after if not same(before.get(key), after[key])]
+        change = Change(
+            action=name,
+            arguments=arguments,
+            before={key: before[key] for key in moved},
+            after={key: after[key] for key in moved},
         )
+        for listener in list(self._listeners):
+            listener(change)
 
 
 def declared_actions(cls) -> list[tuple[str, str]]:
@@ -108,8 +208,9 @@ def declared_actions(cls) -> list[tuple[str, str]]:
 class Registry:
     """Every action the app has, and the one way any of them is called."""
 
-    def __init__(self):
+    def __init__(self, journal: Journal | None = None):
         self._actions: dict[str, Action] = {}
+        self.journal = journal
 
     def add(self, owner) -> None:
         """Register every action ``owner``'s class declares."""
@@ -120,15 +221,32 @@ class Registry:
             self._actions[name] = Action(name, method, parameter_model(name, method))
 
     def bind(self, controller) -> None:
-        """Publish the actions on trame's controller, which is what the UI calls."""
-        for name, entry in self._actions.items():
-            setattr(controller, name, entry.call)
+        """Publish the actions on trame's controller, which is what the UI calls.
 
-    def dispatch(self, name: str, **arguments):
+        What is published is the same entry point a script reaches, so that a
+        button press is recorded like anything else rather than going round the
+        back of the journal.
+        """
+        for name in self._actions:
+            setattr(controller, name, ft.partial(self.run, name))
+
+    def run(self, name: str, *positional, **keyword):
         """Do the named thing, with its arguments checked against its signature."""
         if name not in self._actions:
             raise KeyError(f"No such action: {name!r}. Known: {', '.join(self.names)}")
-        return self._actions[name](**arguments)
+
+        entry = self._actions[name]
+        arguments = entry.bind(positional, keyword)
+
+        if self.journal is None:
+            return entry.call(**arguments)
+
+        with self.journal.record(name, arguments):
+            return entry.call(**arguments)
+
+    def dispatch(self, name: str, **arguments):
+        """Do the named thing, named arguments only."""
+        return self.run(name, **arguments)
 
     @property
     def names(self) -> list[str]:

@@ -15,6 +15,9 @@ lives here, where the application can read it too.
 import dataclasses as dc
 import enum
 
+# Internal
+from .state import ObjectState
+
 
 class Scope(enum.StrEnum):
     """What a variable is, for the parts of the app that treat state in bulk."""
@@ -152,7 +155,7 @@ VARIABLES: dict[str, Variable] = {
 }
 
 
-def keys(scope: Scope) -> list[str]:
+def keys_in_scope(scope: Scope) -> list[str]:
     """Every literal key in ``scope``, sorted."""
     return sorted(key for key, var in VARIABLES.items() if var.scope is scope)
 
@@ -160,6 +163,19 @@ def keys(scope: Scope) -> list[str]:
 def source_of(key: str) -> str:
     """The dotted ``Scene`` field ``key`` is seeded from, empty if it has none."""
     return VARIABLES[key].source
+
+
+def document_keys(scene) -> list[str]:
+    """Every key that says what ``scene`` is currently showing.
+
+    What a saved session writes down and what an undo puts back. The literal
+    keys are the same whatever the scene holds; the rest are per object, so the
+    scene is the only thing that can say what they are.
+    """
+    keys = keys_in_scope(Scope.DOCUMENT)
+    for obj in scene.renderables:
+        keys.extend(ObjectState.of(obj).document_keys)
+    return keys
 
 
 # Which field on the object model seeds each of ObjectState's per-object keys.

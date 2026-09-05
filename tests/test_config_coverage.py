@@ -207,7 +207,7 @@ def test_every_computed_binding_is_accounted_for():
     )
 
 
-@pytest.mark.parametrize("key", registry.keys(registry.Scope.DOCUMENT))
+@pytest.mark.parametrize("key", registry.keys_in_scope(registry.Scope.DOCUMENT))
 def test_document_keys_name_a_real_scene_field(key):
     assert _resolve(Scene, registry.source_of(key)) is not None
 
@@ -231,7 +231,7 @@ def test_object_sources_name_real_object_state_keys():
 
 def test_session_and_items_keys_carry_a_reason():
     for scope in (registry.Scope.SESSION, registry.Scope.ITEMS):
-        for key in registry.keys(scope):
+        for key in registry.keys_in_scope(scope):
             assert registry.VARIABLES[key].reason.strip()
 
 

@@ -108,6 +108,22 @@ def app(scene):
     return build_app(scene)
 
 
+def document(server, logic) -> dict:
+    """Every key that says what the app is showing, as text.
+
+    Text because the values include arrays, which do not answer ``==`` with a
+    bool.
+    """
+    return {key: repr(server.state[key]) for key in logic.document_keys()}
+
+
+def _delta(before: dict, after: dict) -> dict:
+    """What moved between two documents, as ``key: (from, to)``."""
+    return {
+        key: (before[key], after[key]) for key in after if before[key] != after[key]
+    }
+
+
 def snapshot(state) -> str:
     """Every state value, as text.
 
@@ -237,6 +253,119 @@ def test_an_action_reads_its_arguments_by_name(app):
 
     assert server.state.mpr_window == pytest.approx(810.0)
     assert server.state.mpr_level == pytest.approx(195.0)
+
+
+# One action per shape of call: no arguments, one, several, and ones that
+# cascade through the change listeners into other document keys.
+EQUIVALENT = [
+    ("snap_to_centroid", {}, lambda logic: logic.snap.snap_to_centroid),
+    ("toggle_crosshairs", {}, lambda logic: logic.mpr.toggle_crosshairs),
+    ("add_rotation", {"axis": "Z"}, lambda logic: logic.rotations.add_mpr_rotation),
+    (
+        "adjust_window_level",
+        {"window_delta": 10.0, "level_delta": -5.0},
+        lambda logic: logic.mpr.adjust_window_level,
+    ),
+    (
+        "pan_view",
+        {"view_name": "axial", "dx": 3.0, "dy": -2.0},
+        lambda logic: logic.mpr.pan_view,
+    ),
+]
+
+
+def test_dispatching_is_the_same_as_calling_the_method(tmp_path_factory):
+    """While nothing is watching, the journal is not in the way.
+
+    The boundary is there for undo and for a saved action log to hook into. It
+    is worth nothing if switching it on is the first time anyone finds out that
+    it changed what the actions do, so this pins the two against each other
+    while it is off.
+
+    Two builds kept in step and each compared with itself, rather than compared
+    outright: the rotation metadata stamps the moment it was built, and an
+    action that edits the sequence carries that stamp with it. It is the
+    sharper claim anyway -- the change dispatching makes is the change calling
+    makes.
+    """
+    stamped = {"mpr_rotation_sequence": {"metadata": {"timestamp": "pinned"}}}
+    called = build_app(build_scene(tmp_path_factory.mktemp("called"), **stamped))
+    dispatched = build_app(
+        build_scene(tmp_path_factory.mktemp("dispatched"), **stamped)
+    )
+
+    for server, _, logic, _ in (called, dispatched):
+        connect(server)
+        assert not logic.journal.watched
+
+    for name, arguments, method in EQUIVALENT:
+        was = [document(server, logic) for server, _, logic, _ in (called, dispatched)]
+
+        with called[0].state:
+            method(called[2])(**arguments)
+        with dispatched[0].state:
+            dispatched[2].dispatch(name, **arguments)
+
+        now = [document(server, logic) for server, _, logic, _ in (called, dispatched)]
+        assert _delta(was[1], now[1]) == _delta(was[0], now[0]), name
+
+
+def test_a_watched_action_reports_what_it_moved(app):
+    """Including the keys the change listeners moved on its behalf.
+
+    Window and level are what the drag writes; the preset selection it departs
+    from is cleared by the listener, on the flush the journal holds open.
+    """
+    server, _, logic, _ = app
+    connect(server)
+
+    changes = []
+    logic.journal.watch(changes.append)
+    logic.dispatch("adjust_window_level", window_delta=10.0, level_delta=-5.0)
+
+    (change,) = changes
+    assert change.action == "adjust_window_level"
+    assert set(change.before) == {"mpr_window", "mpr_level", "mpr_window_level_preset"}
+    assert change.after["mpr_window_level_preset"] is None
+
+
+UNDOABLE = [
+    ("adjust_window_level", {"window_delta": 10.0, "level_delta": -5.0}),
+    ("add_rotation", {"axis": "Z"}),
+    ("toggle_crosshairs", {}),
+    ("scroll_slice", {"view_name": "axial", "distance": 2.0}),
+    ("set_window_level_preset", {"preset": 3}),
+]
+
+
+def test_writing_a_change_back_puts_the_document_where_it_was(app):
+    """The assumption the whole design rests on.
+
+    Undo can be a snapshot rather than a hand-written inverse per action only
+    if the document is the whole of what an action moves -- if writing the old
+    values back and flushing is enough to get the old picture. Almost nothing
+    here is drawn from anything but state, so it is; the camera is the
+    exception, and it is not yet in the document at all.
+
+    Each action is undone before the next runs, so the app is back at the same
+    place every time round.
+    """
+    server, _, logic, _ = app
+    connect(server)
+
+    changes = []
+    logic.journal.watch(changes.append)
+
+    for name, arguments in UNDOABLE:
+        before = document(server, logic)
+        logic.dispatch(name, **arguments)
+        assert changes[-1].changed, f"{name} moved nothing, so nothing was tested"
+
+        with server.state:
+            for key, value in changes[-1].before.items():
+                server.state[key] = value
+
+        assert document(server, logic) == before, name
 
 
 def test_maximizing_a_view_toggles_and_switches(app):
