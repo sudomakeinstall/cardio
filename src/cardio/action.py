@@ -143,13 +143,27 @@ class Journal:
     why the action runs inside a state block, so that the flush happens before
     the second look rather than after it.
 
-    While nothing is watching, no comparison is made and no state block is
-    opened: an action runs exactly as it did before there was a journal at all.
+    Not all of the document is written down as it happens -- a camera moves
+    under VTK's own trackball, telling nobody -- so ``refresh`` is the chance to
+    put that right. It runs at the end of an action and not at the start,
+    deliberately: what the document held before is what the last action left
+    it holding, and a drag that happened in between is that action's doing to
+    undo, not this one's to be told about too late.
+
+    While nothing is watching, no comparison is made, nothing is refreshed and
+    no state block is opened: an action runs exactly as it did before there was
+    a journal at all.
     """
 
-    def __init__(self, state, keys: ty.Callable[[], ty.Iterable[str]]):
+    def __init__(
+        self,
+        state,
+        keys: ty.Callable[[], ty.Iterable[str]],
+        refresh: ty.Callable[[], None] | None = None,
+    ):
         self._state = state
         self._keys = keys
+        self._refresh = refresh or (lambda: None)
         self._listeners: list[ty.Callable[[Change], None]] = []
 
     @property
@@ -157,7 +171,13 @@ class Journal:
         return bool(self._listeners)
 
     def watch(self, listener) -> None:
-        """Be told about every action, whether or not it changed anything."""
+        """Be told about every action, whether or not it changed anything.
+
+        Nothing is refreshed while nothing is watching, so the first thing to
+        watch brings the document up to date rather than inheriting whatever
+        was last written down.
+        """
+        self._refresh()
         self._listeners.append(listener)
 
     def unwatch(self, listener) -> None:
@@ -176,6 +196,10 @@ class Journal:
         before = self.snapshot()
         with self._state:
             yield
+            # Inside the block, so that anything the refresh writes is flushed
+            # with the rest rather than left pending for a later action.
+            self._refresh()
+
         after = self.snapshot()
 
         moved = [key for key in after if not same(before.get(key), after[key])]

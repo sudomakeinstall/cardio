@@ -27,6 +27,10 @@ HANDLED_EVENTS = [
 
 MPR_VIEWS = {"axial", "sagittal", "coronal"}
 
+# The one view whose drags VTK handles itself, turning the camera with its own
+# trackball. Nothing tells us it moved, so the release is when we go and look.
+TRACKBALL_VIEW = "volume"
+
 # Views a drag means something in. The tile grid takes window/level but not the
 # slice scroll, which has no single slice to move.
 DRAG_VIEWS = MPR_VIEWS | {"tile"}
@@ -88,6 +92,7 @@ class Interaction:
 
             case "LeftButtonRelease":
                 self.left_dragging = False
+                self._note_camera(view_name)
 
             case "RightButtonPress":
                 self.right_dragging = True
@@ -95,6 +100,7 @@ class Interaction:
 
             case "RightButtonRelease":
                 self.right_dragging = False
+                self._note_camera(view_name)
 
             case "MiddleButtonPress":
                 self.middle_dragging = True
@@ -102,6 +108,7 @@ class Interaction:
 
             case "MiddleButtonRelease":
                 self.middle_dragging = False
+                self._note_camera(view_name)
 
             case "MouseMove" if (
                 self.left_dragging or self.right_dragging or self.middle_dragging
@@ -120,6 +127,11 @@ class Interaction:
                         view_name=view_name,
                         distance=spin * self.wheel_sensitivity,
                     )
+
+    def _note_camera(self, view_name):
+        """Write down where a trackball drag left the camera."""
+        if view_name == TRACKBALL_VIEW:
+            self.logic.dispatch("place_camera")
 
     def _apply_drag(self, view_name, previous, position):
         """One gesture per button combination.

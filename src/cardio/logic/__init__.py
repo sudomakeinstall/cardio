@@ -11,6 +11,7 @@ import cardio.registry as registry
 from ..action import Journal, Registry
 from ..scene import Scene
 from .base import Controller
+from .camera import CameraController
 from .capture import CaptureController
 from .clipping import ClippingController
 from .mpr import MPRController
@@ -23,6 +24,7 @@ from .visibility import VisibilityController
 
 __all__ = [
     "ALIGN_STEP_NAME",
+    "CameraController",
     "CaptureController",
     "ClippingController",
     "Controller",
@@ -63,8 +65,11 @@ class Logic:
         self.clipping = ClippingController(self)
         self.tiles = TileController(self)
         self.capture = CaptureController(self)
+        self.camera = CameraController(self)
 
-        self.journal = Journal(server.state, self.document_keys)
+        self.journal = Journal(
+            server.state, self.document_keys, refresh=self.camera.publish
+        )
         self.actions = Registry(self.journal)
         for controller in self.controllers:
             controller.register()
@@ -100,9 +105,10 @@ class Logic:
     def controllers(self) -> list[Controller]:
         """The controllers, in the order they register and then seed.
 
-        ``snap`` is last because a configured lock snaps the moment it is
+        ``snap`` is late because a configured lock snaps the moment it is
         seeded, which reads the origin, the rotation and the frame that the
-        controllers above it write.
+        controllers above it write; ``camera`` is last because it reads where
+        every camera ended up once all of that has happened.
         """
         return [
             self.view,
@@ -114,4 +120,5 @@ class Logic:
             self.tiles,
             self.capture,
             self.snap,
+            self.camera,
         ]

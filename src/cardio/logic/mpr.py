@@ -460,6 +460,10 @@ class MPRController(Controller):
         # Apply loaded rotation data to MPR views
         self.update_mpr_rotation()
 
+        # The moment the views are real, which is when a configured camera pose
+        # finally has something to point.
+        self.app.camera.install_configured()
+
     def _current_pose(self):
         """The origin and rotation the cuts are aimed by, both in ITK."""
         return (

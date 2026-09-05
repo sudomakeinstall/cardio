@@ -194,6 +194,7 @@ ACTIONS = {
     "decrement_frame",
     "increment_frame",
     "pan_view",
+    "place_camera",
     "remove_rotation",
     "reset_all",
     "reset_mpr_origin",

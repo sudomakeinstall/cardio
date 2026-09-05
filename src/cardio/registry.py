@@ -85,6 +85,7 @@ DOCUMENT = _document(
     bpm="playback.bpm",
     bpr="playback.bpr",
     camera_lock="view.camera_lock",
+    cameras="view.cameras",
     capture_format="capture_format",
     drawer_sections="view.drawer_sections",
     frame="current_frame",

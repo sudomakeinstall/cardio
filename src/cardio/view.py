@@ -6,6 +6,9 @@ import enum
 # Third Party
 import pydantic as pc
 
+# Internal
+from .camera import Cameras
+
 # The value ``maximized_view`` carries for the unmaximized quad view. Spelled
 # once here rather than as a bare "" at every site that means it.
 QUAD_LAYOUT = ""
@@ -127,6 +130,13 @@ class View(pc.BaseModel):
     metadata_visible: bool = pc.Field(
         default=False,
         description="Open with the scene metadata dialog showing. CLI usage: --view.metadata_visible true",
+    )
+    cameras: Cameras = pc.Field(
+        default_factory=Cameras,
+        description=(
+            "Where each camera is looking. Left unset, they open wherever "
+            "fitting the scene puts them."
+        ),
     )
 
     @property
