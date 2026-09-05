@@ -8,6 +8,7 @@ from .mesh import Mesh
 from .object import Object
 from .scene import Scene
 from .segmentation import Segmentation
+from .session import Session
 from .ui import UI
 from .volume import Volume
 from .volume_property_presets import (
@@ -22,6 +23,7 @@ __all__ = [
     "Object",
     "Scene",
     "Segmentation",
+    "Session",
     "Volume",
     "list_volume_property_presets",
     "load_volume_property_preset",

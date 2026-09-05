@@ -109,7 +109,11 @@ class UI:
                 capture_panel(self.server, self.scene)
 
     def _update_all_mpr_views(self, **kwargs):
-        """Push a new frame to whichever views the layout created."""
+        """Push a new frame to every view.
+
+        The ones this layout did not build have no implementation and do
+        nothing, which Logic is what says is allowed.
+        """
         controller = self.server.controller
         for name in (
             "axial_update",
@@ -118,5 +122,4 @@ class UI:
             "volume_update",
             "tile_update",
         ):
-            if hasattr(controller, name):
-                getattr(controller, name)()
+            getattr(controller, name)()

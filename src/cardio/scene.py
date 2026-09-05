@@ -69,6 +69,22 @@ class Scene(ps.BaseSettings):
     )
 
     @classmethod
+    def load(cls, config_file=None, cli_source=None, **overrides) -> "Scene":
+        """Build a scene from a config file, the command line, or neither.
+
+        Which sources are read is decided in ``settings_customise_sources``,
+        which pydantic calls with nothing passed in, so they are handed over as
+        class attributes and taken away again.
+        """
+        cls._cli_source = cli_source
+        cls._config_file = config_file
+        try:
+            return cls(**overrides)
+        finally:
+            del cls._cli_source
+            del cls._config_file
+
+    @classmethod
     def settings_customise_sources(
         cls,
         settings_cls,

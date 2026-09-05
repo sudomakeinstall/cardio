@@ -5,7 +5,6 @@ expectation about where a cut landed can be computed rather than recorded.
 """
 
 # System
-import asyncio
 import pathlib as pl
 
 # Third Party
@@ -27,6 +26,7 @@ from cardio.capture.mosaic import compose
 from cardio.logic.capture import VIEWPORTS, summary_of, written_files
 from cardio.orientation import create_vtk_reslice_matrix
 from cardio.reslice import VIEW_TRANSFORMS
+from cardio.session import until_settled
 from tests.test_app_smoke import build_app, build_scene, connect
 
 VOLUME_SIZE = (20, 24, 16)
@@ -569,15 +569,11 @@ def test_an_off_screen_viewport_is_never_captured(tmp_path, layout, ticked, expe
 
 
 def capture(logic):
-    """Run the capture controller to completion."""
+    """Run the capture controller to completion.
 
-    async def drive():
-        logic.capture.screenshot()
-        await asyncio.gather(
-            *[t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-        )
-
-    asyncio.run(drive())
+    The same wait a headless session does, which is where it now lives.
+    """
+    until_settled(logic.capture.screenshot)
 
 
 def camera_position(scene):

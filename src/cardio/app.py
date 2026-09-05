@@ -10,44 +10,36 @@ import trame.decorators
 import vtk
 
 from . import __version__
-from .logic import Logic
 from .scene import Scene
+from .session import Session
 from .ui import UI
+
+
+def scene_from_command_line(cli) -> Scene:
+    """The scene the command line asks for, config file included."""
+    cli.add_argument(
+        "--config", help="TOML configuration file.", dest="cfg_file", required=False
+    )
+    cli.add_argument("--version", action="version", version=f"{__version__}")
+
+    cli_source = ps.CliSettingsSource(Scene, root_parser=cli, cli_parse_args=True)
+    args, _unknown = cli.parse_known_args()
+
+    return Scene.load(
+        config_file=getattr(args, "cfg_file", None), cli_source=cli_source
+    )
 
 
 @tm.decorators.TrameApp()
 class CardioApp:
+    """A session, and a page to drive it from."""
+
     def __init__(self, server=None):
         self.server = tm.app.get_server(server, client_type="vue3")
-
-        self.server.cli.add_argument(
-            "--config", help="TOML configuration file.", dest="cfg_file", required=False
+        self.session = Session(
+            scene_from_command_line(self.server.cli), server=self.server
         )
-
-        self.server.cli.add_argument(
-            "--version", action="version", version=f"{__version__}"
-        )
-
-        cli_settings = ps.CliSettingsSource(
-            Scene, root_parser=self.server.cli, cli_parse_args=True
-        )
-
-        args, _unknown = self.server.cli.parse_known_args()
-        config_file = getattr(args, "cfg_file", None)
-
-        Scene._cli_source = cli_settings
-        Scene._config_file = config_file
-
-        try:
-            scene = Scene()
-        finally:
-            if hasattr(Scene, "_cli_source"):
-                delattr(Scene, "_cli_source")
-            if hasattr(Scene, "_config_file"):
-                delattr(Scene, "_config_file")
-
-        logic = Logic(self.server, scene)
-        UI(self.server, scene, logic)
+        UI(self.server, self.session.scene, self.session.logic)
 
 
 def main():
