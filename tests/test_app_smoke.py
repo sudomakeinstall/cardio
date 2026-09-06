@@ -76,14 +76,18 @@ def write_objects(directory) -> pl.Path:
 
 
 def build_scene(directory, segmentation_overrides=None, **overrides) -> Scene:
-    """One object of every renderable type, so every UI branch is built."""
+    """One object of every renderable type, so every UI branch is built.
+
+    An override naming a group replaces it, so a test wanting a volume of
+    several frames can say so without rebuilding the rest of the scene.
+    """
     write_objects(directory)
 
-    return Scene(
-        volumes=[
+    groups = {
+        "volumes": [
             {"label": "vol", "directory": directory, "file_paths": ["vol0.nii.gz"]}
         ],
-        segmentations=[
+        "segmentations": [
             {
                 "label": "seg",
                 "directory": directory,
@@ -91,9 +95,12 @@ def build_scene(directory, segmentation_overrides=None, **overrides) -> Scene:
                 **(segmentation_overrides or {}),
             }
         ],
-        meshes=[{"label": "mesh", "directory": directory, "file_paths": ["mesh0.obj"]}],
-        **overrides,
-    )
+        "meshes": [
+            {"label": "mesh", "directory": directory, "file_paths": ["mesh0.obj"]}
+        ],
+    }
+
+    return Scene(**(groups | overrides))
 
 
 def build_app(scene):
