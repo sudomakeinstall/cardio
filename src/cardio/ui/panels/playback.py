@@ -74,7 +74,6 @@ def playback_panel(server, scene):
         max=scene.nframes - 1,
         step=1,
         hide_details=True,
-        ticks=True,
         thumb_label=True,
     )
 
@@ -87,7 +86,6 @@ def playback_panel(server, scene):
         max=120,
         step=1,
         hide_details=True,
-        ticks=True,
         thumb_label=True,
     )
 
@@ -100,7 +98,6 @@ def playback_panel(server, scene):
         max=360,
         step=1,
         hide_details=True,
-        ticks=True,
         thumb_label=True,
     )
 
@@ -109,11 +106,10 @@ def playback_panel(server, scene):
         label="Quality",
         title="JPEG encode quality while playing; 100 is full quality",
         classes=SLIDER_CLASS,
-        min=10,
+        min=1,
         max=100,
-        step=5,
+        step=1,
         hide_details=True,
-        ticks=True,
         thumb_label=True,
     )
 
@@ -122,10 +118,9 @@ def playback_panel(server, scene):
         label="Res",
         title="Render resolution while playing, as a percent of full",
         classes=SLIDER_CLASS,
-        min=25,
+        min=1,
         max=100,
-        step=5,
+        step=1,
         hide_details=True,
-        ticks=True,
         thumb_label=True,
     )

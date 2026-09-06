@@ -36,13 +36,13 @@ class Playback(pc.BaseModel):
     )
     quality: int = pc.Field(
         default=DEFAULT_PLAYBACK_QUALITY,
-        ge=10,
+        ge=1,
         le=100,
         description="JPEG encode quality while playing; 100 is full quality",
     )
     resolution: int = pc.Field(
         default=DEFAULT_PLAYBACK_RESOLUTION,
-        ge=25,
+        ge=1,
         le=100,
         description="Render resolution while playing, as a percent of full",
     )
