@@ -13,8 +13,11 @@ import pathlib as pl
 import pytest
 import tomlkit as tk
 
+import tests.test_app_smoke as smoke
+
 # Internal
 from cardio.document import scene_from_state, to_toml
+from cardio.scene import Scene
 from cardio.session import Session
 from cardio.state import ObjectState
 from tests.test_session import session_on
@@ -170,3 +173,24 @@ def test_every_scalar_is_written_before_the_first_table(driven):
 
     assert not tables or max(scalars[: tables[0]], default=-1) < tables[0]
     assert tk.loads(body)
+
+
+def test_a_scene_with_nothing_to_snap_to_still_saves(tmp_path):
+    """The snap selection is document state whatever the scene holds.
+
+    A mesh has no labels to snap between, so the panel is never built and the
+    controller has nothing to listen for. The keys behind it are still part of
+    the document, and a save that left them out wrote a config that would not
+    reload.
+    """
+    smoke.write_mesh(tmp_path / "mesh0.obj")
+    scene = Scene(
+        meshes=[{"label": "mesh", "directory": tmp_path, "file_paths": ["mesh0.obj"]}]
+    )
+    session = Session(scene, server=f"snapless-{next(_names)}")
+    session.ready()
+
+    reopen = reopened(session.save(tmp_path / "saved.toml"))
+
+    assert reopen.server.state.snap_seg_label == ""
+    assert not reopen.server.state.snap_locked

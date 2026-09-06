@@ -69,20 +69,25 @@ class SnapController(Controller):
         Seeded last of all the controllers: a configured lock snaps as it is
         applied, against the origin, the rotation and the frame the others have
         just written.
+
+        The selection and the locks are written whether or not there is a
+        segmentation to snap to. They are document state, and a session that
+        left them out would not be one a config could reopen.
         """
+        state = self.server.state
+        self._publish_configured_selection()
+        state.snap_locked = False
+        state.snap_orientation_locked = False
+
         if not self.scene.segmentations:
             return
 
-        state = self.server.state
-        self._publish_configured_selection()
         state.snap_available_labels = []
         state.snap_seg_items = [
             {"title": s.label, "value": s.label} for s in self.scene.segmentations
         ]
         state.snap_no_interface = False
-        state.snap_locked = False
         state.interface_flatness = 0.0
-        state.snap_orientation_locked = False
 
         seg = self._selected_segmentation()
         if seg is None:
@@ -124,8 +129,8 @@ class SnapController(Controller):
         state = self.server.state
         snap = self.scene.snap
         state.snap_mode = snap.mode.value
-        state.snap_seg_label = (
-            snap.segmentation_label or self.scene.segmentations[0].label
+        state.snap_seg_label = snap.segmentation_label or next(
+            (s.label for s in self.scene.segmentations), ""
         )
         state.snap_labels_a = list(snap.labels_a)
         state.snap_labels_b = list(snap.labels_b)
