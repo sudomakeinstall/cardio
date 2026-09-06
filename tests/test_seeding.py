@@ -58,6 +58,7 @@ MOVED = {
     "tile_cols": 4,
     "tile_rows": 6,
     "view.camera_lock": "LL",
+    "view.clip_depth": [12.0, 345.0],
     "view.drawer_sections": ["orientation", "export"],
     "view.layout": "axial",
     "view.theme": "light",

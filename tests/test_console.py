@@ -438,6 +438,17 @@ def test_a_key_bound_straight_to_a_widget_still_reaches_the_log(session):
     assert texts(session) == ["set_state(key='tile_cols', value=4)"]
 
 
+def test_dragging_the_depth_range_is_written_down(session):
+    """It moves only when a person drags it, which is the whole of why it is
+    document state: nothing else in the app ever writes it.
+    """
+    session.ready()
+
+    moved(session, clip_depth=[12.0, 345.0])
+
+    assert texts(session) == ["set_state(key='clip_depth', value=[12.0, 345.0])"]
+
+
 def test_what_the_log_says_is_what_would_do_it_again(session):
     session.ready()
     moved(session, theme_mode="light")

@@ -63,16 +63,22 @@ class ClippingController(Controller):
     def seed(self):
         """The depth range, each object's toggle, and its bounds from geometry.
 
-        The depth range has no ``Scene`` field: it is where the camera's own
-        clipping range sits once the pipeline is built, which is the only
-        sensible place for the slider to open. Snapped outwards onto the
-        slider's own notches, so that the thumbs open on a value the slider can
-        hold and the label under them is a short number.
+        The depth range is the one document key the seeding pass cannot write
+        from the scene: a config need not name one, and a scene that does not
+        has no range until the pipeline exists. Falling back to where the
+        camera's own range sits is the only sensible place for the slider to
+        open, snapped outwards onto its notches so that the thumbs start on a
+        value the slider can hold and the label under them is a short number.
         """
         super().seed()
         state = self.server.state
-        state.clip_depth = snapped_depth(
-            *self.scene.renderer.GetActiveCamera().GetClippingRange()
+        configured = self.scene.view.clip_depth
+        state.clip_depth = (
+            list(configured)
+            if configured is not None
+            else snapped_depth(
+                *self.scene.renderer.GetActiveCamera().GetClippingRange()
+            )
         )
 
         for obj in self.scene.renderables:

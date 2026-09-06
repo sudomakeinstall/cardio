@@ -150,6 +150,14 @@ class View(pc.BaseModel):
         default=False,
         description="Open with the action console showing. CLI usage: --view.console_visible true",
     )
+    clip_depth: tuple[float, float] | None = pc.Field(
+        default=None,
+        description=(
+            "Near and far clipping planes of the shared camera. Left unset, it "
+            "opens on the camera's own range once the scene is built. "
+            'CLI usage: --view.clip_depth "[23, 848]"'
+        ),
+    )
     cameras: Cameras = pc.Field(
         default_factory=Cameras,
         description=(
