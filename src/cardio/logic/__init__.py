@@ -14,6 +14,7 @@ from .base import Controller
 from .camera import CameraController
 from .capture import CaptureController
 from .clipping import ClippingController
+from .console import ConsoleController
 from .mpr import MPRController
 from .playback import PlaybackController
 from .rotations import RotationController
@@ -27,6 +28,7 @@ __all__ = [
     "CameraController",
     "CaptureController",
     "ClippingController",
+    "ConsoleController",
     "Controller",
     "Logic",
     "MPRController",
@@ -56,6 +58,7 @@ class Logic:
         self.server = server
         self.scene = scene
 
+        self.console = ConsoleController(self)
         self.view = ViewController(self)
         self.rotations = RotationController(self)
         self.mpr = MPRController(self)
@@ -82,14 +85,18 @@ class Logic:
         """Every state key that says what the app is showing."""
         return registry.document_keys(self.scene)
 
-    def dispatch(self, name: str, **arguments):
+    def dispatch(self, name: str, *positional, **arguments):
         """Do the named thing.
 
         The one way an action is called, whichever asked for it -- a button, a
-        gesture, a script. Anything that has to happen around every action goes
-        here and nowhere else.
+        gesture, a script, a typed line. Anything that has to happen around
+        every action goes here and nowhere else.
+
+        Positional arguments are passed through rather than refused: the
+        registry resolves them against the signature, so a hand-typed call may
+        give its arguments the way the method spells them.
         """
-        return self.actions.run(name, **arguments)
+        return self.actions.run(name, *positional, **arguments)
 
     def apply_scene(self):
         """Write every state variable the scene configures.
@@ -105,12 +112,15 @@ class Logic:
     def controllers(self) -> list[Controller]:
         """The controllers, in the order they register and then seed.
 
-        ``snap`` is late because a configured lock snaps the moment it is
-        seeded, which reads the origin, the rotation and the frame that the
-        controllers above it write; ``camera`` is last because it reads where
-        every camera ended up once all of that has happened.
+        ``console`` is first because it reads and writes nothing any sibling
+        owns, and being first is how that is said. ``snap`` is late because a
+        configured lock snaps the moment it is seeded, which reads the origin,
+        the rotation and the frame that the controllers above it write;
+        ``camera`` is last because it reads where every camera ended up once
+        all of that has happened.
         """
         return [
+            self.console,
             self.view,
             self.rotations,
             self.mpr,

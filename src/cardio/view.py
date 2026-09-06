@@ -146,6 +146,10 @@ class View(pc.BaseModel):
         default=False,
         description="Open with the scene metadata dialog showing. CLI usage: --view.metadata_visible true",
     )
+    console_visible: bool = pc.Field(
+        default=False,
+        description="Open with the action console showing. CLI usage: --view.console_visible true",
+    )
     cameras: Cameras = pc.Field(
         default_factory=Cameras,
         description=(

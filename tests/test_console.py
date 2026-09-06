@@ -15,6 +15,7 @@ import pytest
 
 # Internal
 import cardio.console as console
+from tests.test_session import session_on
 
 # ------------------------------------------------------------- the syntax ----
 
@@ -276,3 +277,133 @@ def test_the_script_does_not_share_its_arguments_with_the_log():
     log.script[0][1]["axis"] = "X"
 
     assert log.script == [("add_rotation", {"axis": "Z"})]
+
+# ------------------------------------------------------- against a session ----
+
+
+@pytest.fixture
+def session(tmp_path):
+    return session_on(tmp_path)
+
+
+def log_of(session):
+    return session.logic.console.log
+
+
+def test_an_action_asked_for_is_an_action_logged(session):
+    session.do("add_rotation", axis="Z")
+
+    (entry,) = log_of(session).entries
+    assert console.parse_call(entry["text"]) == ("add_rotation", [], {"axis": "Z"})
+
+
+def test_a_typed_call_logs_what_a_button_would_have(session):
+    """One line, not two: the wrapper is not a thing the app was asked to do."""
+    session.do("run_command", text="add_rotation(axis='Z')")
+
+    (entry,) = log_of(session).entries
+    assert entry["text"] == "add_rotation(axis='Z')"
+
+
+def test_a_typed_call_does_what_dispatching_it_would(tmp_path_factory):
+    typed = session_on(tmp_path_factory.mktemp("typed"))
+    dispatched = session_on(tmp_path_factory.mktemp("dispatched"))
+
+    typed.do("run_command", text="add_rotation(axis='Z')")
+    dispatched.do("add_rotation", axis="Z")
+
+    assert [step.axis for step in typed.scene.mpr_rotation_sequence.angles_list] == [
+        step.axis for step in dispatched.scene.mpr_rotation_sequence.angles_list
+    ]
+    assert typed.server.state.console_input == ""
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("nonsense()", "No such action"),
+        ("add_rotation(ax='Z')", "ax"),
+        ("add_rotation()", "axis"),
+        ("add_rotation(axis=", "not a call"),
+        ("os.system('rm -rf /')", "not an action name"),
+    ],
+)
+def test_a_command_that_cannot_be_run_says_so_and_does_nothing(session, text, expected):
+    session.do("run_command", text=text)
+
+    (entry,) = log_of(session).entries
+    assert entry["kind"] == "error"
+    assert expected in entry["text"]
+    assert session.scene.mpr_rotation_sequence.angles_list == []
+
+
+def test_a_refused_command_stays_in_the_box_to_be_corrected(session):
+    session.server.state.console_input = "add_rotation(ax='Z')"
+
+    session.do("run_command", text="add_rotation(ax='Z')")
+
+    assert session.server.state.console_input == "add_rotation(ax='Z')"
+
+
+def test_clearing_the_console_leaves_no_trace_of_itself(session):
+    session.do("add_rotation", axis="Z")
+
+    session.do("clear_console")
+
+    assert log_of(session).entries == []
+
+
+def test_the_log_is_published_only_while_the_console_is_showing(session):
+    session.do("add_rotation", axis="Z")
+    assert session.server.state.console_entries == [], "nothing is looking"
+
+    session.do("toggle_console")
+
+    published = session.server.state.console_entries
+    assert [entry["text"] for entry in published] == [
+        "toggle_console()",
+        "add_rotation(axis='Z')",
+    ], "opening it shows what it missed"
+
+
+def test_a_configured_console_opens_showing(tmp_path):
+    session = session_on(tmp_path, view={"console_visible": True})
+
+    assert session.server.state.console_visible is True
+
+    session.do("add_rotation", axis="Z")
+    assert session.server.state.console_entries
+
+
+def test_the_console_does_not_arm_the_journal(session):
+    """The assertion that keeps a log of everything off the deepcopy path.
+
+    Watching the journal copies every document key twice per action, and a
+    drag dispatches one per mouse move. The console is armed all session, so
+    it must not be watching that.
+    """
+    session.do("add_rotation", axis="Z")
+
+    assert not session.logic.journal.watched
+
+
+def test_the_log_is_a_script_that_reproduces_the_session(tmp_path_factory):
+    """What makes capture and replay a file format away rather than a design away."""
+    steps = [
+        ("add_rotation", {"axis": "Z"}),
+        ("add_rotation", {"axis": "X"}),
+        ("toggle_crosshairs", None),
+        ("set_window_level_preset", {"preset": 3}),
+    ]
+
+    first = session_on(tmp_path_factory.mktemp("first"))
+    first.run(steps)
+
+    second = session_on(tmp_path_factory.mktemp("second"))
+    second.run(log_of(first).script)
+
+    assert [step.axis for step in second.scene.mpr_rotation_sequence.angles_list] == [
+        step.axis for step in first.scene.mpr_rotation_sequence.angles_list
+    ]
+    for key in ("mpr_crosshairs_enabled", "mpr_window", "mpr_level"):
+        assert second.server.state[key] == first.server.state[key], key

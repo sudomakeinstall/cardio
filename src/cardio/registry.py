@@ -112,6 +112,7 @@ DOCUMENT = _declare(
     bpm="playback.bpm",
     bpr="playback.bpr",
     camera_lock="view.camera_lock",
+    console_visible="view.console_visible",
     cameras=(
         "view.cameras",
         (
@@ -162,6 +163,8 @@ SESSION = _declare(
     capture_running="a capture in flight does not survive the session",
     capture_saved_at="written when a capture finishes",
     capture_summary="the one line the drawer shows about the last capture",
+    console_entries="the log of what was done starts empty every session",
+    console_input="what is half-typed at the prompt is not a thing to save",
     clip_depth="derived from the camera's clipping range at build time",
     interface_flatness="measured from the interface the current selection fits",
     metadata_object="which object's metadata sheet is showing is browsing state",
