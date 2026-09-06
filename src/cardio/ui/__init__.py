@@ -7,6 +7,7 @@ from trame.widgets import vuetify3 as vuetify
 # Internal
 from .. import __version__
 from ..scene import Scene
+from ..view import RENDER_VIEWS
 from .common import TILE_ACTIVE, drawer_styles, section
 from .help import help_dialog
 from .interaction import Interaction
@@ -115,11 +116,5 @@ class UI:
         nothing, which Logic is what says is allowed.
         """
         controller = self.server.controller
-        for name in (
-            "axial_update",
-            "coronal_update",
-            "sagittal_update",
-            "volume_update",
-            "tile_update",
-        ):
+        for name in RENDER_VIEWS:
             getattr(controller, name)()

@@ -271,10 +271,7 @@ class Scene(ps.BaseSettings):
             return self
 
         chosen = {"mpr_window", "mpr_level"} & self.model_fields_set
-        if not chosen or (self.mpr_window, self.mpr_level) == (
-            preset.window,
-            preset.level,
-        ):
+        if not chosen or preset.matches(self.mpr_window, self.mpr_level):
             self.mpr_window = preset.window
             self.mpr_level = preset.level
             return self

@@ -5,8 +5,7 @@ from trame.widgets import html
 from trame.widgets import vuetify3 as vuetify
 
 # Internal
-from ...logic.capture import VIEWPORTS
-from ...state import screenshot_viewport
+from ...state import VIEWPORTS, screenshot_viewport
 
 VIEWPORT_LABELS = {
     "vr": "3D",

@@ -13,6 +13,21 @@ from .camera import Cameras
 # once here rather than as a bare "" at every site that means it.
 QUAD_LAYOUT = ""
 
+# The controller functions the render views assign as ``ui/layout.py`` builds
+# them. ``RENDER_VIEWS`` are the per-view updates the frame path pushes to; the
+# other two act on whatever is on screen. Named here rather than at the
+# assignment, so that a session with no page can say which of them are allowed
+# to have no implementation without importing the page to find out.
+RENDER_VIEWS = (
+    "axial_update",
+    "coronal_update",
+    "sagittal_update",
+    "volume_update",
+    "tile_update",
+)
+
+VIEW_FUNCTIONS = (*RENDER_VIEWS, "view_reset_camera", "view_update")
+
 
 class Layout(str, enum.Enum):
     """The layouts a viewport can be maximized to, plus the quad view.

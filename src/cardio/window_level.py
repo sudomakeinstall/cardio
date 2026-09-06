@@ -19,6 +19,10 @@ class WindowLevel:
     def upper(self) -> float:
         return self.level + self.window / 2
 
+    def matches(self, window: float, level: float) -> bool:
+        """Whether a window and level are still the ones this preset names."""
+        return (window, level) == (self.window, self.level)
+
 
 presets = {
     1: WindowLevel("Abdomen", 400, 40),

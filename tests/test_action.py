@@ -98,7 +98,7 @@ def test_an_unknown_action_says_what_it_knows():
     registry.add(Recorder())
 
     with pytest.raises(KeyError, match="takes_two"):
-        registry.dispatch("nonsense")
+        registry.run("nonsense")
 
 
 @pytest.mark.parametrize(
@@ -134,7 +134,7 @@ def test_a_missing_argument_is_refused():
     registry.add(Recorder())
 
     with pytest.raises(pc.ValidationError):
-        registry.dispatch("takes_two")
+        registry.run("takes_two")
 
 
 def test_a_misspelled_argument_is_refused():
@@ -142,7 +142,7 @@ def test_a_misspelled_argument_is_refused():
     registry.add(Recorder())
 
     with pytest.raises(pc.ValidationError):
-        registry.dispatch("takes_two", first=1, secnod="z")
+        registry.run("takes_two", first=1, secnod="z")
 
 
 def test_too_many_positional_arguments_are_refused():

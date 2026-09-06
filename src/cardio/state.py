@@ -87,10 +87,11 @@ class ObjectState:
             self.mpr_overlay,
         ]
 
-    @property
-    def session_keys(self) -> list[str]:
-        """Whether this object's subpanels are expanded, which is browsing state."""
-        return [self.clip_panel, self.preset_panel]
+
+# Everywhere a capture can be taken from. Named here rather than beside the
+# capture logic because these are what the ticks below are keyed by, and the
+# registry has to be able to enumerate them without importing a controller.
+VIEWPORTS = ("vr", "axial", "coronal", "sagittal", "tile")
 
 
 def screenshot_viewport(viewport: str) -> str:

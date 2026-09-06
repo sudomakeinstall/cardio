@@ -16,7 +16,7 @@ import dataclasses as dc
 import enum
 
 # Internal
-from .state import ObjectState
+from .state import VIEWPORTS, ObjectState, screenshot_viewport
 from .view import Layout
 
 
@@ -60,27 +60,16 @@ class Variable:
                 )
 
 
-def _document(**sources: str) -> list[Variable]:
-    return [
-        Variable(key, Scope.DOCUMENT, source=source) for key, source in sources.items()
-    ]
-
-
-def _session(**reasons: str) -> list[Variable]:
-    return [
-        Variable(key, Scope.SESSION, reason=reason) for key, reason in reasons.items()
-    ]
-
-
-def _items(**reasons: str) -> list[Variable]:
-    return [
-        Variable(key, Scope.ITEMS, reason=reason) for key, reason in reasons.items()
-    ]
+def _declare(scope: Scope, **entries: str) -> list[Variable]:
+    """Every key in ``scope``, the string filling whichever field it wants."""
+    field = "source" if scope is Scope.DOCUMENT else "reason"
+    return [Variable(key, scope, **{field: value}) for key, value in entries.items()]
 
 
 # The dotted paths are resolved against Scene by the coverage test, so a field
 # renamed out from under one of these fails there rather than at runtime.
-DOCUMENT = _document(
+DOCUMENT = _declare(
+    Scope.DOCUMENT,
     active_volume_label="active_volume_label",
     angle_units="mpr_rotation_sequence.metadata.angle_units",
     bpm="playback.bpm",
@@ -120,7 +109,8 @@ DOCUMENT = _document(
 
 # A reason here is a decision, not an excuse: anything a user would want to
 # open the app in, or to find again in a saved session, belongs in DOCUMENT.
-SESSION = _session(
+SESSION = _declare(
+    Scope.SESSION,
     capture_ok="whether the last capture wrote anything",
     capture_progress="how far the running capture has got",
     capture_running="a capture in flight does not survive the session",
@@ -137,7 +127,8 @@ SESSION = _session(
     trame__title="trame's own, set from the version",
 )
 
-ITEMS = _items(
+ITEMS = _declare(
+    Scope.ITEMS,
     angle_units_items="the two angle units, spelled for the picker",
     camera_lock_items="the CameraLock members, spelled for the picker",
     capture_available="the viewports the layout currently draws",
@@ -187,14 +178,16 @@ def document_keys(scene) -> list[str]:
     scene is the only thing that can say what they are.
     """
     keys = keys_in_scope(Scope.DOCUMENT)
+    keys.extend(screenshot_viewport(viewport) for viewport in VIEWPORTS)
     for obj in scene.renderables:
         keys.extend(ObjectState.of(obj).document_keys)
     return keys
 
 
-# Which field on the object model seeds each of ObjectState's per-object keys.
-# The clip bounds are absent deliberately: they come from the object's geometry
-# rather than from a field.
+# Which field on the object model seeds each of ObjectState's per-object keys,
+# one key to one field. The clip bounds are absent because they are not that
+# shape: three range sliders make up the one ``crop`` box, so each direction of
+# that mapping is spelled where it is used.
 OBJECT_SOURCES: dict[str, str] = {
     "visibility": "visible",
     "clipping": "clipping_enabled",

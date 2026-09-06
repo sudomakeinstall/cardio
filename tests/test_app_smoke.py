@@ -7,6 +7,7 @@ This is the cheap guard against that.
 
 # System
 import itertools
+import pathlib as pl
 import re
 
 # Third Party
@@ -66,11 +67,17 @@ def write_mesh(path):
     writer.Write()
 
 
-def build_scene(directory, segmentation_overrides=None, **overrides) -> Scene:
-    """One object of every renderable type, so every UI branch is built."""
+def write_objects(directory) -> pl.Path:
+    """One volume, one segmentation and one mesh, written to ``directory``."""
     write_volume(directory / "vol0.nii.gz")
     write_segmentation(directory / "seg0.nii.gz")
     write_mesh(directory / "mesh0.obj")
+    return directory
+
+
+def build_scene(directory, segmentation_overrides=None, **overrides) -> Scene:
+    """One object of every renderable type, so every UI branch is built."""
+    write_objects(directory)
 
     return Scene(
         volumes=[

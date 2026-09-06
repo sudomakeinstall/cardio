@@ -89,7 +89,7 @@ class Logic:
         gesture, a script. Anything that has to happen around every action goes
         here and nowhere else.
         """
-        return self.actions.dispatch(name, **arguments)
+        return self.actions.run(name, **arguments)
 
     def apply_scene(self):
         """Write every state variable the scene configures.

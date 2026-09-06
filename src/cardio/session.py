@@ -16,22 +16,11 @@ import trame as tm
 import trame.app
 
 # Internal
+from . import toml
 from .document import scene_from_state, to_toml
 from .logic import Logic
 from .scene import Scene
-
-# Controller functions the render views assign as the page builds them. Without
-# a page nothing assigns them, and trame raises on a controller function that
-# has no implementation rather than passing quietly.
-VIEW_FUNCTIONS = (
-    "axial_update",
-    "coronal_update",
-    "sagittal_update",
-    "tile_update",
-    "view_reset_camera",
-    "view_update",
-    "volume_update",
-)
+from .view import VIEW_FUNCTIONS
 
 
 def until_settled(work):
@@ -62,6 +51,9 @@ class Session:
         self.scene = scene
         self.logic = Logic(self.server, scene)
 
+        # Without a page nothing assigns these, and trame raises on a
+        # controller function that has no implementation rather than passing
+        # quietly.
         for name in VIEW_FUNCTIONS:
             getattr(self.server.controller, name).can_be_empty = True
 
@@ -97,10 +89,7 @@ class Session:
 
     def save(self, path) -> pl.Path:
         """Write the session out as a config file, and say where it went."""
-        path = pl.Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(to_toml(self.scene_now()), encoding="utf-8")
-        return path
+        return toml.write(path, to_toml(self.scene_now()))
 
     def do(self, name: str, **arguments):
         """Ask for one action, and wait for whatever it started.

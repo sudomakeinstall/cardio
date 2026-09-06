@@ -42,7 +42,7 @@ class ObjectMetadata:
     @property
     def title(self) -> str:
         """How the object is named in the sheet's dropdown."""
-        return f"{self.label} ({self.kind})"
+        return page_title(self)
 
 
 def _numbers(values, places: int = 3) -> str:
@@ -185,9 +185,7 @@ def describe(obj) -> ObjectMetadata:
     sections.append(surface_section(obj))
 
     return ObjectMetadata(
-        # A mesh and a volume may carry the same label, so the kind is part of
-        # the key the sheet switches on.
-        key=f"{obj.kind}:{obj.label}",
+        key=page_key(obj),
         label=obj.label,
         kind=obj.kind,
         sections=[section for section in sections if section is not None],
@@ -197,3 +195,29 @@ def describe(obj) -> ObjectMetadata:
 def describe_scene(scene) -> list[ObjectMetadata]:
     """Every renderable object in the scene, in the order the scene lists them."""
     return [describe(obj) for obj in scene.renderables]
+
+
+def page_key(obj) -> str:
+    """How the sheet names ``obj``'s page.
+
+    A mesh and a volume may carry the same label, so the kind is part of the
+    key the sheet switches on.
+    """
+    return f"{obj.kind}:{obj.label}"
+
+
+def page_title(obj) -> str:
+    """How the object is named in the sheet's dropdown."""
+    return f"{obj.label} ({obj.kind})"
+
+
+def pages(scene) -> list[dict]:
+    """The dropdown's entries, which is all the picker itself needs.
+
+    Naming the pages costs two f-strings apiece; describing them reads every
+    header and walks every label volume. That is the sheet's own work, and it
+    can wait until the sheet is built.
+    """
+    return [
+        {"title": page_title(obj), "value": page_key(obj)} for obj in scene.renderables
+    ]

@@ -26,6 +26,7 @@ import pytest
 # Internal
 import cardio.logic as logic
 import cardio.registry as registry
+import cardio.view as view
 from cardio.action import declared_actions
 from cardio.object import Object
 from cardio.scene import Scene
@@ -237,18 +238,8 @@ def test_session_and_items_keys_carry_a_reason():
 
 # Names the UI reaches for on trame's controller that are not actions: the
 # render views' own methods, which ui/layout.py assigns as it builds them, and
-# the one lifecycle hook.
-VIEW_FUNCTIONS = {
-    "axial_update",
-    "coronal_update",
-    "finalize_mpr_initialization",
-    "on_server_ready",
-    "sagittal_update",
-    "tile_update",
-    "view_reset_camera",
-    "view_update",
-    "volume_update",
-}
+# the two lifecycle hooks.
+NOT_ACTIONS = {*view.VIEW_FUNCTIONS, "finalize_mpr_initialization", "on_server_ready"}
 
 
 def _controller_references() -> set[str]:
@@ -283,7 +274,7 @@ def test_every_controller_call_the_ui_makes_is_an_action():
     when nothing is registered, so a stale name on a ``click=`` is silent both
     at build time and at click time.
     """
-    unknown = _controller_references() - set(_declared_action_names()) - VIEW_FUNCTIONS
+    unknown = _controller_references() - set(_declared_action_names()) - NOT_ACTIONS
 
     assert unknown == set(), (
         f"the UI calls controller functions that no action declares: {sorted(unknown)}"

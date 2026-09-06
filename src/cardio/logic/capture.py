@@ -21,11 +21,9 @@ from ..capture.dicom import IDENTITY_TAGS
 from ..capture.geometry import plane_from_reslice
 from ..capture.mosaic import compose
 from ..reslice import VIEW_TRANSFORMS
-from ..state import screenshot_viewport
+from ..state import VIEWPORTS, screenshot_viewport
 from ..view import Layout
 from .base import Controller
-
-VIEWPORTS = ("vr", "axial", "coronal", "sagittal", "tile")
 
 # The one viewport the capture and the layout call different things.  Every
 # other name is shared, so this is the whole of the translation.
@@ -101,15 +99,16 @@ class CaptureController(Controller):
             )
 
         state.capture_format = self.scene.capture_format.value
-        state.capture_available = sorted(
-            viewport_of(shown) for shown in self.scene.view.layout.on_screen
-        )
         state.capture_formats = FORMAT_ITEMS
         state.capture_running = False
         state.capture_progress = 0
         state.capture_saved_at = None
         state.capture_summary = ""
         state.capture_ok = True
+
+        # From the layout already seeded, rather than from the scene field
+        # behind it: the same rule as every later change goes through.
+        self.sync_available()
 
         # Written here rather than by the rotations panel that shows them: a
         # freshly seeded scene has saved nothing and edited nothing.

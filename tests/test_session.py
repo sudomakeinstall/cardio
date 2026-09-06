@@ -17,37 +17,16 @@ import pytest
 # Internal
 from cardio.scene import Scene
 from cardio.session import VIEW_FUNCTIONS, Session
-from tests.test_app_smoke import write_mesh, write_segmentation, write_volume
+from tests.test_app_smoke import build_scene, write_objects
 
 _names = itertools.count()
-
-
-def data(directory: pl.Path) -> pl.Path:
-    """One volume, one segmentation and one mesh, written to ``directory``."""
-    write_volume(directory / "vol0.nii.gz")
-    write_segmentation(directory / "seg0.nii.gz")
-    write_mesh(directory / "mesh0.obj")
-    return directory
-
-
-def scene_of(directory: pl.Path, **overrides) -> Scene:
-    return Scene(
-        volumes=[
-            {"label": "vol", "directory": directory, "file_paths": ["vol0.nii.gz"]}
-        ],
-        segmentations=[
-            {"label": "seg", "directory": directory, "file_paths": ["seg0.nii.gz"]}
-        ],
-        meshes=[{"label": "mesh", "directory": directory, "file_paths": ["mesh0.obj"]}],
-        active_volume_label="vol",
-        **overrides,
-    )
 
 
 def session_on(directory: pl.Path, **overrides) -> Session:
     """A session nobody has connected to, on a server nobody has started."""
     return Session(
-        scene_of(data(directory), **overrides), server=f"session-{next(_names)}"
+        build_scene(directory, active_volume_label="vol", **overrides),
+        server=f"session-{next(_names)}",
     )
 
 
@@ -140,7 +119,7 @@ def test_a_capture_has_written_before_the_next_action_begins(tmp_path):
 
 
 def test_a_config_file_is_the_scene(tmp_path):
-    directory = data(tmp_path)
+    directory = write_objects(tmp_path)
     config = tmp_path / "cardio.toml"
     config.write_text(
         "\n".join(
@@ -174,7 +153,7 @@ def test_a_config_file_is_the_scene(tmp_path):
 
 def test_a_scene_built_after_a_config_read_is_not_still_reading_it(tmp_path):
     """The sources are handed to pydantic as class attributes and taken back."""
-    directory = data(tmp_path)
+    directory = write_objects(tmp_path)
     config = tmp_path / "cardio.toml"
     config.write_text("tile_rows = 2")
 

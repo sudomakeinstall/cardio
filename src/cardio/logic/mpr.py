@@ -303,7 +303,7 @@ class MPRController(Controller):
         rather than at the write.
         """
         preset = presets.get(self.server.state.mpr_window_level_preset)
-        if preset is not None and (window, level) != (preset.window, preset.level):
+        if preset is not None and not preset.matches(window, level):
             self.server.state.mpr_window_level_preset = None
 
     def update_mpr_preset(self, mpr_window_level_preset, **kwargs):

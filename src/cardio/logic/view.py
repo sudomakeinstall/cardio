@@ -1,9 +1,8 @@
 """The page itself: which layout is up, and which sheets are open."""
 
 # Internal
-from .. import __version__
+from .. import __version__, metadata
 from ..action import action
-from ..metadata import describe_scene
 from ..view import QUAD_LAYOUT
 from .base import Controller
 
@@ -28,11 +27,9 @@ class ViewController(Controller):
         state.metadata_overlay_visible = view.metadata_visible
         state.drawer_sections = view.open_sections
 
-        entries = describe_scene(self.scene)
-        state.metadata_pages = [
-            {"title": entry.title, "value": entry.key} for entry in entries
-        ]
-        state.metadata_object = entries[0].key if entries else ""
+        pages = metadata.pages(self.scene)
+        state.metadata_pages = pages
+        state.metadata_object = pages[0]["value"] if pages else ""
 
     @action("toggle_maximized")
     def toggle_maximized(self, view: str):

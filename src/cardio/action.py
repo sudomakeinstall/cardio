@@ -99,9 +99,6 @@ class Action:
         validated = self.arguments(**arguments)
         return {field: getattr(validated, field) for field in names}
 
-    def __call__(self, *positional, **keyword):
-        return self.call(**self.bind(positional, keyword))
-
 
 @dc.dataclass(frozen=True)
 class Change:
@@ -268,19 +265,9 @@ class Registry:
         with self.journal.record(name, arguments):
             return entry.call(**arguments)
 
-    def dispatch(self, name: str, **arguments):
-        """Do the named thing, named arguments only."""
-        return self.run(name, **arguments)
-
     @property
     def names(self) -> list[str]:
         return sorted(self._actions)
 
-    def __contains__(self, name: str) -> bool:
-        return name in self._actions
-
     def __getitem__(self, name: str) -> Action:
         return self._actions[name]
-
-    def __len__(self) -> int:
-        return len(self._actions)

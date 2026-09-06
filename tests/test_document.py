@@ -37,15 +37,13 @@ DRIVEN = [
 
 
 def document(session: Session) -> dict:
-    """Every key that says what the session is showing, as text.
+    """Every key that says what the session is showing.
 
-    Text because the values include arrays, which do not answer ``==`` with a
-    bool.
+    The cameras are read out of VTK first: they are the one part of the
+    document that a gesture can move without going through state.
     """
     session.logic.camera.publish()
-    return {
-        key: repr(session.server.state[key]) for key in session.logic.document_keys()
-    }
+    return smoke.document(session.server, session.logic)
 
 
 def reopened(path: pl.Path) -> Session:
@@ -158,21 +156,18 @@ def test_a_selected_preset_survives_beside_the_values_it_implies(tmp_path):
     assert reopen.server.state.mpr_window == session.server.state.mpr_window
 
 
-def test_every_scalar_is_written_before_the_first_table(driven):
-    """TOML reads a bare key as belonging to the table above it.
+def test_the_written_file_reads_back_as_the_document_it_was_given(driven):
+    """Every field comes back saying what it said, and under the same table.
 
-    A scalar written after one would come back meaning something else, so the
-    dump orders them whatever order the model happens to be in.
+    TOML reads a bare key as belonging to the table above it, so a scalar
+    written after one would come back meaning something else. Reading the file
+    back is what says it did not.
     """
-    body = to_toml(driven.scene_now())
-    lines = [line for line in body.splitlines() if line and not line.startswith("#")]
-    tables = [i for i, line in enumerate(lines) if line.startswith("[")]
-    scalars = [
-        i for i, line in enumerate(lines) if " = " in line and not line.startswith("[")
-    ]
+    scene = driven.scene_now()
 
-    assert not tables or max(scalars[: tables[0]], default=-1) < tables[0]
-    assert tk.loads(body)
+    body = to_toml(scene)
+
+    assert tk.loads(body) == scene.model_dump(mode="json", exclude_none=True)
 
 
 def test_a_scene_with_nothing_to_snap_to_still_saves(tmp_path):
