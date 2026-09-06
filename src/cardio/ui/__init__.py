@@ -8,7 +8,7 @@ from trame.widgets import vuetify3 as vuetify
 from .. import __version__
 from ..scene import Scene
 from ..view import RENDER_VIEWS
-from .common import DRAWER_WIDTH, TILE_ACTIVE, drawer_styles, section
+from .common import DRAWER_WIDTH, drawer_styles, section
 from .help import help_dialog
 from .interaction import Interaction
 from .layout import toolbar, viewports
@@ -91,14 +91,10 @@ class UI:
                 overlays_panel(self.server, self.scene)
 
             if self.scene.volumes:
-                # The tile grid is posed by the same controls, so they stay
-                # reachable while it is on screen.
-                with section(
-                    "orientation",
-                    "Orientation",
-                    "mdi-axis-arrow",
-                    v_if=f"!maximized_view || {TILE_ACTIVE}",
-                ):
+                # Up in every layout: the tile grid is posed by these controls,
+                # and so is a volume camera locked to one of the slices, which
+                # follows the pose while the slices are off screen.
+                with section("orientation", "Orientation", "mdi-axis-arrow"):
                     snap_panel(self.server, self.scene)
                     rotations_panel(self.server, self.scene)
 

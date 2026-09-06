@@ -16,9 +16,12 @@ from ..view import Layout
 # which has to start where the drawer stops.
 DRAWER_WIDTH = 340
 
-# The drawer's MPR controls only make sense in the quad view with a volume
-# selected. Written out nineteen times before this constant existed.
-MPR_ACTIVE = "!maximized_view && active_volume_label"
+# A volume to orient. The pose of the cuts is not a property of whatever is on
+# screen: a volume camera locked to a slice follows the pose while the slices
+# themselves are off screen -- which logic/mpr.py's update_mpr_rotation runs a
+# branch of its own for -- and the tile grid is posed by the same controls. So
+# the layout does not come into it; having a volume at all does.
+VOLUME_ACTIVE = "active_volume_label"
 
 TILE_ACTIVE = "maximized_view === 'tile'"
 # Spelled out rather than negating TILE_ACTIVE: "!" binds tighter than "===",

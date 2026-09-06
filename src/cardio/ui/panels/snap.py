@@ -4,7 +4,7 @@
 from trame.widgets import vuetify3 as vuetify
 
 # Internal
-from ..common import NOT_TILE_ACTIVE, RESLICE_ACTIVE, SLIDER_CLASS, TILE_ACTIVE
+from ..common import NOT_TILE_ACTIVE, SLIDER_CLASS, TILE_ACTIVE, VOLUME_ACTIVE
 
 # Modes that fit a plane, and so offer Align and the orientation lock.
 PLANAR_MODE = "(snap_mode === 'interface' || snap_mode === 'traverse')"
@@ -51,10 +51,10 @@ def snap_panel(server, scene):
     if scene.volumes and scene.segmentations:
         vuetify.VListSubheader(
             "Snap & Align",
-            v_if=RESLICE_ACTIVE,
+            v_if=VOLUME_ACTIVE,
         )
         vuetify.VSelect(
-            v_if=f"{RESLICE_ACTIVE} && snap_seg_items.length >= 2",
+            v_if=f"{VOLUME_ACTIVE} && snap_seg_items.length >= 2",
             v_model=("snap_seg_label",),
             items=("snap_seg_items",),
             item_title="title",
@@ -64,7 +64,7 @@ def snap_panel(server, scene):
             classes="mb-2",
         )
         with vuetify.VBtnToggle(
-            v_if=RESLICE_ACTIVE,
+            v_if=VOLUME_ACTIVE,
             v_model=("snap_mode",),
             mandatory=True,
             classes="mb-2",
@@ -78,17 +78,17 @@ def snap_panel(server, scene):
             (
                 "snap_labels_a",
                 ("snap_mode === 'label' ? 'Labels' : 'Group A'",),
-                RESLICE_ACTIVE,
+                VOLUME_ACTIVE,
             ),
             (
                 "snap_labels_b",
                 "Group B",
-                f"{RESLICE_ACTIVE} && {PLANAR_MODE}",
+                f"{VOLUME_ACTIVE} && {PLANAR_MODE}",
             ),
             (
                 "snap_labels_c",
                 "Group C",
-                f"{RESLICE_ACTIVE} && snap_mode === 'traverse'",
+                f"{VOLUME_ACTIVE} && snap_mode === 'traverse'",
             ),
         ):
             vuetify.VSelect(
@@ -107,7 +107,7 @@ def snap_panel(server, scene):
         # The slider drives a single pose, which the tile grid has no use for:
         # its tiles already span the whole path.
         vuetify.VSlider(
-            v_if=f"{RESLICE_ACTIVE} && snap_mode === 'traverse' && {NOT_TILE_ACTIVE}",
+            v_if=f"{VOLUME_ACTIVE} && snap_mode === 'traverse' && {NOT_TILE_ACTIVE}",
             v_model=("snap_traverse",),
             label="Traverse",
             title="Travel from the A|B interface to the B|C interface",
@@ -127,7 +127,7 @@ def snap_panel(server, scene):
             variant="tonal",
         )
         with vuetify.VRow(
-            v_if=RESLICE_ACTIVE,
+            v_if=VOLUME_ACTIVE,
             no_gutters=True,
             classes="mb-2 align-center",
         ):
@@ -152,7 +152,7 @@ def snap_panel(server, scene):
                     hide_details=True,
                 )
         with vuetify.VRow(
-            v_if=f"{RESLICE_ACTIVE} && {PLANAR_MODE}",
+            v_if=f"{VOLUME_ACTIVE} && {PLANAR_MODE}",
             no_gutters=True,
             classes="mb-2 align-center",
         ):
@@ -190,7 +190,7 @@ def snap_panel(server, scene):
         # traverse mode, so it serves as the guard for both.
         vuetify.VBtn(
             "Reverse",
-            v_if=f"{RESLICE_ACTIVE} && snap_mode === 'interface'",
+            v_if=f"{VOLUME_ACTIVE} && snap_mode === 'interface'",
             click=server.controller.swap_snap_groups,
             title="Swap Group A and Group B, viewing the interface from the other side",
             disabled=(f"!({GROUPS_CHOSEN})",),
@@ -200,7 +200,7 @@ def snap_panel(server, scene):
         )
         vuetify.VBtn(
             "Reverse",
-            v_if=f"{RESLICE_ACTIVE} && snap_mode === 'traverse'",
+            v_if=f"{VOLUME_ACTIVE} && snap_mode === 'traverse'",
             click=server.controller.swap_snap_groups,
             title="Reverse the direction of travel, swapping Group A and Group C",
             disabled=(f"!({GROUPS_CHOSEN})",),
@@ -212,7 +212,7 @@ def snap_panel(server, scene):
         # rather than among them, and needs no selection to be usable.
         vuetify.VBtn(
             "Reset",
-            v_if=RESLICE_ACTIVE,
+            v_if=VOLUME_ACTIVE,
             click=server.controller.reset_snap,
             title=(
                 "Clear the groups, release the locks, drop the interface"

@@ -8,7 +8,7 @@ from trame.widgets import client, html
 from trame.widgets import vuetify3 as vuetify
 
 # Internal
-from ..common import MPR_ACTIVE
+from ..common import VOLUME_ACTIVE
 
 
 def rotations_panel(server, scene):
@@ -17,11 +17,11 @@ def rotations_panel(server, scene):
         return
 
     # MPR Rotation controls
-    vuetify.VListSubheader("Rotations", v_if=MPR_ACTIVE)
+    vuetify.VListSubheader("Rotations", v_if=VOLUME_ACTIVE)
 
     # Rotation buttons
     with vuetify.VRow(
-        v_if=MPR_ACTIVE,
+        v_if=VOLUME_ACTIVE,
         no_gutters=True,
         classes="mb-2",
     ):
@@ -51,7 +51,7 @@ def rotations_panel(server, scene):
     with client.DeepReactive("mpr_rotation_data"):
         for i in range(scene.max_mpr_rotations):
             with vuetify.VContainer(
-                v_if=f"{MPR_ACTIVE} && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > {i}",
+                v_if=f"{VOLUME_ACTIVE} && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > {i}",
                 fluid=True,
                 classes="pa-0 mb-2",
             ):
@@ -127,7 +127,7 @@ def rotations_panel(server, scene):
 
     # Angle units selector
     with vuetify.VRow(
-        v_if=MPR_ACTIVE,
+        v_if=VOLUME_ACTIVE,
         no_gutters=True,
         classes="align-center mb-2 mt-2",
     ):
@@ -144,7 +144,7 @@ def rotations_panel(server, scene):
 
     # Axis convention selector
     with vuetify.VRow(
-        v_if=MPR_ACTIVE,
+        v_if=VOLUME_ACTIVE,
         no_gutters=True,
         classes="align-center mb-2",
     ):
@@ -161,7 +161,7 @@ def rotations_panel(server, scene):
 
     # Camera lock selector
     with vuetify.VRow(
-        v_if="!maximized_view",
+        v_if=VOLUME_ACTIVE,
         no_gutters=True,
         classes="align-center mb-2",
     ):
@@ -179,7 +179,7 @@ def rotations_panel(server, scene):
     # Save rotations button
     vuetify.VBtn(
         "Save Rotations",
-        v_if="!maximized_view && active_volume_label && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > 0",
+        v_if=f"{VOLUME_ACTIVE} && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > 0",
         click=server.controller.save_rotation_angles,
         color="success",
         block=True,
@@ -209,7 +209,7 @@ def rotations_panel(server, scene):
     # Delete rotations button
     vuetify.VBtn(
         "Delete All Rotations",
-        v_if="!maximized_view && active_volume_label && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > 0",
+        v_if=f"{VOLUME_ACTIVE} && mpr_rotation_data.angles_list && mpr_rotation_data.angles_list.length > 0",
         click=server.controller.reset_rotations,
         color="error",
         block=True,

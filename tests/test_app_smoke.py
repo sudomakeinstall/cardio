@@ -838,6 +838,25 @@ def test_the_overlay_controls_survive_a_maximized_slice_view(read_only_app):
     assert "'axial'" in condition and "'sagittal'" in condition
 
 
+def test_the_orientation_controls_are_reachable_from_every_layout(read_only_app):
+    """They pose more than the slices they are named after.
+
+    A volume camera locked to one of the slices follows the pose while the
+    slices are off screen, which ``update_mpr_rotation`` runs a branch of its
+    own for, and the tile grid is posed by the same controls. The section used
+    to be up in the quad view and the tile grid only.
+    """
+    _, _, _, ui = read_only_app
+
+    section = re.search(r'<VExpansionPanel value="orientation"[^>]*>', ui.layout.html)
+    assert section is not None
+    assert "v-if" not in section.group(0)
+
+    toggle = re.search(r'<VBtnToggle[^>]*v-model="snap_mode"[^>]*>', ui.layout.html)
+    condition = re.search(r'v-if="([^"]*)"', toggle.group(0)).group(1)
+    assert condition == common.VOLUME_ACTIVE
+
+
 def test_the_traverse_slider_is_reachable_in_the_quad_view(read_only_app):
     """It went missing once behind exactly the negation above."""
     _, _, _, ui = read_only_app
