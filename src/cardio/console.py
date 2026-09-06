@@ -128,8 +128,10 @@ class Entry:
     seen: dt.datetime
     kind: str
     name: str = ""
+    group: str = ""
     calls: list[dict] = dc.field(default_factory=list)
     message: str = ""
+    ok: bool = True
 
     @property
     def count(self) -> int:
@@ -142,11 +144,17 @@ class Entry:
             return self.message
         return format_call(self.name, self.calls[-1])
 
-    def joins(self, name: str, at: dt.datetime) -> bool:
-        """Whether a call now is part of this line rather than the next one."""
+    def joins(self, group: str, at: dt.datetime) -> bool:
+        """Whether a call now is part of this line rather than the next one.
+
+        A call that raised joins nothing and is joined by nothing: it is the
+        one thing on the line that did not happen, and burying it in a count
+        beside forty that did would misrepresent both.
+        """
         return (
             self.kind == ACTION
-            and self.name == name
+            and self.ok
+            and self.group == group
             and at - self.seen < COALESCE_WITHIN
         )
 
@@ -156,7 +164,7 @@ class Entry:
             "n": self.n,
             "at": self.seen.strftime(TIME_FORMAT),
             "text": self.text,
-            "kind": self.kind,
+            "kind": self.kind if self.ok else ERROR,
             "count": self.count,
         }
 
@@ -179,21 +187,29 @@ class Log:
         self._entries.append(entry)
         return entry
 
-    def record(self, name: str, arguments: dict) -> bool:
+    def record(
+        self, name: str, arguments: dict, group: str = "", ok: bool = True
+    ) -> bool:
         """Write down one action, and say whether it started a new line.
 
-        A repeat of the action on the line above, close enough behind it to be
-        the same gesture, joins that line instead of starting one.
+        A repeat of the line above, close enough behind it to be the same
+        gesture, joins that line instead of starting one.
+
+        What counts as a repeat is ``group``, which is the action's name unless
+        the caller knows better. ``set_state`` is why it can: one action name
+        now stands for every document key, and dragging a slider is not the
+        same gesture as the frame ticking behind it.
         """
         at = self._now()
+        group = group or name
         latest = self._entries[-1] if self._entries else None
 
-        if latest is not None and latest.joins(name, at):
+        if latest is not None and latest.joins(group, at):
             latest.calls.append(dict(arguments))
             latest.seen = at
             return False
 
-        self._add(ACTION, at, name=name, calls=[dict(arguments)])
+        self._add(ACTION, at, name=name, group=group, calls=[dict(arguments)], ok=ok)
         return True
 
     def error(self, message: str) -> None:
@@ -214,13 +230,14 @@ class Log:
 
         A line that collapsed a drag contributes each of its calls, not the one
         it shows: what collapsed was the reading, and a script that dropped the
-        rest would not put the app back where the drag left it. Errors are not
-        in it, having done nothing to repeat.
+        rest would not put the app back where the drag left it. Neither a
+        refusal nor a call that raised is in it, both having done nothing that
+        there is any point repeating.
         """
         return [
             (entry.name, dict(arguments))
             for entry in self._entries
-            if entry.kind == ACTION
+            if entry.kind == ACTION and entry.ok
             for arguments in entry.calls
         ]
 

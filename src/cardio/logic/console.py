@@ -12,7 +12,9 @@ which cost nothing to be told.
 """
 
 # System
+import contextlib as cl
 import time
+import typing as ty
 
 # Third Party
 import pydantic as pc
@@ -32,6 +34,21 @@ SILENT = frozenset({"run_command", "clear_console"})
 # from writing the whole list sixty times a second.
 PUBLISH_INTERVAL = 0.2
 
+# The action a document key moving by itself is written down as, and the one a
+# script uses to move it back.
+SET_STATE = "set_state"
+
+# Keys nobody ever asks for, which move as a consequence of something else.
+# The state's cameras are only ever a note of where VTK's ended up -- refitted
+# when the layout changes, turned by a trackball drag -- and the one time a
+# person means to move one, place_camera writes it down as the action it was.
+FOLLOWS = frozenset({"cameras"})
+
+# Keys a running loop drives, and what says the loop is running. A cine writes
+# the frame thirty times a second and nobody asked for any of them: what was
+# asked for was to play, and that is already a line of its own.
+DRIVEN = {"frame": ("playing", "capture_running")}
+
 
 def _message(exc: Exception) -> str:
     """What a refusal says, without the quotes ``KeyError`` prints around it."""
@@ -49,6 +66,8 @@ class ConsoleController(Controller):
         super().__init__(app)
         self.log = Log()
         self._published = 0.0
+        self._applying = 0
+        self._armed = False
 
     def register(self):
         self.app.actions.observe(self._observed)
@@ -56,6 +75,19 @@ class ConsoleController(Controller):
         # A log gathered while the console was shut is still a log of what
         # happened, so opening it publishes what it missed.
         self.server.state.change("console_visible")(self.publish)
+
+        # Most of the drawer binds its state directly, so most of what a person
+        # does reaches no action at all. Watching the keys rather than the
+        # widgets is what catches those -- and catches the per-object ones,
+        # which no widget names, for nothing extra.
+        self.server.state.change(*self.app.document_keys())(self._document_moved)
+
+        # Bringing the app up writes the whole document, and none of it is
+        # anybody's doing. This is what both a page and a bare session run last
+        # once everything is up, and an added function runs after the one it
+        # was added to -- so by the time the log starts, the startup writes
+        # have been and gone.
+        self.server.controller.finalize_mpr_initialization.add(self._arm)
 
     def seed(self):
         super().seed()
@@ -80,11 +112,66 @@ class ConsoleController(Controller):
         with self.server.state as state:
             state.console_entries = self.log.entries
 
+    @cl.contextmanager
     def _observed(self, name: str, arguments: dict):
         if name in SILENT:
+            yield
             return
 
-        started = self.log.record(name, arguments)
+        self._applying += 1
+        went_through = True
+        try:
+            # The action's own writes are flushed in here, so that the listener
+            # below sees them while this is standing and knows to leave them
+            # alone: they are the action about to be written down, not
+            # something done to the app behind its back.
+            with self.server.state:
+                yield
+        except Exception:
+            went_through = False
+            raise
+        finally:
+            self._applying -= 1
+
+            # Written down on the way out rather than on the way in, so that a
+            # call which raised is not left looking like one that happened --
+            # and, which matters more, is not left in the script.
+            started = self.log.record(name, arguments, ok=went_through)
+            if started or time.monotonic() - self._published >= PUBLISH_INTERVAL:
+                self.publish()
+
+    def _arm(self, **kwargs):
+        """Start recording: what came before was the app being built."""
+        self._armed = True
+
+    def _asked_for(self, key: str) -> bool:
+        """Whether ``key`` moving is a thing anybody asked for."""
+        if key in FOLLOWS:
+            return False
+        return not any(self.server.state[guard] for guard in DRIVEN.get(key, ()))
+
+    def _document_moved(self, **state):
+        """Write down what moved with nobody having asked for it by name.
+
+        A widget bound straight to a document key is most of the drawer, and
+        every one of those writes is something the user did that no action saw.
+        Recorded as the action that would do it again, so that a log of a
+        session driven entirely from the drawer still replays.
+        """
+        if not self._armed or self._applying:
+            return
+
+        moved = set(self.server.state.modified_keys) & set(self.app.document_keys())
+        started = False
+        for key in sorted(moved):
+            if not self._asked_for(key):
+                continue
+            started |= self.log.record(
+                SET_STATE,
+                {"key": key, "value": self.server.state[key]},
+                group=f"{SET_STATE}:{key}",
+            )
+
         if started or time.monotonic() - self._published >= PUBLISH_INTERVAL:
             self.publish()
 
@@ -93,6 +180,22 @@ class ConsoleController(Controller):
         """Open or close the action console."""
         state = self.server.state
         state.console_visible = not state.console_visible
+
+    @action(SET_STATE)
+    def set_state(self, key: str, value: ty.Any):
+        """Put one document key where it is being asked to be.
+
+        The way back in for everything the drawer does by binding state
+        directly. The widgets still write their keys themselves -- what this is
+        for is that the line the console wrote about it is a line that can be
+        run, which is the whole of what makes a log a script.
+
+        Confined to the document: session state is not a thing a script has any
+        business reaching into, and a mistyped key should say so.
+        """
+        if key not in self.app.document_keys():
+            raise ValueError(f"{key!r} is not a document key")
+        self.server.state[key] = value
 
     @action("clear_console")
     def clear_console(self):

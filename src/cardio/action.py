@@ -253,20 +253,29 @@ class Registry:
             setattr(controller, name, ft.partial(self.run, name))
 
     def observe(self, observer) -> None:
-        """Be told the name and arguments of every call, before it is made.
+        """Watch every call: a context manager taking the name and arguments.
 
         Not the journal, which answers what an action *moved* and pays a copy of
         the whole document for the answer. This one answers only what was asked
         for, costs nothing, and so can stay armed for as long as a session lasts
         -- which a log of everything the user did has to be.
 
-        Before the call rather than after, so that a command which goes on to
-        raise is still a command that was given.
+        Entered before the call, so a command that goes on to raise is still a
+        command that was given, and exited after it, so a watcher can tell what
+        an action did from what was done to the app while none was running.
         """
         self._observers.append(observer)
 
     def unobserve(self, observer) -> None:
         self._observers.remove(observer)
+
+    @cl.contextmanager
+    def _watching(self, name: str, arguments: dict):
+        """Every observer, wrapped around the call in the order they asked."""
+        with cl.ExitStack() as stack:
+            for observer in list(self._observers):
+                stack.enter_context(observer(name, arguments))
+            yield
 
     def run(self, name: str, *positional, **keyword):
         """Do the named thing, with its arguments checked against its signature."""
@@ -276,14 +285,12 @@ class Registry:
         entry = self._actions[name]
         arguments = entry.bind(positional, keyword)
 
-        for observer in list(self._observers):
-            observer(name, arguments)
+        with self._watching(name, arguments):
+            if self.journal is None:
+                return entry.call(**arguments)
 
-        if self.journal is None:
-            return entry.call(**arguments)
-
-        with self.journal.record(name, arguments):
-            return entry.call(**arguments)
+            with self.journal.record(name, arguments):
+                return entry.call(**arguments)
 
     @property
     def names(self) -> list[str]:

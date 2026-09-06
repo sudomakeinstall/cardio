@@ -412,6 +412,159 @@ def test_the_log_is_a_script_that_reproduces_the_session(tmp_path_factory):
         assert second.server.state[key] == first.server.state[key], key
 
 
+# --------------------------------------------- what nobody asked for by name ----
+#
+# Most of the drawer binds a document key straight to a widget, so most of what
+# a person does reaches no action at all. What is checked here is that those
+# still reach the log, as the action that would do them again.
+
+
+def moved(session, **keys):
+    """Write document keys the way a bound widget does: no action anywhere."""
+    with session.server.state as state:
+        for key, value in keys.items():
+            state[key] = value
+
+
+def texts(session):
+    return [entry["text"] for entry in log_of(session).entries]
+
+
+def test_a_key_bound_straight_to_a_widget_still_reaches_the_log(session):
+    session.ready()
+
+    moved(session, tile_cols=4)
+
+    assert texts(session) == ["set_state(key='tile_cols', value=4)"]
+
+
+def test_what_the_log_says_is_what_would_do_it_again(session):
+    session.ready()
+    moved(session, theme_mode="light")
+
+    (line,) = texts(session)
+
+    assert console.parse_call(line) == (
+        "set_state",
+        [],
+        {"key": "theme_mode", "value": "light"},
+    )
+
+
+def test_several_keys_moving_at_once_are_several_lines(session):
+    """A grid is two keys, and a script has to set both."""
+    session.ready()
+
+    moved(session, tile_rows=2, tile_cols=4)
+
+    assert sorted(texts(session)) == [
+        "set_state(key='tile_cols', value=4)",
+        "set_state(key='tile_rows', value=2)",
+    ]
+
+
+def test_an_action_is_not_written_down_twice(session):
+    """It moves document keys too, and the log already names it."""
+    session.ready()
+
+    session.do("toggle_crosshairs")
+
+    assert texts(session) == ["toggle_crosshairs()"], (
+        "the keys it moved must not come back as set_state as well"
+    )
+
+
+def test_bringing_the_app_up_is_not_something_anybody_did(session):
+    """Seeding writes the whole document, and the log starts after it."""
+    session.ready()
+
+    assert log_of(session).entries == []
+
+
+def test_two_keys_dragged_in_turn_do_not_collapse_into_one_line(session):
+    """One action name now stands for every key, so the name cannot be enough."""
+    session.ready()
+
+    moved(session, tile_cols=4)
+    moved(session, tile_rows=2)
+
+    assert len(texts(session)) == 2
+
+
+def test_the_same_key_dragged_is_one_line(session):
+    session.ready()
+
+    for cols in (2, 3, 4):
+        moved(session, tile_cols=cols)
+
+    (entry,) = log_of(session).entries
+    assert entry["count"] == 3
+    assert entry["text"] == "set_state(key='tile_cols', value=4)"
+
+
+def test_the_cameras_moving_is_not_something_anybody_asked_for(session):
+    """They are refitted by a layout change and turned by a trackball drag.
+
+    The state is only ever a note of where VTK's ended up, and the one time a
+    person means to move one, place_camera writes that down as the action.
+    """
+    session.ready()
+
+    moved(session, maximized_view="tile")
+
+    assert texts(session) == ["set_state(key='maximized_view', value='tile')"]
+
+
+def test_the_frame_is_not_logged_while_a_loop_is_stepping_it(session):
+    """A cine writes it thirty times a second; what was asked for was to play."""
+    session.ready()
+    moved(session, playing=True)
+
+    moved(session, frame=1)
+    moved(session, frame=2)
+
+    assert texts(session) == []
+
+
+def test_the_frame_is_logged_when_a_person_scrubs_it(session):
+    session.ready()
+
+    moved(session, frame=1)
+
+    assert texts(session) == ["set_state(key='frame', value=1)"]
+
+
+def test_set_state_refuses_a_key_that_is_not_the_document(session):
+    """Session state is not a thing a script has business reaching into."""
+    session.ready()
+
+    session.do("run_command", text="set_state(key='capture_running', value=True)")
+
+    said, tried = log_of(session).entries
+    assert "not a document key" in said["text"]
+    assert tried["text"] == "set_state(key='capture_running', value=True)"
+    assert tried["kind"] == "error", "the call is shown as one that did not happen"
+    assert log_of(session).script == [], "and is not in the script"
+
+
+def test_a_session_driven_from_the_drawer_alone_replays(tmp_path_factory):
+    """The whole point: a log of a session nobody dispatched an action in."""
+    first = session_on(tmp_path_factory.mktemp("first"))
+    first.ready()
+
+    moved(first, maximized_view="tile")
+    moved(first, tile_rows=2, tile_cols=4)
+    moved(first, theme_mode="light")
+    moved(first, mpr_segmentation_opacity=0.25)
+
+    second = session_on(tmp_path_factory.mktemp("second"))
+    second.run(log_of(first).script)
+
+    for key in ("maximized_view", "tile_rows", "tile_cols", "theme_mode"):
+        assert second.server.state[key] == first.server.state[key], key
+    assert second.server.state.mpr_segmentation_opacity == pytest.approx(0.25)
+
+
 # ---------------------------------------------------------- against a page ----
 
 

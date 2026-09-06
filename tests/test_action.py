@@ -6,6 +6,7 @@ a call's arguments are resolved, and what the journal does and does not do.
 """
 
 # System
+import contextlib as cl
 import typing as ty
 
 # Third Party
@@ -200,47 +201,102 @@ def journalled(**state):
     return registry, journal, fake
 
 
+def watcher(into, label=""):
+    """An observer that writes down when it was entered and when it left."""
+
+    @cl.contextmanager
+    def observe(name, arguments):
+        into.append((f"{label}enter", name, arguments))
+        try:
+            yield
+        finally:
+            into.append((f"{label}exit", name, arguments))
+
+    return observe
+
+
 def test_an_observer_is_told_the_name_and_the_arguments():
     registry = Registry()
     registry.add(Recorder())
     seen = []
-    registry.observe(lambda name, arguments: seen.append((name, arguments)))
+    registry.observe(watcher(seen))
 
     registry.run("takes_two", 1)
 
-    assert seen == [("takes_two", {"first": 1, "second": "b"})]
+    assert seen == [
+        ("enter", "takes_two", {"first": 1, "second": "b"}),
+        ("exit", "takes_two", {"first": 1, "second": "b"}),
+    ]
 
 
-def test_an_observer_is_told_before_the_call_is_made():
+def test_an_observer_is_entered_before_the_call_and_left_after_it():
+    """The two halves are what tell an action's doing from anybody else's."""
+    order = []
+
+    class Slow:
+        @action("slow")
+        def slow(self):
+            order.append("called")
+
+    registry = Registry()
+    registry.add(Slow())
+    registry.observe(watcher(order))
+
+    registry.run("slow")
+
+    assert [step[0] if isinstance(step, tuple) else step for step in order] == [
+        "enter",
+        "called",
+        "exit",
+    ]
+
+
+def test_an_observer_is_left_even_when_the_action_raises():
     """A command that goes on to raise is still a command that was given."""
     order = []
 
     class Failing:
         @action("boom")
         def boom(self):
-            order.append("called")
             raise RuntimeError("no")
 
     registry = Registry()
     registry.add(Failing())
-    registry.observe(lambda name, arguments: order.append("observed"))
+    registry.observe(watcher(order))
 
     with pytest.raises(RuntimeError):
         registry.run("boom")
 
-    assert order == ["observed", "called"]
+    assert [step[0] for step in order] == ["enter", "exit"]
 
 
 def test_an_unknown_action_is_never_observed():
     registry = Registry()
     registry.add(Recorder())
     seen = []
-    registry.observe(lambda name, arguments: seen.append(name))
+    registry.observe(watcher(seen))
 
     with pytest.raises(KeyError):
         registry.run("nonsense")
 
     assert seen == []
+
+
+def test_observers_nest_in_the_order_they_asked_to_watch():
+    registry = Registry()
+    registry.add(Recorder())
+    order = []
+    registry.observe(watcher(order, "first "))
+    registry.observe(watcher(order, "second "))
+
+    registry.run("takes_none")
+
+    assert [step[0] for step in order] == [
+        "first enter",
+        "second enter",
+        "second exit",
+        "first exit",
+    ]
 
 
 def test_observing_does_not_arm_the_journal():
@@ -251,7 +307,7 @@ def test_observing_does_not_arm_the_journal():
     what says the two hooks stayed separate.
     """
     registry, journal, state = journalled(a=1)
-    registry.observe(lambda name, arguments: None)
+    registry.observe(watcher([]))
 
     registry.run("assign", "a", 10)
 
@@ -263,9 +319,7 @@ def test_an_observer_can_stop_observing():
     registry = Registry()
     registry.add(Recorder())
     seen = []
-
-    def observer(name, arguments):
-        seen.append(name)
+    observer = watcher(seen)
 
     registry.observe(observer)
     registry.run("takes_none")
@@ -273,7 +327,7 @@ def test_an_observer_can_stop_observing():
     registry.unobserve(observer)
     registry.run("takes_none")
 
-    assert seen == ["takes_none"]
+    assert [step[0] for step in seen] == ["enter", "exit"]
 
 
 # -------------------------------------------------------------- journal ------

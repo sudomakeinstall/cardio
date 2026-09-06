@@ -222,6 +222,7 @@ ACTIONS = {
     "save_rotation_angles",
     "screenshot",
     "scroll_slice",
+    "set_state",
     "set_window_level_preset",
     "snap_to_centroid",
     "swap_snap_groups",
