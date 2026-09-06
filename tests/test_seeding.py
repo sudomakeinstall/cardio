@@ -26,6 +26,7 @@ import cardio.registry as registry
 from cardio.document import _place, scene_from_state
 from cardio.logic.base import Controller
 from cardio.scene import Scene
+from cardio.state import VIEWPORTS, screenshot_viewport
 from tests.test_app_smoke import build_app, build_scene, write_volume
 
 # Every document field, moved off its default. Keyed by the dotted source
@@ -33,6 +34,7 @@ from tests.test_app_smoke import build_app, build_scene, write_volume
 MOVED = {
     "active_volume_label": "vol",
     "capture_format": "jpeg",
+    "screenshot_viewports": ["axial", "tile"],
     "current_frame": 2,
     "mpr_level": 111.0,
     "mpr_origin": [1.0, 2.0, 3.0],
@@ -496,3 +498,30 @@ def test_every_per_object_property_is_claimed_by_exactly_one_controller():
         f"claimed but not a per-object source: "
         f"{sorted(set(claimed) - set(registry.OBJECT_SOURCES))}"
     )
+
+
+def test_a_configured_viewport_tick_reaches_its_own_key(rounds):
+    """The one config field that fans out to a family of keys.
+
+    A list of the viewports to capture going in, one tick per viewport once
+    it gets there. Nothing asserted the way in before: the field was named
+    as a literal at each end, and only the way out was guarded.
+    """
+    for scene, seen in rounds:
+        chosen = set(scene.screenshot_viewports)
+        assert chosen and chosen != set(VIEWPORTS), (
+            "a scene ticking all or none would pass whatever was written"
+        )
+
+        # Read off the scene rather than through the registry helper, which
+        # is what wrote them -- comparing that against itself says nothing.
+        for viewport in VIEWPORTS:
+            _, written = seen[screenshot_viewport(viewport)][0]
+            assert written == (viewport in chosen), viewport
+
+
+def test_the_viewport_ticks_are_part_of_the_document(rounds):
+    """They are saved and restored, so an undo has to put a tick back too."""
+    scene, _ = rounds[0]
+    keys = registry.document_keys(scene)
+    assert set(registry.viewport_tick_keys()) <= set(keys)

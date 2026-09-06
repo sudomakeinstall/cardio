@@ -258,6 +258,29 @@ OBJECT_SOURCES: dict[str, str] = {
 }
 
 
+# The one config field that fans out to a family of keys rather than to a
+# single one: a tick per viewport going in, the list of the ticked ones coming
+# back. Neither direction is a copy, so both are spelled here rather than
+# separately at each end, where they used to name the field as a literal.
+VIEWPORT_TICKS = "screenshot_viewports"
+
+
+def viewport_tick_keys() -> list[str]:
+    """The tick key for every viewport a capture can be taken from."""
+    return [screenshot_viewport(viewport) for viewport in VIEWPORTS]
+
+
+def viewport_ticks(scene) -> dict[str, bool]:
+    """Each viewport's tick, from the list of the ones the config asks for."""
+    chosen = read(scene, VIEWPORT_TICKS)
+    return {screenshot_viewport(viewport): viewport in chosen for viewport in VIEWPORTS}
+
+
+def ticked_viewports(state) -> list[str]:
+    """The viewports whose ticks are on, as the config field spells them."""
+    return [viewport for viewport in VIEWPORTS if state[screenshot_viewport(viewport)]]
+
+
 def object_state_value(obj, prop: str):
     """``obj``'s key for ``prop`` and what it should hold, or ``(None, None)``.
 
@@ -295,7 +318,7 @@ def document_keys(scene) -> list[str]:
     scene is the only thing that can say what they are.
     """
     keys = keys_in_scope(Scope.DOCUMENT)
-    keys.extend(screenshot_viewport(viewport) for viewport in VIEWPORTS)
+    keys.extend(viewport_tick_keys())
     for obj in scene.renderables:
         keys.extend(object_document_keys(obj))
     return keys

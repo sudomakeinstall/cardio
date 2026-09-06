@@ -7,6 +7,8 @@ import datetime as dt
 # Third Party
 import pydicom as pd
 
+from .. import registry
+
 # Internal
 from ..action import action, background
 from ..capture import (
@@ -96,10 +98,8 @@ class CaptureController(Controller):
         super().seed()
         state = self.server.state
 
-        for viewport in VIEWPORTS:
-            state[screenshot_viewport(viewport)] = (
-                viewport in self.scene.screenshot_viewports
-            )
+        for key, ticked in registry.viewport_ticks(self.scene).items():
+            state[key] = ticked
 
         state.capture_formats = FORMAT_ITEMS
         state.capture_running = False

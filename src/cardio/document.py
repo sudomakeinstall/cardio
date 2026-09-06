@@ -14,7 +14,7 @@ objects it loaded.
 # Internal
 from . import registry, toml
 from .scene import Scene
-from .state import VIEWPORTS, ObjectState, screenshot_viewport
+from .state import ObjectState
 
 
 def _place(data: dict, path: str, value) -> None:
@@ -58,9 +58,7 @@ def scene_from_state(state, scene: Scene) -> Scene:
         if source not in mirrors:
             _place(data, source, registry.to_config(key, state[key]))
 
-    data["screenshot_viewports"] = [
-        viewport for viewport in VIEWPORTS if state[screenshot_viewport(viewport)]
-    ]
+    data[registry.VIEWPORT_TICKS] = registry.ticked_viewports(state)
 
     for obj, entry in _entries(scene, data):
         keys = ObjectState.of(obj)
