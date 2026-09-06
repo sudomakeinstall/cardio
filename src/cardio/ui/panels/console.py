@@ -24,6 +24,8 @@ CONSOLE_BODY_CLASS = "cardio-console-body"
 # A refusal is a line like any other, in the colour that says it did nothing.
 ENTRY_CLASS = "'text-pre-wrap ' + (entry.kind === 'error' ? 'text-error' : '')"
 
+PROMPT_CLASS = "cardio-console-prompt"
+
 
 def console_panel(server, scene):
     """The dock along the bottom of the viewports.
@@ -84,3 +86,42 @@ def console_panel(server, scene):
                     classes="text-disabled ml-3 flex-shrink-0",
                 )
 
+        _prompt(server)
+
+
+def _prompt(server):
+    """Where a call is typed, in the syntax the log above is written in.
+
+    The field swallows its own key events. Without that they reach the render
+    view's interactor, where typing `a` maximizes the axial view -- the same
+    guard the rotation name field carries, for the same reason.
+
+    It guards ``keydown`` and ``keypress`` and not ``keyup``, which is the one
+    the submit is on: two handlers for the same event, one of them calling
+    ``stopImmediatePropagation``, is a question about which of them runs first
+    that there is no reason to be asking. ``keydown`` is what the interactor
+    reads anyway.
+    """
+    with vuetify.VRow(no_gutters=True, classes="align-center px-4 py-2"):
+        vuetify.VTextField(
+            v_model=("console_input",),
+            placeholder="add_rotation(axis='Z')",
+            prefix=">",
+            density="compact",
+            variant="plain",
+            hide_details=True,
+            autofocus=True,
+            classes=PROMPT_CLASS,
+            __events=[("keyup_enter", "keyup.enter"), "keydown", "keypress"],
+            keydown="$event.stopPropagation(); $event.stopImmediatePropagation();",
+            keypress="$event.stopPropagation(); $event.stopImmediatePropagation();",
+            keyup_enter=(server.controller.run_command, "[console_input]"),
+        )
+        vuetify.VBtn(
+            icon="mdi-play",
+            variant="text",
+            density="compact",
+            title="Run this call",
+            disabled=("!console_input",),
+            click=(server.controller.run_command, "[console_input]"),
+        )

@@ -67,3 +67,12 @@
     font-size: 0.8125rem;
     line-height: 1.5;
 }
+
+/* The prompt is written in the same syntax the log is printed in, so it is
+   set in the same face. */
+
+.cardio-console-prompt input,
+.cardio-console-prompt .v-text-field__prefix {
+    font-family: monospace;
+    font-size: 0.8125rem;
+}

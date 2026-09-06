@@ -280,6 +280,7 @@ def test_the_script_does_not_share_its_arguments_with_the_log():
 
     assert log.script == [("add_rotation", {"axis": "Z"})]
 
+
 # ------------------------------------------------------- against a session ----
 
 
@@ -431,6 +432,45 @@ def test_the_dock_reads_the_log_out_of_state(page):
 
     assert 'v-for="entry in console_entries"' in html
     assert ':key="entry.n"' in html
+
+
+def test_the_prompt_hands_what_was_typed_to_the_action(page):
+    """Rather than the action reading it off state, so a replay carries it."""
+    _, _, html = page
+
+    assert "@keyup.enter" in html
+    assert "[console_input]" in html
+
+
+def test_the_prompt_does_not_let_a_keystroke_reach_the_interactor(page):
+    """Or typing `a` in the box would maximize the axial view.
+
+    Not on ``keyup``, which is the event the submit is on: two handlers for
+    one event, one of them stopping immediate propagation, is a question about
+    ordering with no reason to be asked.
+    """
+    _, _, html = page
+    field = html[html.find("cardio-console-prompt") :].split("/>")[0]
+
+    assert "@keydown=" in field and "stopImmediatePropagation" in field
+    assert "@keypress=" in field
+    assert "@keyup=" not in field
+
+
+def test_a_button_press_and_a_typed_call_write_the_same_line(page):
+    """The claim the whole syntax exists for."""
+    server, logic, _ = page
+
+    with server.state:
+        logic.dispatch("add_rotation", axis="Z")
+    clicked = logic.console.log.entries[0]["text"]
+
+    with server.state:
+        logic.dispatch("clear_console")
+        logic.dispatch("run_command", text="add_rotation(axis='Z')")
+    typed = logic.console.log.entries[0]["text"]
+
+    assert typed == clicked == "add_rotation(axis='Z')"
 
 
 def test_the_dock_starts_where_the_drawer_stops(page):
