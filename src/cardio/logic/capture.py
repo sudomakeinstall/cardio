@@ -84,6 +84,8 @@ def summary_of(written: list[str], directory) -> str:
 class CaptureController(Controller):
     """Cine capture and rotation serialisation."""
 
+    seeds = ("capture_format",)
+
     def register(self):
         # The layout decides which viewports can be captured, and the drawer
         # greys out the rest; publishing it is what keeps that rule in one place
@@ -91,6 +93,7 @@ class CaptureController(Controller):
         self.server.state.change("maximized_view")(self.sync_available)
 
     def seed(self):
+        super().seed()
         state = self.server.state
 
         for viewport in VIEWPORTS:
@@ -98,7 +101,6 @@ class CaptureController(Controller):
                 viewport in self.scene.screenshot_viewports
             )
 
-        state.capture_format = self.scene.capture_format.value
         state.capture_formats = FORMAT_ITEMS
         state.capture_running = False
         state.capture_progress = 0

@@ -10,6 +10,8 @@ from .base import Controller
 class VisibilityController(Controller):
     """What is drawn, and in what colours."""
 
+    seeds = ("theme_mode",)
+
     def register(self):
         state = self.server.state
         state.change("theme_mode")(self.sync_background_color)
@@ -25,8 +27,8 @@ class VisibilityController(Controller):
             state.change(*preset_keys)(self.sync_volume_presets)
 
     def seed(self):
+        super().seed()
         state = self.server.state
-        state.theme_mode = self.scene.view.theme.value
         self.apply_background_color(state.theme_mode)
 
         for obj in self.scene.renderables:

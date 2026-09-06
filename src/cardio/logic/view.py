@@ -17,15 +17,18 @@ class ViewController(Controller):
     toggle them are actions like any other.
     """
 
+    seeds = (
+        "maximized_view",
+        "help_overlay_visible",
+        "metadata_overlay_visible",
+        "drawer_sections",
+    )
+
     def seed(self):
+        super().seed()
         state = self.server.state
-        view = self.scene.view
 
         state.trame__title = f"cardio v{__version__}"
-        state.maximized_view = view.layout.state_value
-        state.help_overlay_visible = view.help_visible
-        state.metadata_overlay_visible = view.metadata_visible
-        state.drawer_sections = view.open_sections
 
         pages = metadata.pages(self.scene)
         state.metadata_pages = pages

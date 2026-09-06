@@ -55,6 +55,8 @@ def poses_along(pose_at: PoseAt, count: int) -> list[Pose] | None:
 class TileController(Controller):
     """The tile grid: what each tile shows, and how many there are."""
 
+    seeds = ("tile_rows", "tile_cols")
+
     def __init__(self, app):
         super().__init__(app)
         self._tile_sets: dict[tuple[str, int], TileSet] = {}
@@ -79,10 +81,8 @@ class TileController(Controller):
             state.change(ObjectState.of(seg).mpr_overlay)(self.refresh)
 
     def seed(self):
-        state = self.server.state
-        state.tile_rows = self.scene.tile_rows
-        state.tile_cols = self.scene.tile_cols
-        state.tile_sizes = list(range(1, MAX_ROWS + 1))
+        super().seed()
+        self.server.state.tile_sizes = list(range(1, MAX_ROWS + 1))
 
     @property
     def active(self) -> bool:

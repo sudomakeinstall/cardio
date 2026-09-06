@@ -20,12 +20,17 @@ MOUSE_STEP_NAMES = {"X": "Mouse L-R", "Y": "Mouse P-A", "Z": "Mouse S-I"}
 class RotationController(Controller):
     """Owns ``mpr_rotation_data`` and the units/index-order mirrors."""
 
+    # All three come off the same sequence, so they cannot fall out of step;
+    # the two metadata paths nest inside mpr_rotation_data's on purpose.
+    seeds = ("mpr_rotation_data", "angle_units", "index_order")
+
     def register(self):
         state = self.server.state
         state.change("angle_units")(self.sync_angle_units)
         state.change("index_order")(self.sync_index_order)
 
     def seed(self):
+        super().seed()
         state = self.server.state
         state.angle_units_items = [
             {"text": "Degrees", "value": "degrees"},
@@ -35,7 +40,6 @@ class RotationController(Controller):
             {"text": "ITK (X=L, Y=P, Z=S)", "value": "itk"},
             {"text": "Roma (X=S, Y=P, Z=L)", "value": "roma"},
         ]
-        self.publish(self.scene.mpr_rotation_sequence)
 
     def rotation_sequence(self) -> RotationSequence:
         """The rotation state as its model, validated on the way in.

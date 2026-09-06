@@ -55,6 +55,18 @@ CAMERA_LOCK_TITLES = {
 class MPRController(Controller):
     """Everything that decides what the three MPR views show."""
 
+    seeds = (
+        "camera_lock",
+        "mpr_origin",
+        "mpr_crosshairs_enabled",
+        # Already reconciled with the preset by the scene, so these are copies
+        # rather than decisions, and the views need not exist to make them.
+        "mpr_window",
+        "mpr_level",
+        "mpr_window_level_preset",
+        "mpr_segmentation_opacity",
+    )
+
     def __init__(self, app):
         super().__init__(app)
         self._pending_active_volume = None
@@ -94,13 +106,13 @@ class MPRController(Controller):
 
     def seed(self):
         """The cuts' pose, their window and level, and the pickers' contents."""
+        super().seed()
         state = self.server.state
 
         state.volume_items = [
             {"text": volume.label, "value": volume.label}
             for volume in self.scene.volumes
         ]
-        state.camera_lock = self.scene.view.camera_lock.value
         state.camera_lock_items = [
             {"title": CAMERA_LOCK_TITLES[lock], "value": lock.value}
             for lock in CameraLock
@@ -109,15 +121,6 @@ class MPRController(Controller):
             {"text": preset.name, "value": key} for key, preset in presets.items()
         ]
 
-        state.mpr_origin = list(self.scene.mpr_origin)
-        state.mpr_crosshairs_enabled = self.scene.mpr_crosshairs_enabled
-        # Already reconciled with the preset by the scene, so this is a copy
-        # rather than a decision, and the views need not exist to make it.
-        state.mpr_window = self.scene.mpr_window
-        state.mpr_level = self.scene.mpr_level
-        state.mpr_window_level_preset = self.scene.mpr_window_level_preset
-
-        state.mpr_segmentation_opacity = self.scene.mpr_segmentation_opacity
         for seg in self.scene.segmentations:
             state[ObjectState.of(seg).mpr_overlay] = seg.mpr_overlay
 

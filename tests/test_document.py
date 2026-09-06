@@ -189,3 +189,27 @@ def test_a_scene_with_nothing_to_snap_to_still_saves(tmp_path):
 
     assert reopen.server.state.snap_seg_label == ""
     assert not reopen.server.state.snap_locked
+
+
+def test_a_configured_lock_is_kept_even_with_nothing_to_snap_to(tmp_path):
+    """A lock is what the config asked for, whether or not it can take effect.
+
+    Nothing listens to it on a scene with no segmentation, so it does not
+    snap anything -- but it is still what the session says, and it used to be
+    quietly turned off on the way in and lost on the way out. Snap itself
+    takes the same view: asking for a lock that cannot act is a warning.
+    """
+    smoke.write_mesh(tmp_path / "mesh0.obj")
+    scene = Scene(
+        meshes=[{"label": "mesh", "directory": tmp_path, "file_paths": ["mesh0.obj"]}],
+        snap={"locked": True},
+    )
+    session = Session(scene, server=f"locked-{next(_names)}")
+    session.ready()
+
+    assert session.server.state.snap_locked
+
+    reopen = reopened(session.save(tmp_path / "saved.toml"))
+
+    assert reopen.scene.snap.locked
+    assert reopen.server.state.snap_locked

@@ -23,15 +23,10 @@ import pytest
 
 # Internal
 import cardio.registry as registry
-from cardio.document import _place
+from cardio.document import _place, scene_from_state
+from cardio.logic.base import Controller
 from cardio.scene import Scene
 from tests.test_app_smoke import build_app, build_scene, write_volume
-
-# Document keys their own controller writes rather than the registry, and the
-# checkpoint that will change that. Both locks are forced off unless a
-# segmentation is actually selected, which is a decision about snapping rather
-# than about the field.
-WRITTEN_BY_HAND = {"snap_locked", "snap_orientation_locked"}
 
 # Every document field, moved off its default. Keyed by the dotted source
 # rather than the state key, because that is what a scene is built from.
@@ -89,8 +84,12 @@ ROUNDS = 3
 # Enough frames that current_frame has somewhere to be other than the start.
 FRAMES = 3
 
+# Every controller there is. Taken from the base class rather than listed, so
+# a new one is included here without anyone having to remember to add it.
+CONTROLLERS = Controller.__subclasses__()
 
-def moved_scene(directory: pl.Path, round: int) -> Scene:
+
+def moved_scene(directory: pl.Path, round: int, extra: dict | None = None) -> Scene:
     """A scene with every document field away from its default.
 
     ``_place`` is the same dotted-path writer the save direction uses, so the
@@ -116,6 +115,8 @@ def moved_scene(directory: pl.Path, round: int) -> Scene:
         _place(data, source, value)
     for index, source in enumerate(boolean_sources()):
         _place(data, source, bool((index + 1) >> round & 1))
+    for source, value in (extra or {}).items():
+        _place(data, source, value)
     return build_scene(directory, **data)
 
 
@@ -279,7 +280,7 @@ def test_the_pass_writes_what_the_registry_says_it_should(rounds):
     """
     for scene, seen in rounds:
         for key in registry.keys_in_scope(registry.Scope.DOCUMENT):
-            if registry.VARIABLES[key].seeded_by or key in WRITTEN_BY_HAND:
+            if registry.VARIABLES[key].seeded_by:
                 continue
 
             _, written = seen[key][0]
@@ -290,8 +291,121 @@ def test_the_pass_writes_what_the_registry_says_it_should(rounds):
             )
 
 
+def test_every_document_key_is_claimed_by_exactly_one_controller():
+    """Who writes what, said once and checked against the registry.
+
+    A key in no ``seeds`` tuple would go unwritten; a key in two would be
+    written twice with the last one quietly winning.
+    """
+    claimed: dict[str, list[str]] = {}
+    for controller in CONTROLLERS:
+        for key in controller.seeds:
+            claimed.setdefault(key, []).append(controller.__name__)
+
+    doubled = {key: names for key, names in claimed.items() if len(names) > 1}
+    assert not doubled, f"claimed by more than one controller: {doubled}"
+
+    expected = {
+        key
+        for key in registry.keys_in_scope(registry.Scope.DOCUMENT)
+        if not registry.VARIABLES[key].seeded_by
+    }
+    assert set(claimed) == expected, (
+        f"unclaimed: {sorted(expected - set(claimed))}; "
+        f"claimed but not document state: {sorted(set(claimed) - expected)}"
+    )
+
+
+def test_the_controller_that_claims_a_key_is_the_one_that_writes_it(rounds):
+    """The tuples say who owns what; this says the pass agrees.
+
+    Watched rather than declared, so a key moved to another controller
+    without moving its claim fails here.
+    """
+    owner = {
+        key: controller.__name__
+        for controller in CONTROLLERS
+        for key in controller.seeds
+    }
+
+    for _, seen in rounds:
+        for key, claimed_by in owner.items():
+            wrote, _value = seen[key][0]
+            assert wrote == claimed_by, (
+                f"{key} is claimed by {claimed_by} but first written by {wrote}"
+            )
+
+
 def test_the_observation_sees_the_whole_pass(rounds):
     """Guarding the guard: an observer that saw nothing would pass everything."""
     for _, seen in rounds:
         document = set(registry.keys_in_scope(registry.Scope.DOCUMENT))
         assert len(document & set(seen)) >= 30
+
+
+def test_every_controller_is_watched_and_every_one_writes(rounds):
+    """Guarding the guards above: a controller missed would claim nothing.
+
+    All ten write something during a pass, so a name absent here means the
+    observation walked past it rather than that it had nothing to say.
+    """
+    _, seen = rounds[0]
+    watched = {name for writes in seen.values() for name, _ in writes}
+    assert watched == {controller.__name__ for controller in CONTROLLERS}
+
+
+@pytest.fixture(scope="module")
+def settled(tmp_path_factory):
+    """A moved scene with the locks off, seeded and left alone.
+
+    A configured lock snaps the moment it is applied, which moves the origin
+    -- real behaviour, and the wrong thing to hold the two directions to.
+    """
+    directory = tmp_path_factory.mktemp("inverse")
+    scene = moved_scene(
+        directory, 0, extra={"snap.locked": False, "snap.orientation_locked": False}
+    )
+    server, _, _, _ = build_app(scene)
+    return scene, server
+
+
+def test_seeding_and_saving_are_inverse(settled):
+    """The way in and the way out, held against each other.
+
+    Once the registry is what seeds, comparing state to the registry says
+    nothing -- it wrote it. The save direction is the oracle that stays
+    honest: independent code, on the other side of the same map. A key
+    seeded from the wrong field comes back written to the wrong one.
+    """
+    scene, server = settled
+    saved = scene_from_state(server.state, scene)
+
+    written_by_hand = {
+        registry.source_of(key)
+        for key, variable in registry.VARIABLES.items()
+        if variable.seeded_by
+    }
+
+    for key in registry.keys_in_scope(registry.Scope.DOCUMENT):
+        source = registry.source_of(key)
+        if source in written_by_hand:
+            continue
+
+        assert repr(registry.read(saved, source)) == repr(
+            registry.read(scene, source)
+        ), f"{source} came back as something else"
+
+
+def test_the_inverse_has_something_to_say():
+    """Guarding the guard: an empty comparison would pass on any scene."""
+    written_by_hand = {
+        registry.source_of(key)
+        for key, variable in registry.VARIABLES.items()
+        if variable.seeded_by
+    }
+    compared = [
+        key
+        for key in registry.keys_in_scope(registry.Scope.DOCUMENT)
+        if registry.source_of(key) not in written_by_hand
+    ]
+    assert len(compared) >= 30

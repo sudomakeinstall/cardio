@@ -45,6 +45,24 @@ def alignment_rotation(axes: np.ndarray) -> np.ndarray:
 class SnapController(Controller):
     """Centroid snapping, interface alignment and the per-frame locks."""
 
+    # snap_seg_label is absent: an empty one means the first segmentation,
+    # which is a fallback rather than a field, and the registry says so.
+    SELECTION = (
+        "snap_mode",
+        "snap_labels_a",
+        "snap_labels_b",
+        "snap_labels_c",
+        "snap_traverse",
+    )
+
+    # Kept apart from the selection because ``reset`` releases the locks
+    # first and turns them back on last, once there is a settled scene to
+    # snap against. Writing them alongside the selection would put them back
+    # on halfway through that.
+    LOCKS = ("snap_locked", "snap_orientation_locked")
+
+    seeds = (*SELECTION, *LOCKS)
+
     def __init__(self, app):
         super().__init__(app)
         self._published_seg_label = None
@@ -72,12 +90,13 @@ class SnapController(Controller):
 
         The selection and the locks are written whether or not there is a
         segmentation to snap to. They are document state, and a session that
-        left them out would not be one a config could reopen.
+        left them out would not be one a config could reopen -- a lock with
+        nothing to snap to is inert, and ``Snap.warn_ineffective_locks``
+        already treats asking for one as a warning rather than an error.
         """
         state = self.server.state
         self._publish_configured_selection()
-        state.snap_locked = False
-        state.snap_orientation_locked = False
+        self.write_seeds(*self.LOCKS)
 
         if not self.scene.segmentations:
             return
@@ -105,9 +124,7 @@ class SnapController(Controller):
         costs nothing: both answers come from the memoized caches.
         """
         snap = self.scene.snap
-        state = self.server.state
-        state.snap_locked = snap.locked
-        state.snap_orientation_locked = snap.orientation_locked
+        self.write_seeds(*self.LOCKS)
         if snap.locked:
             self.snap_to_centroid()
         if snap.orientation_locked:
@@ -125,17 +142,14 @@ class SnapController(Controller):
         The groups are written unfiltered here: the pickers are populated
         later in the same pass, which filters them against the labels the
         segmentation actually holds.
+
+        Shared with ``reset``, which is why the configured values are written
+        here rather than only in ``seed``.
         """
-        state = self.server.state
-        snap = self.scene.snap
-        state.snap_mode = snap.mode.value
-        state.snap_seg_label = snap.segmentation_label or next(
+        self.write_seeds(*self.SELECTION)
+        self.server.state.snap_seg_label = self.scene.snap.segmentation_label or next(
             (s.label for s in self.scene.segmentations), ""
         )
-        state.snap_labels_a = list(snap.labels_a)
-        state.snap_labels_b = list(snap.labels_b)
-        state.snap_labels_c = list(snap.labels_c)
-        state.snap_traverse = snap.traverse
 
     def _publish_available_labels(self, seg) -> bool:
         """Publish the label picker options for ``seg`` at the current frame.

@@ -22,6 +22,16 @@ from .base import Controller
 class PlaybackController(Controller):
     """Advances the frame, on demand or on a timer."""
 
+    seeds = (
+        "frame",
+        "bpm",
+        "bpr",
+        "incrementing",
+        "rotating",
+        "playback_quality",
+        "playback_resolution",
+    )
+
     def __init__(self, app):
         super().__init__(app)
         self._playback_start_time = None
@@ -40,16 +50,8 @@ class PlaybackController(Controller):
 
     def seed(self):
         """Put the frame and the playback controls where the config starts them."""
-        state = self.server.state
-        playback = self.scene.playback
-        state.frame = self.scene.current_frame
-        state.playing = False
-        state.bpm = playback.bpm
-        state.bpr = playback.bpr
-        state.incrementing = playback.incrementing
-        state.rotating = playback.rotating
-        state.playback_quality = playback.quality
-        state.playback_resolution = playback.resolution
+        super().seed()
+        self.server.state.playing = False
 
     def update_frame(self, frame, **kwargs):
         # Before update_mpr_frame reads mpr_origin, so the new frame is

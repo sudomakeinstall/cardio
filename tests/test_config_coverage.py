@@ -28,6 +28,7 @@ import cardio.logic as logic
 import cardio.registry as registry
 import cardio.view as view
 from cardio.action import declared_actions
+from cardio.logic.base import Controller
 from cardio.object import Object
 from cardio.scene import Scene
 from cardio.segmentation import Segmentation
@@ -189,12 +190,26 @@ def test_every_key_the_source_listens_to_is_declared():
     )
 
 
+def _seeded_keys() -> set[str]:
+    """Every key a controller claims to write from the scene.
+
+    The seeding pass writes through a variable rather than by name, so the
+    scan above cannot see those writes. What names them is the ``seeds``
+    tuple, which is where a controller says which keys are its to write.
+    """
+    return {
+        key for controller in Controller.__subclasses__() for key in controller.seeds
+    }
+
+
 def test_nothing_is_declared_that_the_app_no_longer_uses():
     named, _ = _ui_bindings()
     written, _ = _source_keys()
-    stale = set(registry.VARIABLES) - named - written
+    stale = set(registry.VARIABLES) - named - written - _seeded_keys()
 
-    assert stale == set(), f"declared but neither bound nor written: {sorted(stale)}"
+    assert stale == set(), (
+        f"declared but neither bound, written nor seeded: {sorted(stale)}"
+    )
 
 
 def test_every_computed_binding_is_accounted_for():
@@ -211,6 +226,29 @@ def test_every_computed_binding_is_accounted_for():
 @pytest.mark.parametrize("key", registry.keys_in_scope(registry.Scope.DOCUMENT))
 def test_document_keys_name_a_real_scene_field(key):
     assert _resolve(Scene, registry.source_of(key)) is not None
+
+
+def test_no_two_document_keys_name_the_same_field():
+    """One key to one field, so that seeding and saving cannot collide.
+
+    Both directions read this table, so an entry pointing at another key's
+    field is self-consistent and nothing downstream would notice -- except
+    that the two keys would then write over each other on the way out. Two
+    sources may nest, which is a mirror and is allowed; they may not be the
+    same.
+    """
+    sources = {
+        key: registry.source_of(key)
+        for key in registry.keys_in_scope(registry.Scope.DOCUMENT)
+    }
+    shared = {
+        source: sorted(k for k, s in sources.items() if s == source)
+        for source in set(sources.values())
+    }
+    assert not [names for names in shared.values() if len(names) > 1], (
+        f"more than one key names the same field: "
+        f"{[names for names in shared.values() if len(names) > 1]}"
+    )
 
 
 @pytest.mark.parametrize("key", registry.keys_in_scope(registry.Scope.DOCUMENT))
@@ -372,6 +410,7 @@ def test_the_scan_finds_the_ui():
     written, listened = _source_keys()
     assert len(named) > 20 and len(computed) > 5
     assert len(written) > 20 and len(listened) > 20
+    assert len(_seeded_keys()) > 20
 
 
 def test_the_drawer_sections_the_config_names_are_the_ones_the_ui_builds():
