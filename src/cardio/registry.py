@@ -246,20 +246,6 @@ def source_of(key: str) -> str:
     return VARIABLES[key].source
 
 
-def document_keys(scene) -> list[str]:
-    """Every key that says what ``scene`` is currently showing.
-
-    What a saved session writes down and what an undo puts back. The literal
-    keys are the same whatever the scene holds; the rest are per object, so the
-    scene is the only thing that can say what they are.
-    """
-    keys = keys_in_scope(Scope.DOCUMENT)
-    keys.extend(screenshot_viewport(viewport) for viewport in VIEWPORTS)
-    for obj in scene.renderables:
-        keys.extend(ObjectState.of(obj).document_keys)
-    return keys
-
-
 # Which field on the object model seeds each of ObjectState's per-object keys,
 # one key to one field. The clip bounds are absent because they are not that
 # shape: three range sliders make up the one ``crop`` box, so each direction of
@@ -270,3 +256,46 @@ OBJECT_SOURCES: dict[str, str] = {
     "preset": "transfer_function_preset",
     "mpr_overlay": "mpr_overlay",
 }
+
+
+def object_state_value(obj, prop: str):
+    """``obj``'s key for ``prop`` and what it should hold, or ``(None, None)``.
+
+    A renderable only has the key if it has the field behind it, which is the
+    same partition the save direction makes coming back.
+    """
+    field = OBJECT_SOURCES[prop]
+    if field not in type(obj).model_fields:
+        return None, None
+
+    key = getattr(ObjectState.of(obj), prop)
+    return key, to_state(key, getattr(obj, field))
+
+
+def object_document_keys(obj) -> list[str]:
+    """Every key saying what ``obj`` is showing.
+
+    The clip bounds are here despite having no field behind them: a crop is
+    part of what is on screen whether it was configured or taken from the
+    object's own extent.
+    """
+    named = [
+        getattr(ObjectState.of(obj), prop)
+        for prop in OBJECT_SOURCES
+        if OBJECT_SOURCES[prop] in type(obj).model_fields
+    ]
+    return [*named, *ObjectState.of(obj).clip_bounds]
+
+
+def document_keys(scene) -> list[str]:
+    """Every key that says what ``scene`` is currently showing.
+
+    What a saved session writes down and what an undo puts back. The literal
+    keys are the same whatever the scene holds; the rest are per object, so the
+    scene is the only thing that can say what they are.
+    """
+    keys = keys_in_scope(Scope.DOCUMENT)
+    keys.extend(screenshot_viewport(viewport) for viewport in VIEWPORTS)
+    for obj in scene.renderables:
+        keys.extend(object_document_keys(obj))
+    return keys

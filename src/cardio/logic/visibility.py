@@ -11,6 +11,7 @@ class VisibilityController(Controller):
     """What is drawn, and in what colours."""
 
     seeds = ("theme_mode",)
+    object_seeds = ("visibility",)
 
     def register(self):
         state = self.server.state
@@ -28,11 +29,7 @@ class VisibilityController(Controller):
 
     def seed(self):
         super().seed()
-        state = self.server.state
-        self.apply_background_color(state.theme_mode)
-
-        for obj in self.scene.renderables:
-            state[ObjectState.of(obj).visibility] = obj.visible
+        self.apply_background_color(self.server.state.theme_mode)
 
     def sync_visibility(self, **kwargs):
         """Show or hide each object's current frame, per its visibility toggle."""

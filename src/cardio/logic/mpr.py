@@ -66,6 +66,7 @@ class MPRController(Controller):
         "mpr_window_level_preset",
         "mpr_segmentation_opacity",
     )
+    object_seeds = ("mpr_overlay",)
 
     def __init__(self, app):
         super().__init__(app)
@@ -120,9 +121,6 @@ class MPRController(Controller):
         state.mpr_presets = [{"text": "Select W/L...", "value": None}] + [
             {"text": preset.name, "value": key} for key, preset in presets.items()
         ]
-
-        for seg in self.scene.segmentations:
-            state[ObjectState.of(seg).mpr_overlay] = seg.mpr_overlay
 
         self._seed_active_volume()
 

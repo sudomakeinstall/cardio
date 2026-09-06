@@ -33,10 +33,26 @@ class Controller:
     def register(self):
         """Declare this controller's listeners and controller functions."""
 
+    object_seeds: tuple[str, ...] = ()
+    """The per-object properties this controller writes, for every renderable.
+
+    Named by their ``ObjectState`` property, which is how ``OBJECT_SOURCES``
+    spells them. An object without the field behind one simply has no such
+    key: a mesh has no transfer function to pick.
+    """
+
     def write_seeds(self, *keys):
         """Write ``keys``, or everything this controller seeds, from the scene."""
         for key in keys or self.seeds:
             self.server.state[key] = registry.state_value(self.scene, key)
+
+    def write_object_seeds(self, *properties):
+        """The same, for the keys each renderable has one of."""
+        for obj in self.scene.renderables:
+            for prop in properties or self.object_seeds:
+                key, value = registry.object_state_value(obj, prop)
+                if key is not None:
+                    self.server.state[key] = value
 
     def seed(self):
         """Write this controller's state, as the scene configures it.
@@ -50,6 +66,7 @@ class Controller:
         override this at all.
         """
         self.write_seeds()
+        self.write_object_seeds()
 
     @property
     def convention(self) -> Convention:

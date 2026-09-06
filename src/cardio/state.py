@@ -70,23 +70,6 @@ class ObjectState:
     def mpr_overlay(self) -> str:
         return f"mpr_segmentation_overlay_{self.label}"
 
-    @property
-    def document_keys(self) -> list[str]:
-        """The keys describing what this object is showing.
-
-        Saved with a session and restored from one; ``registry.OBJECT_SOURCES``
-        says which field on the object model seeds each. The clip bounds come
-        from the object's geometry rather than from a field, but they are still
-        part of what is on screen.
-        """
-        return [
-            self.visibility,
-            self.clipping,
-            *self.clip_bounds,
-            self.preset,
-            self.mpr_overlay,
-        ]
-
 
 # Everywhere a capture can be taken from. Named here rather than beside the
 # capture logic because these are what the ticks below are keyed by, and the

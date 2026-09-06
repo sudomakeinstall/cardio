@@ -8,6 +8,8 @@ from .base import Controller
 class ClippingController(Controller):
     """Clip boxes for every renderable, plus the shared near/far range."""
 
+    object_seeds = ("clipping", "preset")
+
     def register(self):
         state = self.server.state
 
@@ -64,6 +66,7 @@ class ClippingController(Controller):
         clipping range sits once the pipeline is built, which is the only
         sensible place for the slider to open.
         """
+        super().seed()
         state = self.server.state
         state.clip_depth = list(
             self.scene.renderer.GetActiveCamera().GetClippingRange()
@@ -71,7 +74,6 @@ class ClippingController(Controller):
 
         for obj in self.scene.renderables:
             keys = ObjectState.of(obj)
-            state[keys.clipping] = obj.clipping_enabled
             state[keys.clip_panel] = []
 
             if not obj.actors:
@@ -84,6 +86,4 @@ class ClippingController(Controller):
                 state[key] = [bounds[low], bounds[low + 1]]
 
         for volume in self.scene.volumes:
-            keys = ObjectState.of(volume)
-            state[keys.preset] = volume.transfer_function_preset
-            state[keys.preset_panel] = []
+            state[ObjectState.of(volume).preset_panel] = []

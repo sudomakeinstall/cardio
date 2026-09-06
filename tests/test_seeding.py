@@ -102,14 +102,39 @@ def moved_scene(directory: pl.Path, round: int, extra: dict | None = None) -> Sc
     for frame in range(FRAMES):
         write_volume(directory / f"vol{frame}.nii.gz")
 
+    # The per-object fields are moved too, and no two of the four alike, so
+    # that a property crossed with another shows up the same way a key
+    # pointed at the wrong field does.
     data: dict = {
         "volumes": [
             {
                 "label": "vol",
                 "directory": directory,
                 "file_paths": [f"vol{frame}.nii.gz" for frame in range(FRAMES)],
+                "visible": False,
+                "clipping_enabled": False,
+                "transfer_function_preset": "xray",
             }
-        ]
+        ],
+        "segmentations": [
+            {
+                "label": "seg",
+                "directory": directory,
+                "file_paths": ["seg0.nii.gz"],
+                "visible": False,
+                "clipping_enabled": False,
+                "mpr_overlay": True,
+            }
+        ],
+        "meshes": [
+            {
+                "label": "mesh",
+                "directory": directory,
+                "file_paths": ["mesh0.obj"],
+                "visible": False,
+                "clipping_enabled": False,
+            }
+        ],
     }
     for source, value in MOVED.items():
         _place(data, source, value)
@@ -409,3 +434,65 @@ def test_the_inverse_has_something_to_say():
         if registry.source_of(key) not in written_by_hand
     ]
     assert len(compared) >= 30
+
+
+def test_the_pass_writes_each_object_the_keys_it_has(rounds):
+    """Every per-object key an object has is written, and from the table.
+
+    An object only has the key if it has the field: a mesh has no transfer
+    function to pick and no overlay to draw, which is the partition
+    OBJECT_SOURCES makes on the way in and document.py makes coming back.
+
+    The values are compared against the same table the pass reads, so what
+    this says is that the pass went through the registry -- not that the
+    registry points where it should. A property crossed with another is
+    caught by the round trip in test_document.py, which is the other side of
+    the map and does not share the mistake.
+    """
+    for scene, seen in rounds:
+        for obj in scene.renderables:
+            for prop in registry.OBJECT_SOURCES:
+                key, expected = registry.object_state_value(obj, prop)
+                if key is None:
+                    continue
+
+                _, written = seen[key][0]
+                assert repr(written) == repr(expected), (
+                    f"{obj.kind} {obj.label} was seeded {written!r} for {prop}, "
+                    f"but its field says {expected!r}"
+                )
+
+
+def test_an_object_without_the_field_has_no_key_for_it(rounds):
+    """Guarding the guard: a partition that let everything through.
+
+    A mesh naming a transfer function key is a key nothing ever writes --
+    read by the journal and by a saved session, and answering None.
+    """
+    scene, _ = rounds[0]
+    mesh = next(obj for obj in scene.renderables if obj.kind == "mesh")
+    volume = next(obj for obj in scene.renderables if obj.kind == "volume")
+
+    assert registry.object_state_value(mesh, "preset") == (None, None)
+    assert registry.object_state_value(mesh, "mpr_overlay") == (None, None)
+    assert registry.object_state_value(volume, "preset")[0] is not None
+
+    mesh_keys = registry.object_document_keys(mesh)
+    assert not any("preset" in key for key in mesh_keys), mesh_keys
+    assert all(key in registry.document_keys(scene) for key in mesh_keys)
+
+
+def test_every_per_object_property_is_claimed_by_exactly_one_controller():
+    """The same ownership rule as the literal keys, for the per-object ones."""
+    claimed: dict[str, list[str]] = {}
+    for controller in CONTROLLERS:
+        for prop in controller.object_seeds:
+            claimed.setdefault(prop, []).append(controller.__name__)
+
+    doubled = {prop: names for prop, names in claimed.items() if len(names) > 1}
+    assert not doubled, f"claimed by more than one controller: {doubled}"
+    assert set(claimed) == set(registry.OBJECT_SOURCES), (
+        f"unclaimed: {sorted(set(registry.OBJECT_SOURCES) - set(claimed))}; "
+        f"claimed but not a per-object source: "
+        f"{sorted(set(claimed) - set(registry.OBJECT_SOURCES))}"
+    )
