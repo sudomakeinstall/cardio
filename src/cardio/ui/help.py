@@ -26,6 +26,9 @@ def help_dialog():
                     html.Td("i")
                     html.Td("Toggle the scene metadata window")
                 with html.Tr():
+                    html.Td("`")
+                    html.Td("Toggle the action console")
+                with html.Tr():
                     html.Td("v")
                     html.Td("Toggle 3D volume view")
                 with html.Tr():

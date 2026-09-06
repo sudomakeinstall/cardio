@@ -38,3 +38,32 @@
     max-height: 70vh;
     overflow-y: auto;
 }
+
+/* The console sits over the bottom of the viewports rather than shortening
+   them: the views are remote render windows, and resizing their box means
+   resizing a VTK window on the far side of it. Held translucent off the
+   theme's surface, as the reference sheets are, for the same reason.
+
+   Where it starts and stops is written on the element itself rather than
+   here: the drawer's width is a python constant, and the panel is where it can
+   be read without the two being written down twice. */
+
+.cardio-console {
+    position: fixed;
+    z-index: 5;
+    background: rgba(var(--v-theme-surface), 0.95);
+    border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+/* Reversed, and fed the newest line first, so the browser pins the scroll to
+   the newest without anything having to scroll it there. */
+
+.cardio-console-body {
+    display: flex;
+    flex-direction: column-reverse;
+    max-height: 25vh;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}

@@ -8,7 +8,7 @@ from trame.widgets import vuetify3 as vuetify
 from .. import __version__
 from ..scene import Scene
 from ..view import RENDER_VIEWS
-from .common import TILE_ACTIVE, drawer_styles, section
+from .common import DRAWER_WIDTH, TILE_ACTIVE, drawer_styles, section
 from .help import help_dialog
 from .interaction import Interaction
 from .layout import toolbar, viewports
@@ -17,6 +17,7 @@ from .panels import (
     appearance_panel,
     capture_panel,
     clip_depth_panel,
+    console_panel,
     overlays_panel,
     playback_panel,
     rotations_panel,
@@ -24,8 +25,6 @@ from .panels import (
     tiles_panel,
     volume_panel,
 )
-
-DRAWER_WIDTH = 340
 
 __all__ = ["UI", "Interaction"]
 
@@ -65,6 +64,7 @@ class UI:
                     self.handled_events,
                     self._update_all_mpr_views,
                 )
+                console_panel(self.server, self.scene)
                 help_dialog()
                 metadata_dialog(self.scene)
 

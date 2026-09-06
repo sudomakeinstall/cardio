@@ -15,6 +15,8 @@ import pytest
 
 # Internal
 import cardio.console as console
+from cardio.ui.common import DRAWER_WIDTH, drawer_styles
+from tests.test_app_smoke import build_app, build_scene, connect
 from tests.test_session import session_on
 
 # ------------------------------------------------------------- the syntax ----
@@ -407,3 +409,54 @@ def test_the_log_is_a_script_that_reproduces_the_session(tmp_path_factory):
     ]
     for key in ("mpr_crosshairs_enabled", "mpr_window", "mpr_level"):
         assert second.server.state[key] == first.server.state[key], key
+
+
+# ---------------------------------------------------------- against a page ----
+
+
+@pytest.fixture
+def page(tmp_path):
+    """The whole app, built as ``CardioApp`` builds it, with the dock open."""
+    scene = build_scene(
+        tmp_path, active_volume_label="vol", view={"console_visible": True}
+    )
+    server, scene, logic, ui = build_app(scene)
+    connect(server)
+    return server, logic, ui.layout.html
+
+
+def test_the_dock_reads_the_log_out_of_state(page):
+    """The first thing here built from a list that grows rather than a scene."""
+    _, _, html = page
+
+    assert 'v-for="entry in console_entries"' in html
+    assert ':key="entry.n"' in html
+
+
+def test_the_dock_starts_where_the_drawer_stops(page):
+    """Written on the element, not in the served stylesheet.
+
+    The rules arrive as a cached asset and the drawer's width is a python
+    constant, so the one thing that decides whether the log is readable is
+    kept where both are already known.
+    """
+    _, _, html = page
+
+    assert f"left: var(--v-layout-left, {DRAWER_WIDTH}px)" in html
+
+
+def test_the_stylesheet_is_named_by_what_is_in_it():
+    """Or an edit to it shows up whenever the browser's cache decides to."""
+    served = {}
+
+    class Server:
+        def enable_module(self, module):
+            served.update(module)
+
+    drawer_styles(Server())
+
+    (style,) = served["styles"]
+    assert style.startswith("__cardio/drawer.css?v=")
+
+    digest = style.split("=")[-1]
+    assert len(digest) == 12 and digest.isalnum()

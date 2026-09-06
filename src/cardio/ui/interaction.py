@@ -35,6 +35,10 @@ TRACKBALL_VIEW = "volume"
 # slice scroll, which has no single slice to move.
 DRAG_VIEWS = MPR_VIEWS | {"tile"}
 
+# The console's key. A backtick because every letter that reads as "console"
+# already names a view, and because it is where a console usually is.
+CONSOLE_KEY = "`"
+
 # Keys that maximize a view, and the view each one names
 MAXIMIZE_KEYS = {
     "v": "volume",
@@ -194,6 +198,8 @@ class Interaction:
             self.logic.dispatch("toggle_help")
         elif key == "i":
             self.logic.dispatch("toggle_metadata")
+        elif key == CONSOLE_KEY:
+            self.logic.dispatch("toggle_console")
         elif key in MAXIMIZE_KEYS:
             self.logic.dispatch("toggle_maximized", view=MAXIMIZE_KEYS[key])
 

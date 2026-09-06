@@ -2,11 +2,16 @@
 
 # System
 import contextlib as cl
+import hashlib
 import pathlib as pl
 
 # Third Party
 from trame.widgets import html
 from trame.widgets import vuetify3 as vuetify
+
+# How wide the drawer is. Read by the layout that sets it and by the console,
+# which has to start where the drawer stops.
+DRAWER_WIDTH = 340
 
 # The drawer's MPR controls only make sense in the quad view with a volume
 # selected. Written out nineteen times before this constant existed.
@@ -75,15 +80,22 @@ def sheet_dialog(visible_key: str, title: str):
 STATIC = pl.Path(__file__).parent / "static"
 
 
+STYLESHEET = "drawer.css"
+
+
 def drawer_styles(server):
     """Serve the drawer stylesheet.
 
     A ``<style>`` tag written into the layout does not survive vue's template
-    compiler, so the rules have to arrive as a served asset instead.
+    compiler, so the rules have to arrive as a served asset instead -- and a
+    served asset is one the browser is entitled to keep. Naming it by a digest
+    of its own contents is what makes an edit to it an edit the next reload
+    actually sees, rather than one that shows up whenever the cache decides.
     """
+    digest = hashlib.sha256((STATIC / STYLESHEET).read_bytes()).hexdigest()[:12]
     server.enable_module(
         {
             "serve": {"__cardio": str(STATIC)},
-            "styles": ["__cardio/drawer.css"],
+            "styles": [f"__cardio/{STYLESHEET}?v={digest}"],
         }
     )

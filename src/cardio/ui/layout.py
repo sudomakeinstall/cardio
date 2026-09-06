@@ -9,7 +9,7 @@ from ..view import Theme
 
 
 def toolbar(server, scene, layout):
-    """Theme switch, the reference sheets, close button and busy indicator.
+    """Theme switch, the reference sheets, the console, close and busy.
 
     Each control is its icon alone, and says what it does on hover: the labels
     were most of the toolbar's width, for four buttons whose icons already name
@@ -30,7 +30,8 @@ def toolbar(server, scene, layout):
             density="compact",
         )
 
-        # The two reference sheets, which the `i` and `h` keys also toggle
+        # The two reference sheets and the console, which the `i`, `h` and `\``
+        # keys also toggle
         vuetify.VCheckbox(
             value=False,
             true_icon="mdi-information-outline",
@@ -46,6 +47,15 @@ def toolbar(server, scene, layout):
             false_icon="mdi-help-circle-outline",
             title="Help (h)",
             click="help_overlay_visible = !help_overlay_visible",
+            readonly=True,
+        )
+
+        vuetify.VCheckbox(
+            value=False,
+            true_icon="mdi-console",
+            false_icon="mdi-console",
+            title="Console (`)",
+            click="console_visible = !console_visible",
             readonly=True,
         )
 
