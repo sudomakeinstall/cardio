@@ -2,13 +2,14 @@
 
 # Third Party
 from trame.ui.vuetify3 import SinglePageWithDrawerLayout
+from trame.widgets import html
 from trame.widgets import vuetify3 as vuetify
 
 # Internal
 from .. import __version__
 from ..scene import Scene
 from ..view import RENDER_VIEWS
-from .common import DRAWER_WIDTH, drawer_styles, section
+from .common import DRAWER_WIDTH, RENDERING_ACTIVE, drawer_styles, section
 from .help import help_dialog
 from .interaction import Interaction
 from .layout import toolbar, viewports
@@ -86,8 +87,12 @@ class UI:
                 playback_panel(self.server, self.scene)
 
             with section("appearance", "Appearance", "mdi-palette-outline"):
-                clip_depth_panel(self.server, self.scene)
-                appearance_panel(self.server, self.scene)
+                # Both act on the volume rendering's own renderer, so both go
+                # away with it. The overlays are drawn on the cuts instead and
+                # say so for themselves.
+                with html.Div(v_if=RENDERING_ACTIVE):
+                    clip_depth_panel(self.server, self.scene)
+                    appearance_panel(self.server, self.scene)
                 overlays_panel(self.server, self.scene)
 
             if self.scene.volumes:

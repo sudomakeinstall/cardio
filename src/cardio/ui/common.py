@@ -38,6 +38,14 @@ _RESLICE_LAYOUTS = ", ".join(
 )
 RESLICE_ACTIVE = f"[{_RESLICE_LAYOUTS}].includes(maximized_view) && active_volume_label"
 
+# The layouts with the volume rendering on screen. Everything under Appearance
+# but the MPR overlays acts on that renderer and no other: what is drawn in it,
+# in what colours, cropped to what box, between which two depths.
+_RENDERING_LAYOUTS = ", ".join(
+    f"'{layout.state_value}'" for layout in Layout if Layout.VOLUME in layout.on_screen
+)
+RENDERING_ACTIVE = f"[{_RENDERING_LAYOUTS}].includes(maximized_view)"
+
 
 @cl.contextmanager
 def section(value, title, icon, **kwargs):

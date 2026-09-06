@@ -46,7 +46,7 @@ def appearance_panel(server, scene):
         if not objects:
             continue
 
-        vuetify.VListSubheader(heading, classes="text-caption pl-4")
+        vuetify.VListSubheader(heading)
         for obj in objects:
             object_panel(obj, CLIP_ICONS[obj.kind])
 
