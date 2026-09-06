@@ -76,6 +76,34 @@ def test_principal_axes_are_orthonormal():
     assert axes.T @ axes == pytest.approx(np.eye(3), abs=1e-9)
 
 
+def test_principal_axes_follow_the_weights_not_the_count():
+    """A few heavy points outweigh many light ones.
+
+    Which is why the interface plane is fitted through the surface's cells
+    weighted by area rather than through its vertices: SurfaceNets spreads
+    vertices by how the surface lies against the voxel grid, so how many there
+    are says nothing about how much surface is there.
+    """
+    dense = np.column_stack([np.linspace(-1, 1, 100), np.zeros(100), np.zeros(100)])
+    sparse = np.column_stack([np.zeros(4), np.linspace(-1, 1, 4), np.zeros(4)])
+    points = np.vstack([dense, sparse])
+
+    _, counted, _ = principal_axes(points)
+    _, weighted, _ = principal_axes(
+        points, np.concatenate([np.ones(100), np.full(4, 100.0)])
+    )
+
+    assert abs(counted[:, 0] @ [1, 0, 0]) == pytest.approx(1.0, abs=1e-9)
+    assert abs(weighted[:, 0] @ [0, 1, 0]) == pytest.approx(1.0, abs=1e-9)
+
+
+def test_principal_axes_weight_the_centroid_too():
+    centroid, _, _ = principal_axes(
+        np.array([[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]]), [1.0, 3.0]
+    )
+    assert centroid == pytest.approx([7.5, 0.0, 0.0])
+
+
 @pytest.mark.parametrize(
     "kind,expected",
     [

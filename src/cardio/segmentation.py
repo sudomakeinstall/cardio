@@ -75,15 +75,19 @@ def masked_centroid(
     if surface is None:
         return None
 
-    sizes = vtk.vtkCellSizeFilter()
-    sizes.SetInputData(surface)
-    sizes.ComputeAreaOn()
-    sizes.ComputeVolumeOff()
-    sizes.ComputeLengthOff()
-    sizes.ComputeVertexCountOff()
-    sizes.Update()
-    areas = vtk_np.vtk_to_numpy(sizes.GetOutput().GetCellData().GetArray("Area"))
+    positions, areas = cell_centers_and_areas(surface)
+    total = float(areas.sum())
+    if total <= 0.0:
+        return None
+    return [float(v) for v in (positions * areas[:, None]).sum(axis=0) / total]
 
+
+def cell_centers_and_areas(surface: vtk.vtkPolyData) -> tuple[np.ndarray, np.ndarray]:
+    """Where each cell of a surface sits, and how much surface it is.
+
+    Widened to float64: VTK stores points as float32, which is not enough
+    precision for the rotation and quaternion math downstream.
+    """
     centers = vtk.vtkCellCenters()
     centers.SetInputData(surface)
     centers.Update()
@@ -91,10 +95,18 @@ def masked_centroid(
         np.float64
     )
 
-    total = float(areas.sum())
-    if total <= 0.0:
-        return None
-    return [float(v) for v in (positions * areas[:, None]).sum(axis=0) / total]
+    sizes = vtk.vtkCellSizeFilter()
+    sizes.SetInputData(surface)
+    sizes.ComputeAreaOn()
+    sizes.ComputeVolumeOff()
+    sizes.ComputeLengthOff()
+    sizes.ComputeVertexCountOff()
+    sizes.Update()
+    areas = vtk_np.vtk_to_numpy(
+        sizes.GetOutput().GetCellData().GetArray("Area")
+    ).astype(np.float64)
+
+    return positions, areas
 
 
 def voxel_centroid(image_data, labels: ty.Sequence[int]) -> list[float] | None:
@@ -120,25 +132,36 @@ def voxel_centroid(image_data, labels: ty.Sequence[int]) -> list[float] | None:
     return [float(v) for v in point]
 
 
-def surface_points(surface: vtk.vtkPolyData) -> np.ndarray:
-    """Point coordinates of a surface as an (N, 3) array.
+def principal_axes(
+    points: np.ndarray, weights: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """PCA of a point cloud, weighting each point by how much it stands for.
 
-    Widened to float64: VTK stores points as float32, which is not enough
-    precision for the rotation and quaternion math downstream.
-    """
-    return vtk_np.vtk_to_numpy(surface.GetPoints().GetData()).astype(np.float64)
-
-
-def principal_axes(points: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """PCA of a point cloud.
-
-    Returns (centroid, axes, extents). The columns of ``axes`` are the two
+    Returns (centroid, axes, spreads). The columns of ``axes`` are the two
     in-plane directions ordered by decreasing spread, then the plane normal.
-    ``extents`` holds the corresponding singular values.
+    ``spreads`` holds the RMS spread along each, in the same order.
+
+    A surface is fitted through its cells weighted by area, not through its
+    vertices: SurfaceNets puts one vertex in every grid cell the surface
+    crosses, so counting them rather than measuring them tilts the fitted plane
+    toward whichever part of the patch runs obliquely to the voxel grid.
+    ``weights`` is optional for a point set that has nothing to weight it by.
     """
-    centroid = points.mean(axis=0)
-    _, extents, basis = np.linalg.svd(points - centroid, full_matrices=True)
-    return centroid, basis.T, extents
+    points = np.asarray(points, dtype=np.float64)
+    weights = (
+        np.ones(len(points))
+        if weights is None
+        else np.asarray(weights, dtype=np.float64)
+    )
+
+    total = float(weights.sum())
+    centroid = (points * weights[:, None]).sum(axis=0) / total
+    offsets = points - centroid
+    covariance = (offsets * weights[:, None]).T @ offsets / total
+
+    variances, axes = np.linalg.eigh(covariance)
+    order = np.argsort(variances)[::-1]
+    return centroid, axes[:, order], np.sqrt(np.clip(variances[order], 0.0, None))
 
 
 # LPS reference directions for the in-plane axes. Anterior reproduces the
@@ -540,15 +563,19 @@ class Segmentation(Object):
         if mask is None:
             return None
         surface = masked_surface(mesh, mask)
-        if surface is None or surface.GetNumberOfPoints() < 3:
+        if surface is None or surface.GetNumberOfCells() < 3:
             return None
 
-        centroid, axes, extents = principal_axes(surface_points(surface))
-        if extents[1] <= 0:
+        positions, areas = cell_centers_and_areas(surface)
+        if areas.sum() <= 0.0:
+            return None
+
+        centroid, axes, spreads = principal_axes(positions, areas)
+        if spreads[1] <= 0:
             return None
 
         normal = self._normal_sign(axes[:, 2], labels_a, labels_b, frame, anchor)
-        return centroid, plane_basis(normal, anchor), float(extents[2] / extents[1])
+        return centroid, plane_basis(normal, anchor), float(spreads[2] / spreads[1])
 
     def _normal_sign(
         self,
