@@ -213,6 +213,52 @@ def test_document_keys_name_a_real_scene_field(key):
     assert _resolve(Scene, registry.source_of(key)) is not None
 
 
+@pytest.mark.parametrize("key", registry.keys_in_scope(registry.Scope.DOCUMENT))
+def test_every_document_key_can_be_read_off_a_default_scene(key):
+    """A dotted path walks models that always exist, so it cannot come up short.
+
+    Not a value assertion -- an empty scene has nothing configured to check
+    against. What it says is that the walk itself reaches a leaf.
+    """
+    registry.state_value(Scene(), key)
+
+
+@pytest.mark.parametrize("layout", list(view.Layout))
+def test_the_two_layout_conversions_are_inverses(layout):
+    """The one key spelled differently in a config and in state.
+
+    ``to_state`` takes the field and ``to_config`` takes the state value, so
+    they compose to the identity without looking symmetric. This is what says
+    they still do.
+    """
+    assert (
+        registry.to_config(
+            "maximized_view", registry.to_state("maximized_view", layout)
+        )
+        == layout.value
+    )
+
+
+def test_the_quad_layout_is_why_that_pair_exists():
+    """Guarding the guard above, which every other member would pass anyway."""
+    assert registry.to_state("maximized_view", view.Layout.QUAD) == ""
+    assert registry.to_state("maximized_view", view.Layout.AXIAL) == "axial"
+
+
+@pytest.mark.parametrize(
+    "key", sorted(k for k, v in registry.VARIABLES.items() if v.seeded_by)
+)
+def test_a_key_its_controller_writes_says_why(key):
+    """The exceptions to the seeding pass are declared, not discovered.
+
+    A hardcoded skip list inside the seeder would say which keys it passes
+    over; this says why, next to the rule each one is an exception to.
+    """
+    variable = registry.VARIABLES[key]
+    assert variable.scope is registry.Scope.DOCUMENT
+    assert variable.source and variable.seeded_by.strip()
+
+
 @pytest.mark.parametrize("expression,target", sorted(PER_OBJECT.items()))
 def test_per_object_keys_name_a_real_object_field(expression, target):
     model, prop = target

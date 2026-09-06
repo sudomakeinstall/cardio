@@ -14,6 +14,10 @@ lives here, where the application can read it too.
 # System
 import dataclasses as dc
 import enum
+import functools as ft
+
+# Third Party
+import pydantic_core
 
 # Internal
 from .state import VIEWPORTS, ObjectState, screenshot_viewport
@@ -45,6 +49,14 @@ class Variable:
     reason: str = ""
     """For the other two scopes, why this is not something a config decides."""
 
+    seeded_by: str = ""
+    """For a document variable its controller writes, why the table cannot.
+
+    Every other document key is written from its ``source`` by the seeding
+    pass. These are the ones where reading the field is not the whole story --
+    a fallback, a deferral, or a value that mirrors VTK rather than the config.
+    """
+
     def __post_init__(self):
         if self.scope is Scope.DOCUMENT:
             if not self.source:
@@ -52,6 +64,10 @@ class Variable:
             if self.reason:
                 raise ValueError(f"{self.key} is document state; a reason says why not")
         else:
+            if self.seeded_by:
+                raise ValueError(
+                    f"{self.key} is {self.scope}; only document state is seeded"
+                )
             if not self.reason.strip():
                 raise ValueError(f"{self.key} is {self.scope} with no reason given")
             if self.source:
@@ -60,22 +76,49 @@ class Variable:
                 )
 
 
-def _declare(scope: Scope, **entries: str) -> list[Variable]:
-    """Every key in ``scope``, the string filling whichever field it wants."""
+def _declare(scope: Scope, **entries: str | tuple[str, str]) -> list[Variable]:
+    """Every key in ``scope``, the string filling whichever field it wants.
+
+    A document key whose controller writes it gives a pair -- its source, and
+    why the seeding pass cannot write it -- so that the exceptions sit in the
+    table beside the rule they are exceptions to.
+    """
     field = "source" if scope is Scope.DOCUMENT else "reason"
-    return [Variable(key, scope, **{field: value}) for key, value in entries.items()]
+    declared = []
+    for key, entry in entries.items():
+        value, seeded_by = entry if isinstance(entry, tuple) else (entry, "")
+        if seeded_by and not seeded_by.strip():
+            raise ValueError(f"{key} says its controller writes it, but not why")
+        declared.append(Variable(key, scope, seeded_by=seeded_by, **{field: value}))
+    return declared
 
 
 # The dotted paths are resolved against Scene by the coverage test, so a field
 # renamed out from under one of these fails there rather than at runtime.
 DOCUMENT = _declare(
     Scope.DOCUMENT,
-    active_volume_label="active_volume_label",
+    active_volume_label=(
+        "active_volume_label",
+        (
+            "an empty one means the first volume, and until the render views "
+            "exist there is nothing to make active -- so MPRController writes "
+            "an empty string and finalize_mpr_initialization the real one"
+        ),
+    ),
+    # Nested inside mpr_rotation_data's source deliberately: the sequence is
+    # written whole and these two mirror part of it. document._mirrored is the
+    # other side of that -- saving skips them, seeding writes them.
     angle_units="mpr_rotation_sequence.metadata.angle_units",
     bpm="playback.bpm",
     bpr="playback.bpr",
     camera_lock="view.camera_lock",
-    cameras="view.cameras",
+    cameras=(
+        "view.cameras",
+        (
+            "the state mirrors where VTK's cameras actually ended up, which is "
+            "where the configured poses put them only until something moves"
+        ),
+    ),
     capture_format="capture_format",
     drawer_sections="view.drawer_sections",
     frame="current_frame",
@@ -100,7 +143,10 @@ DOCUMENT = _declare(
     snap_locked="snap.locked",
     snap_mode="snap.mode",
     snap_orientation_locked="snap.orientation_locked",
-    snap_seg_label="snap.segmentation_label",
+    snap_seg_label=(
+        "snap.segmentation_label",
+        "an empty one means the first segmentation, and a scene may have none",
+    ),
     snap_traverse="snap.traverse",
     theme_mode="view.theme",
     tile_cols="tile_cols",
@@ -163,6 +209,36 @@ def to_config(key: str, value):
     """``value`` as the ``Scene`` field behind ``key`` spells it."""
     convert = TO_CONFIG.get(key)
     return convert(value) if convert else value
+
+
+# The way back in. Only the one key needs saying: everything else state holds
+# is what ``mode="json"`` makes of the field, which is not a choice this app
+# gets to make and so is not worth a table of its own.
+TO_STATE = {"maximized_view": lambda layout: layout.state_value}
+
+
+def to_state(key: str, value):
+    """The ``Scene`` field behind ``key`` as the state variable spells it."""
+    convert = TO_STATE.get(key)
+    return convert(value) if convert else pydantic_core.to_jsonable_python(value)
+
+
+def read(scene, path: str):
+    """The value at the dotted ``Scene`` field ``path``.
+
+    Every branch a path passes through is a model with a default, so a scene
+    always has one to walk -- there is no missing middle to guard against.
+    """
+    return ft.reduce(getattr, path.split("."), scene)
+
+
+def state_value(scene, key: str):
+    """What ``key`` should hold, given ``scene``.
+
+    The one way state is told what a config says, as ``to_config`` is the one
+    way a config is told what state says.
+    """
+    return to_state(key, read(scene, source_of(key)))
 
 
 def source_of(key: str) -> str:
