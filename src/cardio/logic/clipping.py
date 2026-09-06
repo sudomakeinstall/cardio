@@ -1,6 +1,7 @@
 """Per-object clipping planes and the camera's depth clipping range."""
 
 # Internal
+from ..camera import snapped_depth
 from ..state import ObjectState
 from .base import Controller
 
@@ -64,12 +65,14 @@ class ClippingController(Controller):
 
         The depth range has no ``Scene`` field: it is where the camera's own
         clipping range sits once the pipeline is built, which is the only
-        sensible place for the slider to open.
+        sensible place for the slider to open. Snapped outwards onto the
+        slider's own notches, so that the thumbs open on a value the slider can
+        hold and the label under them is a short number.
         """
         super().seed()
         state = self.server.state
-        state.clip_depth = list(
-            self.scene.renderer.GetActiveCamera().GetClippingRange()
+        state.clip_depth = snapped_depth(
+            *self.scene.renderer.GetActiveCamera().GetClippingRange()
         )
 
         for obj in self.scene.renderables:

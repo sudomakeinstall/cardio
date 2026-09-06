@@ -7,10 +7,17 @@ could put them back -- which is the whole of what undo and a saved session are
 for.
 """
 
+# System
+import math
+
 # Third Party
 import pydantic as pc
 
 Point = tuple[float, float, float]
+
+# What the near/far slider moves in. A whole unit is as fine as anybody drags a
+# depth in millimetres, and it is short enough to read under the thumb.
+DEPTH_STEP = 1.0
 
 
 class Pose(pc.BaseModel):
@@ -91,3 +98,28 @@ def fit_about_origin(renderer) -> None:
 
     x, y, z = (max(abs(bounds[2 * i]), abs(bounds[2 * i + 1])) for i in range(3))
     renderer.ResetCamera(-x, x, -y, y, -z, z)
+
+
+def depth_top(far: float) -> float:
+    """The top of the near/far slider.
+
+    ``far`` is where the camera's own clipping range ends once the scene is
+    built, which is the far side of everything drawn: past it the slider would
+    only offer more of the nothing beyond. Rounded up to a whole step, so that
+    the far thumb has a notch to sit on at its own end.
+    """
+    return float(math.ceil(far / DEPTH_STEP) * DEPTH_STEP)
+
+
+def snapped_depth(near: float, far: float) -> list[float]:
+    """A clipping range moved out onto the notches of the near/far slider.
+
+    Outwards in both directions, so that the range the app opens on is one the
+    slider can hold exactly and one that clips nothing the camera was already
+    showing. The near plane stops at one step rather than at zero, which is not
+    a distance a perspective camera can be given.
+    """
+    return [
+        max(DEPTH_STEP, math.floor(near / DEPTH_STEP) * DEPTH_STEP),
+        depth_top(far),
+    ]

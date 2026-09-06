@@ -4,6 +4,7 @@
 from trame.widgets import vuetify3 as vuetify
 
 # Internal
+from ...camera import DEPTH_STEP, depth_top
 from ...state import ObjectState
 from ...volume_property_presets import list_volume_property_presets
 from ..common import SLIDER_CLASS, SUBPANEL_CLASS
@@ -27,9 +28,9 @@ def clip_depth_panel(server, scene):
         label="Near / Far",
         title="Near and far clipping planes of the shared camera",
         classes=SLIDER_CLASS,
-        min=0.1,
-        max=far,
-        step=far / 100,
+        min=DEPTH_STEP,
+        max=depth_top(far),
+        step=DEPTH_STEP,
         hide_details=True,
         thumb_label=True,
     )

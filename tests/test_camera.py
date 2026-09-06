@@ -12,7 +12,7 @@ import pytest
 import vtk
 
 # Internal
-from cardio.camera import Cameras, Pose
+from cardio.camera import DEPTH_STEP, Cameras, Pose, depth_top, snapped_depth
 from tests.test_app_smoke import build_app, build_scene, connect
 
 # --------------------------------------------------------------- the model ---
@@ -47,6 +47,42 @@ def test_only_the_slice_poses_that_are_set_are_offered():
 def test_an_unknown_camera_is_refused():
     with pytest.raises(Exception, match="tilt"):
         Cameras(tilt=1.0)
+
+
+# ------------------------------------------------------ the depth slider ---
+
+
+def test_the_top_of_the_slider_covers_what_the_camera_could_see():
+    assert depth_top(847.3921) == 848.0
+    assert depth_top(46.5) == 47.0
+
+
+def test_a_top_already_on_a_notch_is_left_where_it_is():
+    """The panel reads the camera, which the seeding has already snapped."""
+    for far in (0.3, 7.0, 99.6, 847.3921):
+        assert depth_top(depth_top(far)) == depth_top(far)
+
+
+def test_the_opening_range_lands_on_notches():
+    for value in snapped_depth(23.4, 847.3921):
+        assert value % DEPTH_STEP == pytest.approx(0.0)
+
+
+def test_the_opening_range_clips_nothing_the_camera_was_showing():
+    """Where ``ResetCamera`` leaves it: the camera outside what it is looking at."""
+    near, far = snapped_depth(23.4, 46.5)
+
+    assert near <= 23.4
+    assert far >= 46.5
+
+
+def test_the_near_plane_stops_at_the_bottom_of_the_slider():
+    """Zero is not a distance a perspective camera can be given, and one step
+    is the smallest near the slider itself can be dragged to.
+    """
+    near, _ = snapped_depth(0.01, 500.0)
+
+    assert near == pytest.approx(DEPTH_STEP)
 
 
 # ---------------------------------------------------------- in the running app ---
@@ -250,3 +286,16 @@ def test_a_cine_does_not_fill_the_journal_with_a_change_per_frame(app):
 
     logic.dispatch("increment_frame")
     assert [change.action for change in changes] == ["increment_frame"]
+
+
+def test_the_range_the_app_opens_on_sits_on_the_sliders_notches(app):
+    """The panel scales the slider off the camera, the seeding snaps the value
+    off the same camera, and the thumbs land on notches only if the two agree.
+    """
+    server, scene, _, _ = app
+    _, camera_far = scene.renderer.GetActiveCamera().GetClippingRange()
+
+    near, far = server.state.clip_depth
+    assert near % DEPTH_STEP == pytest.approx(0.0)
+    assert far % DEPTH_STEP == pytest.approx(0.0)
+    assert DEPTH_STEP <= near <= far <= depth_top(camera_far)
