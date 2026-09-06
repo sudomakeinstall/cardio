@@ -10,6 +10,7 @@ window means the shape is ours to change -- add renderers, recompute rectangles
 import vtk
 
 # Internal
+from .camera import fit_about_origin
 from .reslice import TileSet
 
 # Six each way is already 36 reslices per frame per object; past that the tiles
@@ -130,7 +131,7 @@ class TileViews:
             return
 
         for renderer in self._renderers:
-            renderer.ResetCamera()
+            fit_about_origin(renderer)
 
         scale = max(r.GetActiveCamera().GetParallelScale() for r in self._renderers)
         for renderer in self._renderers:

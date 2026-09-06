@@ -4,7 +4,11 @@ import numpy as np
 import pytest
 import vtk
 
-from cardio.orientation import create_vtk_reslice_matrix
+from cardio.orientation import (
+    EulerAxis,
+    create_vtk_reslice_matrix,
+    euler_angle_to_rotation_matrix,
+)
 from cardio.reslice import VIEW_TRANSFORMS, TileSet
 from cardio.tile_views import MAX_COLS, MAX_ROWS, TileViews, tile_viewport
 from tests.phantoms import make_image
@@ -147,6 +151,44 @@ def test_reset_cameras_puts_every_tile_on_one_scale(views):
 
 def test_reset_cameras_tolerates_an_empty_grid():
     TileViews().reset_cameras()
+
+
+def walked_poses(count: int) -> list:
+    """One pose per tile, walking and tilting the way a traverse path does.
+
+    Every tile is posed somewhere else, so no tile's auto-cropped extent is
+    centred on the point that tile is meant to be showing.
+    """
+    return [
+        (
+            [4.0 * step, 9.0 - 2.0 * step, 3.0 + step],
+            euler_angle_to_rotation_matrix(EulerAxis.X, -20.0 + 8.0 * step),
+        )
+        for step in range(count)
+    ]
+
+
+def test_reset_cameras_looks_at_each_tile_origin(views):
+    """Each tile centres on its own point along the path, not on the image."""
+    grid = tiles(len(views))
+    grid.set_poses(walked_poses(len(views)))
+    views.show(grid, reset_cameras=True)
+
+    for renderer in views.renderers:
+        camera = renderer.GetActiveCamera()
+        assert camera.GetFocalPoint() == pytest.approx((0.0, 0.0, 0.0), abs=1e-9)
+
+
+def test_reset_cameras_still_shows_every_whole_tile(views):
+    """The one shared scale is wide enough for the widest cut on the path."""
+    grid = tiles(len(views))
+    grid.set_poses(walked_poses(len(views)))
+    views.show(grid, reset_cameras=True)
+
+    for renderer in views.renderers:
+        bounds = renderer.ComputeVisiblePropBounds()
+        span = max(abs(bounds[2]), abs(bounds[3]))
+        assert renderer.GetActiveCamera().GetParallelScale() >= span - 1e-9
 
 
 # TileSet

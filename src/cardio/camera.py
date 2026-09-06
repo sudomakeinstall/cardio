@@ -69,3 +69,25 @@ class Cameras(pc.BaseModel):
             for view in ("axial", "coronal", "sagittal")
             if (pose := getattr(self, view)) is not None
         }
+
+
+def fit_about_origin(renderer) -> None:
+    """Fit the camera to what is drawn, looking at the reslice origin.
+
+    A cut is posed by its reslice axes, so the point the views were aimed at is
+    always the output's (0, 0, 0) -- which is what the crosshairs, drawn at the
+    centre of the viewport, are pointing at. ``ResetCamera`` centres on the
+    auto-cropped extent instead, and that is the same point only when the origin
+    happens to be the image's own centre.
+
+    Passing it a box symmetric about the origin, large enough to hold the one it
+    would have chosen, leaves the fit it makes but takes away the choice of
+    centre.
+    """
+    bounds = renderer.ComputeVisiblePropBounds()
+    if bounds[0] > bounds[1]:
+        renderer.ResetCamera()
+        return
+
+    x, y, z = (max(abs(bounds[2 * i]), abs(bounds[2 * i + 1])) for i in range(3))
+    renderer.ResetCamera(-x, x, -y, y, -z, z)

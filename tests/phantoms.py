@@ -17,14 +17,38 @@ import vtk
 from cardio.segmentation import Segmentation
 
 
-def make_image(dims=(8, 10, 12), spacing=(1.0, 2.0, 3.0)) -> vtk.vtkImageData:
-    """A small scalar image with non-uniform spacing, so axes cannot be confused."""
+def make_image(
+    dims=(8, 10, 12), spacing=(1.0, 2.0, 3.0), direction=None
+) -> vtk.vtkImageData:
+    """A small scalar image with non-uniform spacing, so axes cannot be confused.
+
+    ``direction`` gives it the acquisition axes of an oblique series, which is
+    what makes a reslice's auto-cropped extent land off the whole millimetre.
+    """
     image = vtk.vtkImageData()
     image.SetDimensions(*dims)
     image.SetSpacing(*spacing)
     image.SetOrigin(0.0, 0.0, 0.0)
+    if direction is not None:
+        matrix = vtk.vtkMatrix3x3()
+        for row in range(3):
+            for column in range(3):
+                matrix.SetElement(row, column, float(direction[row][column]))
+        image.SetDirectionMatrix(matrix)
     image.AllocateScalars(vtk.VTK_SHORT, 1)
     return image
+
+
+def rotation_about_z(degrees: float) -> np.ndarray:
+    """A proper rotation, for an image that was not acquired axis-aligned."""
+    angle = np.radians(degrees)
+    return np.array(
+        [
+            [np.cos(angle), -np.sin(angle), 0.0],
+            [np.sin(angle), np.cos(angle), 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
 
 
 def write_segmentation(directory, arrays, label="s", stem="seg") -> Segmentation:

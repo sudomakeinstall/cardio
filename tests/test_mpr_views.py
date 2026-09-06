@@ -1,5 +1,8 @@
 """Test that MPRViews wires all three renderers the way the unrolled code did."""
 
+# System
+import math
+
 # Third Party
 import pytest
 import vtk
@@ -7,7 +10,7 @@ import vtk
 # Internal
 from cardio.mpr_views import MPRViews
 from cardio.reslice import VIEWS, ResliceSet
-from tests.phantoms import make_image
+from tests.phantoms import make_image, rotation_about_z
 
 
 def make_crosshairs() -> dict:
@@ -218,3 +221,70 @@ def test_a_degenerate_zoom_is_ignored(views, factor):
     views.zoom(factor)
 
     assert views.world_per_pixel("axial") == pytest.approx(before)
+
+
+# The fit
+
+
+def posed_away_from_the_centre(image) -> ResliceSet:
+    """Cuts aimed somewhere other than the middle of their own image.
+
+    Which is the case the fit used to get wrong: the auto-cropped extent is
+    centred on the image, so it names the posed origin only by coincidence.
+    """
+    cuts = ResliceSet(image, interpolation="linear", background_level=-1000.0)
+    cuts.set_pose(
+        [value + shift for value, shift in zip(image.GetCenter(), (7.0, -5.0, 11.0))]
+    )
+    return cuts
+
+
+def half_height(renderer) -> float:
+    """What the camera covers above and below the focal point, in world units."""
+    camera = renderer.GetActiveCamera()
+    focal, position = camera.GetFocalPoint(), camera.GetPosition()
+    distance = math.dist(focal, position)
+    return distance * math.tan(math.radians(camera.GetViewAngle() / 2.0))
+
+
+def half_span(renderer) -> float:
+    """How far what is drawn reaches from the origin, along the view's y."""
+    bounds = renderer.ComputeVisiblePropBounds()
+    return max(abs(bounds[2]), abs(bounds[3]))
+
+
+def test_reset_cameras_looks_at_the_reslice_origin(views):
+    """Every view centres on the point the cuts were posed on.
+
+    The origin is always the reslice output's (0, 0, 0), which is the whole
+    reason the crosshairs can be drawn at the middle of the viewport.
+    """
+    views.show(posed_away_from_the_centre(make_image()), reset_camera=True)
+
+    for view in VIEWS:
+        camera = views.renderer(view).GetActiveCamera()
+        assert camera.GetFocalPoint() == pytest.approx((0.0, 0.0, 0.0), abs=1e-9)
+
+
+def test_reset_cameras_centres_an_oblique_image(views):
+    """An obliquely acquired image is centred too, not merely nearly.
+
+    Its auto-cropped extent is rounded out to whole voxels asymmetrically, so
+    fitting to the extent leaves a fraction of a millimetre behind -- small
+    enough to miss until the view is zoomed in on something small.
+    """
+    image = make_image(direction=rotation_about_z(25.0))
+    views.show(posed_away_from_the_centre(image), reset_camera=True)
+
+    for view in VIEWS:
+        camera = views.renderer(view).GetActiveCamera()
+        assert camera.GetFocalPoint() == pytest.approx((0.0, 0.0, 0.0), abs=1e-9)
+
+
+def test_reset_cameras_still_shows_the_whole_cut(views):
+    """Centring on the origin widens the fit rather than cropping it."""
+    views.show(posed_away_from_the_centre(make_image()), reset_camera=True)
+
+    for view in VIEWS:
+        renderer = views.renderer(view)
+        assert half_height(renderer) >= half_span(renderer) - 1e-9

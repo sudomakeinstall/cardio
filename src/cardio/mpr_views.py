@@ -12,6 +12,7 @@ import math
 import vtk
 
 # Internal
+from .camera import fit_about_origin
 from .reslice import VIEWS, ResliceSet
 
 
@@ -88,7 +89,7 @@ class MPRViews:
 
     def reset_cameras(self):
         for view in self.windows:
-            self.renderer(view).ResetCamera()
+            fit_about_origin(self.renderer(view))
 
     def origin_on_screen(self, view: str) -> tuple[float, float] | None:
         """Where the camera's focal point lands, in display coordinates.
