@@ -160,6 +160,14 @@ DOCUMENT = _declare(
     theme_mode="view.theme",
     tile_cols="tile_cols",
     tile_rows="tile_rows",
+    zoom_fill="zoom.fill",
+    zoom_labels="zoom.labels",
+    zoom_locked="zoom.locked",
+    zoom_plane="zoom.plane",
+    zoom_seg_label=(
+        "zoom.segmentation_label",
+        "an empty one means the first segmentation, and a scene may have none",
+    ),
 )
 
 # A reason here is a decision, not an excuse: anything a user would want to
@@ -193,10 +201,12 @@ ITEMS = _declare(
     index_order_items="the two index orders, spelled for the picker",
     metadata_pages="one page per object in the scene",
     mpr_presets="the window/level presets, spelled for the picker",
-    snap_available_labels="the labels present in the chosen segmentation",
-    snap_seg_items="one entry per segmentation in the scene",
+    segmentation_items="one entry per segmentation in the scene",
+    snap_available_labels="the labels present in the segmentation snap is aimed at",
     tile_sizes="the grid sizes offered, fixed at build time",
     volume_items="one entry per volume in the scene",
+    zoom_available_labels="the labels present in the segmentation the fit is aimed at",
+    zoom_plane_items="the three MPR planes, spelled for the picker",
 )
 
 VARIABLES: dict[str, Variable] = {

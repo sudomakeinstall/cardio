@@ -54,9 +54,9 @@ def snap_panel(server, scene):
             v_if=VOLUME_ACTIVE,
         )
         vuetify.VSelect(
-            v_if=f"{VOLUME_ACTIVE} && snap_seg_items.length >= 2",
+            v_if=f"{VOLUME_ACTIVE} && segmentation_items.length >= 2",
             v_model=("snap_seg_label",),
-            items=("snap_seg_items",),
+            items=("segmentation_items",),
             item_title="title",
             item_value="value",
             label="Segmentation",

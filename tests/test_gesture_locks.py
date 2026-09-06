@@ -8,6 +8,10 @@ back the next time the frame changed, so it is refused instead.
 Pan and slice scroll both move ``mpr_origin``, so a position lock stands both
 down. Rotation is stood down by an orientation lock, which is a lock on the
 alignment step it composes on top of.
+
+The zoom fit is the same bargain over the camera framing rather than over
+state: its lock re-applies the fit whenever the views move, so it stands the
+zoom gesture down, while a snap lock -- which owns neither -- does not.
 """
 
 # System
@@ -184,10 +188,31 @@ def test_both_locks_stand_down_everything_that_writes_either():
     assert steps(app) == []
 
 
-def test_zoom_is_never_stood_down():
-    """Zoom is camera framing and writes no shared state, so no lock owns it."""
+def test_zoom_is_not_stood_down_by_a_snap_lock():
+    """Snap owns the origin and the alignment; the camera framing is not either."""
     zoomed = []
     app = make_app(snap_locked=True, snap_orientation_locked=True, snap_mode="traverse")
+    app.scene.mpr_views.zoom = zoomed.append
+
+    app.mpr.zoom_views(2.0)
+
+    assert zoomed == [2.0]
+
+
+def test_zoom_is_stood_down_by_the_lock_that_re_applies_a_fit():
+    """The one lock that does own the framing, because it re-applies it."""
+    zoomed = []
+    app = make_app(zoom_locked=True)
+    app.scene.mpr_views.zoom = zoomed.append
+
+    app.mpr.zoom_views(2.0)
+
+    assert zoomed == []
+
+
+def test_a_fit_that_is_not_held_leaves_the_gesture_alone():
+    zoomed = []
+    app = make_app(zoom_locked=False)
     app.scene.mpr_views.zoom = zoomed.append
 
     app.mpr.zoom_views(2.0)

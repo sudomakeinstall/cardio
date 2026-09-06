@@ -233,6 +233,7 @@ ACTIONS = {
     "toggle_maximized",
     "toggle_metadata",
     "zoom_tiles",
+    "zoom_to_labels",
     "zoom_views",
 }
 
@@ -903,6 +904,36 @@ def test_the_overlay_controls_survive_a_maximized_slice_view(read_only_app):
     assert slider is not None
     condition = re.search(r'v-if="([^"]*)"', slider.group(0)).group(1)
     assert "'axial'" in condition and "'sagittal'" in condition
+
+
+def test_the_zoom_panel_offers_the_whole_selection(read_only_app):
+    """A fit needs labels, a plane and a margin, and the panel has to ask for all."""
+    _, _, _, ui = read_only_app
+    html = ui.layout.html
+
+    for variable in ("zoom_labels", "zoom_plane", "zoom_fill", "zoom_locked"):
+        assert re.search(rf'v-model="{variable}"', html), variable
+    assert re.search(r'items="zoom_available_labels"', html)
+    assert re.search(r'items="zoom_plane_items"', html)
+
+
+def test_nothing_offers_to_fit_a_selection_that_is_empty(read_only_app):
+    """An empty label set casts no shadow, so the fit would silently do nothing.
+
+    The button and the margin slider both go grey, which says so before the
+    press rather than after it.
+    """
+    _, _, _, ui = read_only_app
+
+    button = re.search(
+        r"<VBtn\b[^<]*?>\s*Zoom to Labels\s*</VBtn>", ui.layout.html, re.DOTALL
+    )
+    assert button is not None
+    assert 'disabled="!(zoom_labels.length > 0)"' in button.group(0)
+
+    slider = re.search(r'<VSlider\b[^<]*v-model="zoom_fill"[^<]*>', ui.layout.html)
+    assert slider is not None
+    assert 'disabled="!(zoom_labels.length > 0)"' in slider.group(0)
 
 
 def test_the_volume_rendering_controls_go_with_the_view_they_act_on(read_only_app):

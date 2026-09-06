@@ -100,6 +100,39 @@ def fit_about_origin(renderer) -> None:
     renderer.ResetCamera(-x, x, -y, y, -z, z)
 
 
+def fit_factor(
+    half_extent: tuple[float, float],
+    size: tuple[int, int],
+    world_per_pixel: float,
+    fill: float,
+) -> float | None:
+    """How much to zoom so a box about the origin fills ``fill`` of the viewport.
+
+    ``half_extent`` is how far the box reaches from the origin along the view's
+    own right and up axes, which is all a fit has to go on: the camera looks at
+    the origin and is never moved off it, so what has to be brought inside the
+    viewport is the farthest edge in each direction rather than the box's width.
+
+    Sized through ``world_per_pixel`` rather than the parallel scale, so the one
+    piece of arithmetic serves the perspective MPR cameras as well as a parallel
+    one -- the same reason ``MPRViews.world_per_pixel`` measures through the
+    camera rather than reading a scale off it.
+
+    None when the window has never been sized, and when the box has no extent in
+    either direction: a fit to a single voxel would otherwise ask to be
+    magnified without limit.
+    """
+    width, height = size
+    if not (width and height and world_per_pixel > 0.0):
+        return None
+
+    visible = (world_per_pixel * width / 2.0, world_per_pixel * height / 2.0)
+    factors = [
+        fill * half / reach for half, reach in zip(visible, half_extent) if reach > 0.0
+    ]
+    return min(factors) if factors else None
+
+
 def depth_top(far: float) -> float:
     """The top of the near/far slider.
 

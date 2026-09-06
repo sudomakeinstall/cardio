@@ -25,6 +25,7 @@ from .panels import (
     snap_panel,
     tiles_panel,
     volume_panel,
+    zoom_panel,
 )
 
 __all__ = ["UI", "Interaction"]
@@ -106,6 +107,9 @@ class UI:
                 if self.scene.segmentations:
                     with section("tiles", "Tile View", "mdi-view-grid-outline"):
                         tiles_panel(self.server, self.scene)
+
+                    with section("zoom", "Zoom", "mdi-fit-to-screen-outline"):
+                        zoom_panel(self.server, self.scene)
 
             with section("export", "Export", "mdi-video-outline"):
                 capture_panel(self.server, self.scene)

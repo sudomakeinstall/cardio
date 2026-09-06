@@ -12,6 +12,7 @@ from cardio.logic.mpr import MPRController
 from cardio.logic.rotations import RotationController
 from cardio.logic.snap import SnapController
 from cardio.logic.tiles import TileController
+from cardio.logic.zoom import ZoomController
 from cardio.orientation import (
     AngleUnits,
     IndexOrder,
@@ -113,6 +114,7 @@ class FakeApp:
         self.mpr = MPRController(self)
         self.snap = SnapController(self)
         self.tiles = TileController(self)
+        self.zoom = ZoomController(self)
 
 
 def snap_state(**overrides) -> dict:

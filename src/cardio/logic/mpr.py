@@ -462,8 +462,10 @@ class MPRController(Controller):
         self.update_mpr_rotation()
 
         # The moment the views are real, which is when a configured camera pose
-        # finally has something to point.
+        # finally has something to point, and a configured zoom lock something
+        # to measure itself against.
         self.app.camera.install_configured()
+        self.app.zoom.refit()
 
     def _current_pose(self):
         """The origin and rotation the cuts are aimed by, both in ITK."""
@@ -611,9 +613,15 @@ class MPRController(Controller):
 
     @action("zoom_views")
     def zoom_views(self, factor: float):
-        """Zoom all three MPR views by ``factor``."""
+        """Zoom all three MPR views by ``factor``.
+
+        Refused while the zoom fit is locked, the way a pan is refused while
+        snap owns the origin: the fit would be re-applied over this the next
+        time the views moved, so letting the drag through would only be a zoom
+        that does not last.
+        """
         views = self.scene.mpr_views
-        if views is None:
+        if views is None or self.app.zoom.locked:
             return
 
         views.zoom(factor)

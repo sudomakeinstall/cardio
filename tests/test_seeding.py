@@ -62,6 +62,10 @@ MOVED = {
     "view.drawer_sections": ["orientation", "export"],
     "view.layout": "axial",
     "view.theme": "light",
+    "zoom.fill": 45,
+    "zoom.labels": [1, 3],
+    "zoom.plane": "coronal",
+    "zoom.segmentation_label": "mask",
 }
 
 
@@ -69,7 +73,7 @@ def boolean_sources() -> list[str]:
     """The document sources holding a bool.
 
     They are the ones distinct values cannot separate: there are only two, and
-    seven keys wanting them. ``moved_scene`` gives each a different pattern
+    nine keys wanting them. ``moved_scene`` gives each a different pattern
     across the rounds instead.
     """
     default = Scene()
@@ -80,9 +84,9 @@ def boolean_sources() -> list[str]:
     )
 
 
-# Enough rounds to give every boolean source its own pattern: with seven of
-# them, three rounds is eight patterns, and no two keys can share one.
-ROUNDS = 3
+# Enough rounds to give every boolean source its own pattern: with nine of
+# them, four rounds is sixteen patterns, and no two keys can share one.
+ROUNDS = 4
 
 # Enough frames that current_frame has somewhere to be other than the start.
 FRAMES = 3
@@ -127,7 +131,17 @@ def moved_scene(directory: pl.Path, round: int, extra: dict | None = None) -> Sc
                 "visible": False,
                 "clipping_enabled": False,
                 "mpr_overlay": True,
-            }
+            },
+            # A second one, so that snap and zoom can name different
+            # segmentations and a source crossed between them shows up.
+            {
+                "label": "mask",
+                "directory": directory,
+                "file_paths": ["seg0.nii.gz"],
+                "visible": False,
+                "clipping_enabled": False,
+                "mpr_overlay": True,
+            },
         ],
         "meshes": [
             {

@@ -108,14 +108,16 @@ class CameraLock(str, enum.Enum):
 class DrawerSection(str, enum.Enum):
     """The collapsible sections of the drawer, by the key the accordion tracks.
 
-    ``ORIENTATION`` and ``TILES`` are only built when the scene has the objects
-    they control, so naming one of those in a scene without them opens nothing.
+    ``ORIENTATION``, ``TILES`` and ``ZOOM`` are only built when the scene has
+    the objects they control, so naming one of those in a scene without them
+    opens nothing.
     """
 
     PLAYBACK = "playback"
     APPEARANCE = "appearance"
     ORIENTATION = "orientation"
     TILES = "tiles"
+    ZOOM = "zoom"
     EXPORT = "export"
 
 

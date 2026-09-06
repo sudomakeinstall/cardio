@@ -102,7 +102,7 @@ class SnapController(Controller):
             return
 
         state.snap_available_labels = []
-        state.snap_seg_items = [
+        state.segmentation_items = [
             {"title": s.label, "value": s.label} for s in self.scene.segmentations
         ]
         state.snap_no_interface = False

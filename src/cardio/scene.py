@@ -19,6 +19,7 @@ from .types import RGBColor
 from .view import View
 from .volume import Volume
 from .window_level import presets
+from .zoom import Zoom
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +212,10 @@ class Scene(ps.BaseSettings):
     snap: Snap = pc.Field(
         default_factory=Snap,
         description='Snap selection at load time. CLI usage: --snap.mode traverse --snap.labels_a "[1]"',
+    )
+    zoom: Zoom = pc.Field(
+        default_factory=Zoom,
+        description='Labels the views are fitted to. CLI usage: --zoom.labels "[1]" --zoom.plane coronal',
     )
 
     # Field validators for JSON string inputs

@@ -1,3 +1,4 @@
+import itertools as it
 import logging
 import typing as ty
 
@@ -109,6 +110,17 @@ def cell_centers_and_areas(surface: vtk.vtkPolyData) -> tuple[np.ndarray, np.nda
     return positions, areas
 
 
+def label_mask(image_data, labels: ty.Sequence[int]) -> np.ndarray | None:
+    """Which voxels carry one of ``labels``, as a ``(k, j, i)`` boolean array."""
+    scalars = image_data.GetPointData().GetScalars()
+    if scalars is None or not labels:
+        return None
+
+    columns, rows, slices = image_data.GetDimensions()
+    values = vtk_np.vtk_to_numpy(scalars).reshape(slices, rows, columns)
+    return np.isin(values, list(labels))
+
+
 def voxel_centroid(image_data, labels: ty.Sequence[int]) -> list[float] | None:
     """Centre of mass of the voxels carrying one of ``labels``, in world LPS.
 
@@ -116,20 +128,96 @@ def voxel_centroid(image_data, labels: ty.Sequence[int]) -> list[float] | None:
     spacing and direction, so the index the voxels average to crosses into world
     coordinates without anything here permuting an axis by hand.
     """
-    scalars = image_data.GetPointData().GetScalars()
-    if scalars is None or not labels:
-        return None
-
-    columns, rows, slices = image_data.GetDimensions()
-    values = vtk_np.vtk_to_numpy(scalars).reshape(slices, rows, columns)
-    selected = np.isin(values, list(labels))
-    if not selected.any():
+    selected = label_mask(image_data, labels)
+    if selected is None or not selected.any():
         return None
 
     k, j, i = (float(axis.mean()) for axis in np.nonzero(selected))
     point = [0.0, 0.0, 0.0]
     image_data.TransformContinuousIndexToPhysicalPoint(i, j, k, point)
     return [float(v) for v in point]
+
+
+def index_to_world(image_data) -> tuple[np.ndarray, np.ndarray]:
+    """The affine carrying a continuous ``(i, j, k)`` index to world LPS.
+
+    What ``TransformContinuousIndexToPhysicalPoint`` does, as a matrix and an
+    offset: a cloud of voxels crosses over in one product rather than in one
+    call per point.
+    """
+    direction = image_data.GetDirectionMatrix()
+    axes = np.array(
+        [[direction.GetElement(row, column) for column in range(3)] for row in range(3)]
+    )
+    return axes * np.asarray(image_data.GetSpacing()), np.asarray(
+        image_data.GetOrigin()
+    )
+
+
+def voxel_shell(mask: np.ndarray) -> np.ndarray:
+    """``mask`` without the voxels all six of whose neighbours are set.
+
+    A voxel walled in on every side is never the farthest one in any direction,
+    so dropping the interior leaves every projection's extent exactly where it
+    was while cutting a solid down to its surface. That is what makes a fit
+    cheap enough to recompute whenever the views turn.
+    """
+    interior = np.zeros_like(mask)
+    interior[1:-1, 1:-1, 1:-1] = np.logical_and.reduce(
+        [
+            mask[1:-1, 1:-1, 1:-1],
+            mask[:-2, 1:-1, 1:-1],
+            mask[2:, 1:-1, 1:-1],
+            mask[1:-1, :-2, 1:-1],
+            mask[1:-1, 2:, 1:-1],
+            mask[1:-1, 1:-1, :-2],
+            mask[1:-1, 1:-1, 2:],
+        ]
+    )
+    return mask & ~interior
+
+
+# The eight corners of a voxel, as offsets from its centre in index units.
+_VOXEL_CORNERS = np.array(list(it.product((-0.5, 0.5), repeat=3)))
+
+
+def voxel_corner_cloud(image_data, labels: ty.Sequence[int]) -> np.ndarray | None:
+    """World LPS corners of the voxels carrying one of ``labels``.
+
+    Corners rather than centres, so that a box fitted to the cloud covers the
+    voxels themselves and not merely their middles -- which is the whole of what
+    a half-voxel pad would otherwise have to be added for.
+    """
+    mask = label_mask(image_data, labels)
+    if mask is None or not mask.any():
+        return None
+
+    k, j, i = np.nonzero(voxel_shell(mask))
+    centres = np.column_stack((i, j, k)).astype(np.float64)
+    corners = np.unique((centres[:, None, :] + _VOXEL_CORNERS).reshape(-1, 3), axis=0)
+
+    matrix, origin = index_to_world(image_data)
+    return corners @ matrix.T + origin
+
+
+def plane_half_extent(cloud, frame, origin) -> tuple[float, float] | None:
+    """How far ``cloud`` reaches from ``origin``, along a plane's own two axes.
+
+    ``frame``'s first two columns are the plane's right and up directions in
+    LPS -- the basis ``MPRController.pan_vectors`` slides a view in -- so a
+    point's shadow on the plane is its coordinates in that basis.
+
+    Only the farthest reach in each direction is wanted, and it is measured from
+    ``origin`` rather than from the cloud's own middle: the camera looks at the
+    origin and is never moved off it, so what a fit has to clear is the edge
+    that reaches the most, whichever side of the crosshair it falls on.
+    """
+    if cloud is None or not len(cloud):
+        return None
+
+    axes = np.asarray(frame, dtype=np.float64)[:, :2]
+    projected = np.abs((np.asarray(cloud) - np.asarray(origin)) @ axes)
+    return tuple(float(value) for value in projected.max(axis=0))
 
 
 def principal_axes(
@@ -273,6 +361,9 @@ class Segmentation(Object):
     _meshes: list[vtk.vtkPolyData] = pc.PrivateAttr(default_factory=list)
     _label_images: list[vtk.vtkImageData] = pc.PrivateAttr(default_factory=list)
     _mpr_actors: dict[int, ResliceSet] = pc.PrivateAttr(default_factory=dict)
+    _label_clouds: dict[tuple[int, ...], np.ndarray | None] = pc.PrivateAttr(
+        default_factory=dict
+    )
     properties: vtkPropertyConfig = pc.Field(
         default_factory=vtkPropertyConfig, description="Property configuration"
     )
@@ -527,6 +618,26 @@ class Segmentation(Object):
         if image is None or not labels:
             return None
         return voxel_centroid(image, labels)
+
+    def label_cloud(self, labels: ty.Sequence[int]) -> np.ndarray | None:
+        """World points covering ``labels`` in every frame, as one cloud.
+
+        Unioned across time so that a fit made on one frame still holds on the
+        next; sized frame by frame, a zoom would breathe with the cardiac cycle.
+
+        Memoised, because a locked fit re-projects this every time the origin or
+        the rotation moves, and reading a whole 4D label series is not something
+        to do again at that rate.
+        """
+        key = tuple(sorted(set(labels)))
+        if key not in self._label_clouds:
+            clouds = [
+                cloud
+                for image in self._label_images
+                if (cloud := voxel_corner_cloud(image, key)) is not None
+            ]
+            self._label_clouds[key] = np.vstack(clouds) if clouds else None
+        return self._label_clouds[key]
 
     def interface_centroid(
         self, labels_a: list[int], labels_b: list[int], frame: int = 0

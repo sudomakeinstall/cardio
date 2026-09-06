@@ -22,6 +22,7 @@ from .snap import ALIGN_STEP_NAME, SnapController
 from .tiles import TileController
 from .view import ViewController
 from .visibility import VisibilityController
+from .zoom import ZoomController
 
 __all__ = [
     "ALIGN_STEP_NAME",
@@ -38,6 +39,7 @@ __all__ = [
     "TileController",
     "ViewController",
     "VisibilityController",
+    "ZoomController",
 ]
 
 
@@ -68,6 +70,7 @@ class Logic:
         self.clipping = ClippingController(self)
         self.tiles = TileController(self)
         self.capture = CaptureController(self)
+        self.zoom = ZoomController(self)
         self.camera = CameraController(self)
 
         self.journal = Journal(
@@ -115,9 +118,10 @@ class Logic:
         ``console`` is first because it reads and writes nothing any sibling
         owns, and being first is how that is said. ``snap`` is late because a
         configured lock snaps the moment it is seeded, which reads the origin,
-        the rotation and the frame that the controllers above it write;
-        ``camera`` is last because it reads where every camera ended up once
-        all of that has happened.
+        the rotation and the frame that the controllers above it write; ``zoom``
+        follows it, fitting the views against the origin and the rotation that
+        lock has just settled; ``camera`` is last because it reads where every
+        camera ended up once all of that has happened.
         """
         return [
             self.console,
@@ -130,5 +134,6 @@ class Logic:
             self.tiles,
             self.capture,
             self.snap,
+            self.zoom,
             self.camera,
         ]

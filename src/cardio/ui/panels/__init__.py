@@ -9,6 +9,7 @@ from .playback import playback_panel
 from .rotations import rotations_panel
 from .snap import snap_panel, volume_panel
 from .tiles import tiles_panel
+from .zoom import zoom_panel
 
 __all__ = [
     "appearance_panel",
@@ -21,4 +22,5 @@ __all__ = [
     "snap_panel",
     "tiles_panel",
     "volume_panel",
+    "zoom_panel",
 ]
