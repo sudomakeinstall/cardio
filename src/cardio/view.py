@@ -66,6 +66,18 @@ class Layout(str, enum.Enum):
         return self not in (Layout.VOLUME, Layout.TILE)
 
     @property
+    def shows_reslice(self) -> bool:
+        """Whether this layout draws a resampled cut of the volume at all.
+
+        Wider than ``shows_slices`` at both ends. A maximized axial view draws
+        the same cut the quad view does, and the tile grid draws its own along
+        the traverse path -- so everything but the volume rendering has a cut
+        on screen, and everything but the volume rendering wants the controls
+        over one.
+        """
+        return self is not Layout.VOLUME
+
+    @property
     def on_screen(self) -> frozenset["Layout"]:
         """The layouts whose view this one actually draws.
 

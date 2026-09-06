@@ -25,8 +25,8 @@ from cardio.reslice import VIEW_TRANSFORMS
 from cardio.rotation import RotationMetadata
 from cardio.scene import Scene
 from cardio.state import ObjectState
-from cardio.ui import UI
-from cardio.view import Theme
+from cardio.ui import UI, common
+from cardio.view import Layout, Theme
 from tests.geometry import matrix_array
 
 _server_names = itertools.count()
@@ -811,6 +811,31 @@ def test_no_binding_negates_a_variable_it_then_compares(read_only_app):
     ]
 
     assert offenders == []
+
+
+def test_the_reslice_condition_names_every_layout_that_draws_a_cut(read_only_app):
+    """The controls over a cut should be up wherever a cut is.
+
+    Written out by hand, this named the quad view and the tile grid, and so
+    hid the overlay controls in a maximized axial view that was drawing the
+    overlays they control.
+    """
+    named = set(re.findall(r"'([^']*)'", common.RESLICE_ACTIVE))
+
+    assert named == {layout.state_value for layout in Layout if layout.shows_reslice}
+    assert Layout.VOLUME.state_value not in named
+
+
+def test_the_overlay_controls_survive_a_maximized_slice_view(read_only_app):
+    """Which is where a person zooms in on the overlay they are judging."""
+    _, _, _, ui = read_only_app
+
+    slider = re.search(
+        r'<VSlider[^>]*v-model="mpr_segmentation_opacity"[^>]*>', ui.layout.html
+    )
+    assert slider is not None
+    condition = re.search(r'v-if="([^"]*)"', slider.group(0)).group(1)
+    assert "'axial'" in condition and "'sagittal'" in condition
 
 
 def test_the_traverse_slider_is_reachable_in_the_quad_view(read_only_app):

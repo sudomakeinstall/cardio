@@ -9,6 +9,9 @@ import pathlib as pl
 from trame.widgets import html
 from trame.widgets import vuetify3 as vuetify
 
+# Internal
+from ..view import Layout
+
 # How wide the drawer is. Read by the layout that sets it and by the console,
 # which has to start where the drawer stops.
 DRAWER_WIDTH = 340
@@ -17,13 +20,20 @@ DRAWER_WIDTH = 340
 # selected. Written out nineteen times before this constant existed.
 MPR_ACTIVE = "!maximized_view && active_volume_label"
 
-# The layouts that resample the volume: the quad MPR grid, and the tile grid.
-# Controls over the slice pose and its overlays belong to both.
 TILE_ACTIVE = "maximized_view === 'tile'"
 # Spelled out rather than negating TILE_ACTIVE: "!" binds tighter than "===",
 # so f"!{TILE_ACTIVE}" reads as (!maximized_view) === 'tile' and is never true.
 NOT_TILE_ACTIVE = "maximized_view !== 'tile'"
-RESLICE_ACTIVE = f"(!maximized_view || {TILE_ACTIVE}) && active_volume_label"
+
+# The layouts with a cut on screen, which is every one that is not the volume
+# rendering. Listed from ``Layout`` rather than written out, because the two
+# had drifted: this used to name the quad view and the tile grid, and so took
+# the overlay controls away from a maximized axial view that was drawing the
+# overlays it controls.
+_RESLICE_LAYOUTS = ", ".join(
+    f"'{layout.state_value}'" for layout in Layout if layout.shows_reslice
+)
+RESLICE_ACTIVE = f"[{_RESLICE_LAYOUTS}].includes(maximized_view) && active_volume_label"
 
 
 @cl.contextmanager
