@@ -231,6 +231,7 @@ class Registry:
 
     def __init__(self, journal: Journal | None = None):
         self._actions: dict[str, Action] = {}
+        self._observers: list[ty.Callable[[str, dict], None]] = []
         self.journal = journal
 
     def add(self, owner) -> None:
@@ -251,6 +252,22 @@ class Registry:
         for name in self._actions:
             setattr(controller, name, ft.partial(self.run, name))
 
+    def observe(self, observer) -> None:
+        """Be told the name and arguments of every call, before it is made.
+
+        Not the journal, which answers what an action *moved* and pays a copy of
+        the whole document for the answer. This one answers only what was asked
+        for, costs nothing, and so can stay armed for as long as a session lasts
+        -- which a log of everything the user did has to be.
+
+        Before the call rather than after, so that a command which goes on to
+        raise is still a command that was given.
+        """
+        self._observers.append(observer)
+
+    def unobserve(self, observer) -> None:
+        self._observers.remove(observer)
+
     def run(self, name: str, *positional, **keyword):
         """Do the named thing, with its arguments checked against its signature."""
         if name not in self._actions:
@@ -258,6 +275,9 @@ class Registry:
 
         entry = self._actions[name]
         arguments = entry.bind(positional, keyword)
+
+        for observer in list(self._observers):
+            observer(name, arguments)
 
         if self.journal is None:
             return entry.call(**arguments)

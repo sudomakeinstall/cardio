@@ -188,7 +188,7 @@ def test_background_keeps_the_signature_it_wraps():
     assert list(registry["slow"].arguments.model_fields) == ["count"]
 
 
-# -------------------------------------------------------------- journal ------
+# ------------------------------------------------------------ observers ------
 
 
 def journalled(**state):
@@ -198,6 +198,85 @@ def journalled(**state):
     registry = Registry(journal)
     registry.add(Recorder(fake))
     return registry, journal, fake
+
+
+def test_an_observer_is_told_the_name_and_the_arguments():
+    registry = Registry()
+    registry.add(Recorder())
+    seen = []
+    registry.observe(lambda name, arguments: seen.append((name, arguments)))
+
+    registry.run("takes_two", 1)
+
+    assert seen == [("takes_two", {"first": 1, "second": "b"})]
+
+
+def test_an_observer_is_told_before_the_call_is_made():
+    """A command that goes on to raise is still a command that was given."""
+    order = []
+
+    class Failing:
+        @action("boom")
+        def boom(self):
+            order.append("called")
+            raise RuntimeError("no")
+
+    registry = Registry()
+    registry.add(Failing())
+    registry.observe(lambda name, arguments: order.append("observed"))
+
+    with pytest.raises(RuntimeError):
+        registry.run("boom")
+
+    assert order == ["observed", "called"]
+
+
+def test_an_unknown_action_is_never_observed():
+    registry = Registry()
+    registry.add(Recorder())
+    seen = []
+    registry.observe(lambda name, arguments: seen.append(name))
+
+    with pytest.raises(KeyError):
+        registry.run("nonsense")
+
+    assert seen == []
+
+
+def test_observing_does_not_arm_the_journal():
+    """The console watches every action all session; the journal cannot.
+
+    Watching the journal copies the whole document twice per action, and a
+    drag dispatches one per mouse move. An observer costs nothing, and this is
+    what says the two hooks stayed separate.
+    """
+    registry, journal, state = journalled(a=1)
+    registry.observe(lambda name, arguments: None)
+
+    registry.run("assign", "a", 10)
+
+    assert not journal.watched
+    assert state.blocks == 0
+
+
+def test_an_observer_can_stop_observing():
+    registry = Registry()
+    registry.add(Recorder())
+    seen = []
+
+    def observer(name, arguments):
+        seen.append(name)
+
+    registry.observe(observer)
+    registry.run("takes_none")
+
+    registry.unobserve(observer)
+    registry.run("takes_none")
+
+    assert seen == ["takes_none"]
+
+
+# -------------------------------------------------------------- journal ------
 
 
 def test_an_unwatched_journal_does_nothing_at_all():
