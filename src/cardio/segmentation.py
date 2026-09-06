@@ -59,16 +59,65 @@ def masked_surface(
 def masked_centroid(
     mesh: vtk.vtkPolyData, mask: ty.Sequence[bool]
 ) -> list[float] | None:
-    """Center of mass of the mesh cells selected by ``mask``."""
+    """Area-weighted centre of the mesh cells selected by ``mask``.
+
+    Weighted rather than averaged over the vertices, which is what
+    ``vtkCenterOfMass`` would give: SurfaceNets puts one vertex in every grid
+    cell the surface crosses, so vertex density per unit area depends on how the
+    surface lies against the voxel grid, and an unweighted mean drifts toward
+    whichever part of the patch runs obliquely to it. The drift grows with the
+    voxel anisotropy, which on a thick-sliced acquisition is considerable.
+
+    Only ``interface_centroid`` needs this; a label is centred on the voxels it
+    is made of rather than on the surface around them.
+    """
     surface = masked_surface(mesh, mask)
     if surface is None:
         return None
 
-    com = vtk.vtkCenterOfMass()
-    com.SetInputData(surface)
-    com.SetUseScalarsAsWeights(False)
-    com.Update()
-    return list(com.GetCenter())
+    sizes = vtk.vtkCellSizeFilter()
+    sizes.SetInputData(surface)
+    sizes.ComputeAreaOn()
+    sizes.ComputeVolumeOff()
+    sizes.ComputeLengthOff()
+    sizes.ComputeVertexCountOff()
+    sizes.Update()
+    areas = vtk_np.vtk_to_numpy(sizes.GetOutput().GetCellData().GetArray("Area"))
+
+    centers = vtk.vtkCellCenters()
+    centers.SetInputData(surface)
+    centers.Update()
+    positions = vtk_np.vtk_to_numpy(centers.GetOutput().GetPoints().GetData()).astype(
+        np.float64
+    )
+
+    total = float(areas.sum())
+    if total <= 0.0:
+        return None
+    return [float(v) for v in (positions * areas[:, None]).sum(axis=0) / total]
+
+
+def voxel_centroid(image_data, labels: ty.Sequence[int]) -> list[float] | None:
+    """Centre of mass of the voxels carrying one of ``labels``, in world LPS.
+
+    ``TransformContinuousIndexToPhysicalPoint`` applies the image's origin,
+    spacing and direction, so the index the voxels average to crosses into world
+    coordinates without anything here permuting an axis by hand.
+    """
+    scalars = image_data.GetPointData().GetScalars()
+    if scalars is None or not labels:
+        return None
+
+    columns, rows, slices = image_data.GetDimensions()
+    values = vtk_np.vtk_to_numpy(scalars).reshape(slices, rows, columns)
+    selected = np.isin(values, list(labels))
+    if not selected.any():
+        return None
+
+    k, j, i = (float(axis.mean()) for axis in np.nonzero(selected))
+    point = [0.0, 0.0, 0.0]
+    image_data.TransformContinuousIndexToPhysicalPoint(i, j, k, point)
+    return [float(v) for v in point]
 
 
 def surface_points(surface: vtk.vtkPolyData) -> np.ndarray:
@@ -418,16 +467,16 @@ class Segmentation(Object):
             return None
         return self._meshes[frame % len(self._meshes)]
 
-    def _label_mask(self, mesh, labels: list[int]) -> list[bool] | None:
-        """Cells whose label is in ``labels``."""
-        scalars = mesh.GetCellData().GetArray("Labels")
-        if not scalars:
+    def _frame_image(self, frame: int):
+        """Label image at ``frame``, wrapping as ``_frame_mesh`` does.
+
+        The same wrapping, so a centroid read from the voxels and one read from
+        the mesh describe the same frame -- which ``_orient_normal`` and the
+        traverse blend both rely on.
+        """
+        if not self._label_images:
             return None
-        label_set = set(labels)
-        return [
-            int(scalars.GetTuple1(i)) in label_set
-            for i in range(scalars.GetNumberOfTuples())
-        ]
+        return self._label_images[frame % len(self._label_images)]
 
     def _interface_mask(
         self, mesh, labels_a: list[int], labels_b: list[int]
@@ -445,13 +494,16 @@ class Segmentation(Object):
         return mask
 
     def label_centroid(self, labels: list[int], frame: int = 0) -> list[float] | None:
-        mesh = self._frame_mesh(frame)
-        if mesh is None or not labels:
+        """Centre of mass of the labelled voxels themselves.
+
+        Read from the label image rather than from the mesh around it: the mesh
+        is a surface, and the centre of a surface is not the centre of the solid
+        it encloses -- for anything hollow or C-shaped the two are far apart.
+        """
+        image = self._frame_image(frame)
+        if image is None or not labels:
             return None
-        mask = self._label_mask(mesh, labels)
-        if mask is None:
-            return None
-        return masked_centroid(mesh, mask)
+        return voxel_centroid(image, labels)
 
     def interface_centroid(
         self, labels_a: list[int], labels_b: list[int], frame: int = 0
