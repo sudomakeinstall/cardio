@@ -208,18 +208,31 @@ def snap_panel(server, scene):
             classes=f"mb-2 {ACTION_CLASS}",
             prepend_icon="mdi-swap-horizontal",
         )
-        # Undoing a snap is not a mode of snapping, so it sits below the modes
-        # rather than among them, and needs no selection to be usable.
+        # Undoing a snap is not a mode of snapping, so these sit below the
+        # modes rather than among them, and need no selection to be usable.
         vuetify.VBtn(
             "Reset",
             v_if=VOLUME_ACTIVE,
             click=server.controller.reset_snap,
             title=(
-                "Clear the groups, release the locks, drop the interface"
-                " alignment and recentre the views"
+                "Put the groups and locks back the way the config asks for,"
+                " drop the interface alignment and recentre the views"
             ),
             block=True,
             classes=ACTION_CLASS,
             prepend_icon="mdi-restore",
+            variant="text",
+        )
+        vuetify.VBtn(
+            "Clear",
+            v_if=VOLUME_ACTIVE,
+            click=server.controller.clear_snap,
+            title=(
+                "Empty the groups, release the locks, drop the interface"
+                " alignment and recentre the views"
+            ),
+            block=True,
+            classes=ACTION_CLASS,
+            prepend_icon="mdi-close-circle-outline",
             variant="text",
         )

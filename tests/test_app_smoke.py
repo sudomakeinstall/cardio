@@ -205,6 +205,7 @@ ACTIONS = {
     "adjust_window_level",
     "align_to_interface",
     "clear_console",
+    "clear_snap",
     "close_application",
     "decrement_frame",
     "increment_frame",
@@ -770,6 +771,72 @@ def test_reset_undoes_a_locked_traverse_alignment(app):
     assert state.snap_labels_a == [] and state.snap_labels_b == []
     assert state.snap_labels_c == []
     assert state.snap_traverse == 0
+    assert state.snap_locked is False
+    assert state.snap_orientation_locked is False
+    assert state.mpr_rotation_data["angles_list"] == []
+    assert state.mpr_origin != moved
+
+
+def configured_snap_app(tmp_path):
+    """A build whose config names a selection, which is what Reset returns to."""
+    scene = build_scene(
+        tmp_path,
+        snap={"mode": "traverse", "labels_a": [1], "labels_b": [2], "labels_c": [3]},
+    )
+    return build_app(scene)
+
+
+def test_reset_returns_to_the_configured_selection(tmp_path):
+    """Which is not an empty one whenever the config named groups."""
+    server, _, _, _ = configured_snap_app(tmp_path)
+    connect(server)
+
+    with server.state:
+        server.state.snap_labels_a = [2]
+
+    with server.state:
+        server.controller.reset_snap()
+
+    state = server.state
+    assert state.snap_mode == "traverse"
+    assert state.snap_labels_a == [1]
+    assert state.snap_labels_b == [2]
+    assert state.snap_labels_c == [3]
+
+
+def test_clear_empties_a_selection_the_config_asked_for(tmp_path):
+    """The button Reset was described as being, and is not."""
+    server, _, _, _ = configured_snap_app(tmp_path)
+    connect(server)
+
+    with server.state:
+        server.controller.clear_snap()
+
+    state = server.state
+    assert state.snap_labels_a == []
+    assert state.snap_labels_b == []
+    assert state.snap_labels_c == []
+    assert state.snap_traverse == 0
+    assert state.snap_mode == "traverse", "there is no blank mode to clear to"
+
+
+def test_clear_undoes_a_locked_traverse_alignment(app):
+    """The half it shares with Reset: the locks, the alignment, the origin."""
+    server, _, _, _ = app
+    traverse_selection(server)
+
+    with server.state:
+        server.state.snap_locked = True
+        server.state.snap_orientation_locked = True
+    server.controller.align_to_interface()
+
+    assert server.state.mpr_rotation_data["angles_list"]
+    moved = list(server.state.mpr_origin)
+
+    with server.state:
+        server.controller.clear_snap()
+
+    state = server.state
     assert state.snap_locked is False
     assert state.snap_orientation_locked is False
     assert state.mpr_rotation_data["angles_list"] == []

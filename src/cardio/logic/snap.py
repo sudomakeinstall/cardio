@@ -306,29 +306,24 @@ class SnapController(Controller):
         self.server.state.snap_no_interface = False
         self.app.mpr.set_origin(center)
 
-    @action("reset_snap")
-    def reset(self, **kwargs):
-        """Put the panel back the way the config asks for, and undo what it did.
+    def _release(self):
+        """Let go of the locks, the alignment and the snapped origin.
 
-        Reset returns to the configured selection rather than to a blank panel,
-        so the state it lands in is the state the app launches in.
+        The half of undoing a snap that has nothing to do with the selection,
+        which is why both buttons start here: one then puts the selection back
+        the way the config asks for it, the other empties it.
 
-        The locks are released first: rebuilding the groups while one is still
-        on would send the views chasing a selection that is being taken apart.
-        They go back on last, once there is a settled scene to snap against.
+        The locks go first. Rebuilding or emptying the groups while one is
+        still on would send the views chasing a selection that is being taken
+        apart.
 
-        Only the alignment step is dropped from the rotation sequence. Steps the
-        user added are theirs, and the rotations panel has its own button for
-        deleting those.
+        Only the alignment step is dropped from the rotation sequence. Steps
+        the user added are theirs, and the rotations panel has its own button
+        for deleting those.
         """
-        if not self.scene.segmentations:
-            return
-
         state = self.server.state
         state.snap_locked = False
         state.snap_orientation_locked = False
-
-        self._publish_configured_selection()
         state.snap_no_interface = False
         state.interface_flatness = 0.0
 
@@ -336,11 +331,52 @@ class SnapController(Controller):
         self.app.rotations.edit_steps(_without_alignment)
         self.app.mpr.reset_mpr_origin()
 
+    @action("reset_snap")
+    def reset(self, **kwargs):
+        """Put the panel back the way the config asks for, and undo what it did.
+
+        Reset returns to the configured selection rather than to a blank panel,
+        so the state it lands in is the state the app launches in -- which is a
+        selection of its own whenever the config named one. ``clear`` is the
+        button for wanting none.
+
+        The configured locks go back on last, once there is a settled scene to
+        snap against.
+        """
+        if not self.scene.segmentations:
+            return
+
+        self._release()
+        self._publish_configured_selection()
+
         seg = self._selected_segmentation()
         if seg is not None:
             self._publish_available_labels(seg)
             self._publish_configured_groups(seg)
             self._apply_configured_locks()
+
+    @action("clear_snap")
+    def clear(self, **kwargs):
+        """Empty the selection and undo what it did.
+
+        The way out of a selection the config knows nothing about, which
+        ``reset`` cannot be: it lands on the configured selection, and a config
+        that named one leaves the panel full rather than empty.
+
+        The mode is left where it is. It is one of three, none of them blank,
+        so there is nothing to clear it to; and the traverse position goes back
+        to the start of a path that no longer has ends.
+        """
+        if not self.scene.segmentations:
+            return
+
+        self._release()
+
+        state = self.server.state
+        state.snap_labels_a = []
+        state.snap_labels_b = []
+        state.snap_labels_c = []
+        state.snap_traverse = 0
 
     def travel(self, steps: float) -> bool:
         """Move along the traverse path by ``steps`` percent of its length.
