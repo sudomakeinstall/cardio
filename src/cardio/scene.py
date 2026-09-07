@@ -7,7 +7,7 @@ import pydantic as pc
 import pydantic_settings as ps
 import vtk
 
-from .capture import CaptureFormat
+from .capture import CaptureFormat, SeriesTags
 from .mesh import Mesh
 from .mpr_views import MPRViews
 from .playback import Playback
@@ -199,6 +199,14 @@ class Scene(ps.BaseSettings):
             "Format a capture is written in. Options: "
             + ", ".join(CaptureFormat)
             + ". CLI usage: --capture-format jpeg"
+        ),
+    )
+    capture_series: SeriesTags = pc.Field(
+        default_factory=SeriesTags,
+        description=(
+            "How each viewport's exported DICOM series is named. "
+            "CLI usage: --capture_series.axial.number 400 "
+            '--capture_series.axial.description "Cine SAX"'
         ),
     )
     playback: Playback = pc.Field(

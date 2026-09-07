@@ -77,6 +77,7 @@ class Context:
     level: float
     identity: dict[str, str]
     series_number: int = 1
+    series_description: str = ""
     frame_of_reference: str = ""
     has_plane: bool = True
 

@@ -24,7 +24,7 @@ from cardio.orientation import AngleUnits
 from cardio.reslice import VIEW_TRANSFORMS
 from cardio.rotation import RotationMetadata
 from cardio.scene import Scene
-from cardio.state import ObjectState
+from cardio.state import VIEWPORTS, ObjectState
 from cardio.ui import UI, common
 from cardio.view import Layout, Theme
 from tests.geometry import matrix_array
@@ -934,6 +934,52 @@ def test_nothing_offers_to_fit_a_selection_that_is_empty(read_only_app):
     slider = re.search(r'<VSlider\b[^<]*v-model="zoom_fill"[^<]*>', ui.layout.html)
     assert slider is not None
     assert 'disabled="!(zoom_labels.length > 0)"' in slider.group(0)
+
+
+def test_the_export_panel_asks_how_each_series_is_to_be_named(read_only_app):
+    """A series is named per viewport, so the panel needs a pair for each."""
+    _, _, _, ui = read_only_app
+    html = ui.layout.html
+
+    for viewport in VIEWPORTS:
+        assert re.search(rf'v-model="capture_series_number_{viewport}"', html), viewport
+        assert re.search(rf'v-model="capture_series_description_{viewport}"', html), (
+            viewport
+        )
+
+
+def test_a_viewport_off_screen_cannot_be_named_either(read_only_app):
+    """The pair greys with the tick above it, and for the same reason.
+
+    A viewport the layout is not drawing is not captured, so offering to name
+    the series it will not write says the capture is going to happen.
+    """
+    _, _, _, ui = read_only_app
+
+    for viewport in VIEWPORTS:
+        for key in (
+            f"capture_series_number_{viewport}",
+            f"capture_series_description_{viewport}",
+        ):
+            field = re.search(
+                rf'<VTextField\b[^<]*v-model="{key}"[^<]*>', ui.layout.html
+            )
+            assert field is not None, key
+            assert (
+                f":disabled=\"!capture_available.includes('{viewport}')\""
+                in field.group(0)
+            ), key
+
+
+def test_a_series_is_named_only_where_there_is_a_series(read_only_app):
+    """A picture format writes none, so a number offered beside one names nothing."""
+    _, _, _, ui = read_only_app
+
+    guard = re.search(r'v-if="([^"]*capture_format[^"]*)"', ui.layout.html)
+    assert guard is not None
+    assert "'dicom-rendered'" in guard.group(1)
+    assert "'dicom-data'" in guard.group(1)
+    assert "'png'" not in guard.group(1)
 
 
 def test_the_volume_rendering_controls_go_with_the_view_they_act_on(read_only_app):

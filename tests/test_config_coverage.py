@@ -53,6 +53,8 @@ PER_OBJECT = {
 COMPUTED_KEYS = {
     "visible_key": "the shared sheet dialog's v-model; both sheets are in the registry",
     "screenshot_viewport(key)": "Scene.screenshot_viewports, via the widget default",
+    "capture_series_number(key)": "Scene.capture_series, one entry per viewport",
+    "capture_series_description(key)": "Scene.capture_series, one entry per viewport",
     "key": "clip bounds, derived from each object's geometry",
     "keys.clip_panel": "whether a clip subpanel is expanded is browsing state",
     "keys.preset_panel": "whether a preset subpanel is expanded is browsing state",

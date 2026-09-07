@@ -22,6 +22,7 @@ import pydicom as pd
 
 # Internal
 from .base import CaptureWriter, Context, Frame, Plane
+from .series import describe
 
 # What a derived series copies from the source so it lands in the same study.
 # ``cardio.dicom.DISPLAY_TAGS`` already reads every one of them.
@@ -92,11 +93,18 @@ class SeriesWriter(CaptureWriter):
     def path_for(self, index: int) -> pl.Path:
         return self.directory / f"{index:04d}.dcm"
 
-    def stamp(self, dataset, index: int, description: str):
-        """The attributes that place an instance within its series."""
+    def stamp(self, dataset, index: int, kind: str):
+        """The attributes that place an instance within its series.
+
+        ``kind`` is what the series holds, which only the writer knows and only
+        once it has a frame in hand; it names the series when the capture was
+        not given a name of its own.
+        """
         dataset.SeriesInstanceUID = self.series_uid
         dataset.SeriesNumber = self.context.series_number
-        dataset.SeriesDescription = description
+        dataset.SeriesDescription = describe(
+            self.context.viewport, kind, self.context.series_description
+        )
         dataset.InstanceNumber = index + 1
         # Milliseconds into the cycle, which is how the reader orders phases.
         # Rounded because DS holds sixteen characters, and a rate that does not
@@ -111,7 +119,7 @@ class SecondaryCaptureWriter(SeriesWriter):
         rgb = np.ascontiguousarray(frame.rgb[:, :, :3])
 
         dataset = _dataset(self.context, ["DERIVED", "SECONDARY"])
-        self.stamp(dataset, index, f"cardio {self.context.viewport} (rendered)")
+        self.stamp(dataset, index, "rendered")
 
         dataset.Rows, dataset.Columns = rgb.shape[:2]
         dataset.SamplesPerPixel = 3
@@ -146,9 +154,7 @@ class SliceWriter(SeriesWriter):
             self.context,
             ["DERIVED", "SECONDARY", "MPR" if localizable else "MOSAIC"],
         )
-        self.stamp(
-            dataset, index, f"cardio {self.context.viewport} ({_kind(localizable)})"
-        )
+        self.stamp(dataset, index, _kind(localizable))
 
         dataset.Rows, dataset.Columns = stored.shape
         dataset.SamplesPerPixel = 1

@@ -20,7 +20,13 @@ import functools as ft
 import pydantic_core
 
 # Internal
-from .state import VIEWPORTS, ObjectState, screenshot_viewport
+from .state import (
+    VIEWPORTS,
+    ObjectState,
+    capture_series_description,
+    capture_series_number,
+    screenshot_viewport,
+)
 from .view import Layout
 
 
@@ -121,6 +127,18 @@ DOCUMENT = _declare(
         ),
     ),
     capture_format="capture_format",
+    # A pair per viewport rather than a pair per capture: a capture writes
+    # one series for each, and the number and description are what tell them
+    # apart once they are in a study. Spelled by the same two helpers the
+    # writers and the panel reach for, so the three cannot drift.
+    **{
+        key: f"capture_series.{viewport}.{field}"
+        for viewport in VIEWPORTS
+        for field, key in (
+            ("number", capture_series_number(viewport)),
+            ("description", capture_series_description(viewport)),
+        )
+    },
     clip_depth=(
         "view.clip_depth",
         (

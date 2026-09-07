@@ -10,6 +10,7 @@ import pathlib as pl
 # Third Party
 import itk
 import numpy as np
+import pydantic as pc
 import pydicom as pd
 import pytest
 import vtk
@@ -19,10 +20,17 @@ from vtk.util import numpy_support as vtknp
 from cardio import Scene, dicom
 from cardio.capture import CaptureFormat, Context, Frame, Plane, image_to_array
 from cardio.capture.dicom import SecondaryCaptureWriter, SliceWriter, encode
-from cardio.capture.formats import WRITERS, writer_for
+from cardio.capture.formats import WRITERS, writer_for, writes_series
 from cardio.capture.geometry import plane_from_reslice, reslice_axes
 from cardio.capture.images import GifWriter, JpegWriter, Mp4Writer, PngWriter
 from cardio.capture.mosaic import compose
+from cardio.capture.series import (
+    DESCRIPTION_LIMIT,
+    Series,
+    SeriesTags,
+    describe,
+    repeated_numbers,
+)
 from cardio.logic.capture import VIEWPORTS, summary_of, written_files
 from cardio.orientation import create_vtk_reslice_matrix
 from cardio.reslice import VIEW_TRANSFORMS
@@ -216,11 +224,11 @@ def written(directory: pl.Path) -> list[pd.dataset.Dataset]:
     return [pd.dcmread(path) for path in sorted(directory.glob("*.dcm"))]
 
 
-def write_slices(tmp_path, frames: int = 3, viewport="axial") -> list:
+def write_slices(tmp_path, frames: int = 3, viewport="axial", **naming) -> list:
     reslice = posed_reslice(phantom())
     plane = plane_from_reslice(reslice)
 
-    writer = SliceWriter(context(tmp_path, viewport))
+    writer = SliceWriter(context(tmp_path, viewport, **naming))
     for index in range(frames):
         writer.add(index, Frame(image=rgb_frame().image, plane=plane))
     writer.close()
@@ -659,6 +667,159 @@ def test_a_viewport_that_wrote_nothing_is_not_reported_as_saved(tmp_path):
 
     assert written_files(tmp_path, "tile") == []
     assert summary_of([], tmp_path) == "Capture wrote nothing"
+
+
+# --- naming a series ----------------------------------------------------------
+
+
+def test_every_viewport_opens_on_a_number_of_its_own():
+    """Unconfigured, a capture of several viewports is several series.
+
+    Numbering them alike would be the one default a study cannot be sorted
+    by, so the defaults are distinct rather than all 1.
+    """
+    numbers = [SeriesTags().of(name).number for name in VIEWPORTS]
+
+    assert len(set(numbers)) == len(VIEWPORTS)
+
+
+def test_a_series_carries_the_number_it_was_given(tmp_path):
+    dataset = write_slices(tmp_path, frames=1, series_number=407)[0]
+
+    assert dataset.SeriesNumber == 407
+
+
+def test_a_named_series_is_called_what_it_was_named(tmp_path):
+    dataset = write_slices(tmp_path, frames=1, series_description="Cine SAX")[0]
+
+    assert dataset.SeriesDescription == "Cine SAX"
+
+
+def test_an_unnamed_series_says_which_viewport_it_came_off(tmp_path):
+    """The fallback still has to be tellable from the series written beside it."""
+    dataset = write_slices(tmp_path, frames=1)[0]
+
+    assert dataset.SeriesDescription == "cardio axial (reformat)"
+
+
+def rendered(tmp_path, **naming) -> pd.dataset.Dataset:
+    writer = SecondaryCaptureWriter(context(tmp_path, "vr", **naming))
+    writer.add(0, rgb_frame())
+    writer.close()
+    return written(pl.Path(tmp_path) / "vr")[0]
+
+
+def test_a_rendered_series_is_named_the_same_way(tmp_path):
+    """Both writers, or a capture would be named by which one it went through."""
+    assert rendered(tmp_path).SeriesDescription == "cardio vr (rendered)"
+    assert rendered(tmp_path, series_description="As shown").SeriesDescription == (
+        "As shown"
+    )
+
+
+@pytest.mark.parametrize("kind", ["rendered", "reformat", "mosaic"])
+def test_an_unnamed_series_is_named_after_what_it_holds(kind):
+    assert describe("tile", kind, "") == f"cardio tile ({kind})"
+
+
+def test_a_name_that_was_given_is_the_whole_of_the_name():
+    """Nothing appended: what was asked for is what a viewer lists."""
+    assert describe("tile", "mosaic", "Cine SAX") == "Cine SAX"
+
+
+def test_two_viewports_written_as_one_number_are_reported():
+    assert repeated_numbers({"axial": 5, "coronal": 5, "vr": 6}) == {
+        5: ["axial", "coronal"]
+    }
+
+
+def test_numbers_that_differ_are_not_reported():
+    assert repeated_numbers({"axial": 5, "coronal": 6}) == {}
+
+
+def test_a_description_longer_than_dicom_carries_is_refused():
+    """Rejected by the receiver rather than shortened, so refuse it here."""
+    Series(description="x" * DESCRIPTION_LIMIT)
+
+    with pytest.raises(pc.ValidationError):
+        Series(description="x" * (DESCRIPTION_LIMIT + 1))
+
+
+def test_a_viewport_that_does_not_exist_is_refused():
+    """A misspelled one would otherwise quietly name nothing."""
+    with pytest.raises(pc.ValidationError):
+        SeriesTags(oblique={"number": 3})
+
+
+def test_only_the_dicom_formats_have_a_series_to_name():
+    naming = {fmt for fmt in CaptureFormat if writes_series(fmt)}
+
+    assert naming == {CaptureFormat.DICOM_RENDERED, CaptureFormat.DICOM_DATA}
+
+
+def captured_series(tmp_path, viewport="axial") -> pd.dataset.Dataset:
+    """The first instance of the one series a capture just wrote."""
+    folder = max((tmp_path / "out" / "screenshots").iterdir())
+    return written(folder / viewport)[0]
+
+
+def exporting(tmp_path, **overrides):
+    """An app set up to write one DICOM series, off the axial view."""
+    server, _, logic = built(
+        tmp_path, "axial", capture_format="dicom-data", **overrides
+    )
+    tick(server, "axial")
+    return server, logic
+
+
+def test_a_capture_is_written_as_the_series_the_scene_named(tmp_path):
+    _, logic = exporting(
+        tmp_path,
+        capture_series={"axial": {"number": 407, "description": "Cine SAX"}},
+    )
+
+    capture(logic)
+
+    dataset = captured_series(tmp_path)
+    assert dataset.SeriesNumber == 407
+    assert dataset.SeriesDescription == "Cine SAX"
+
+
+def test_the_configured_naming_reaches_the_drawer(tmp_path):
+    server, _, _ = built(
+        tmp_path,
+        capture_series={"axial": {"number": 400, "description": "Cine SAX"}},
+    )
+
+    assert server.state.capture_series_number_axial == 400
+    assert server.state.capture_series_description_axial == "Cine SAX"
+
+
+def test_what_the_drawer_holds_is_what_the_capture_is_written_as(tmp_path):
+    """Retyped rather than reconfigured, and the number field hands back text.
+
+    A ``type="number"`` field's v-model is a string, so a number typed into
+    one has to reach ``SeriesNumber`` as the number it reads as.
+    """
+    server, logic = exporting(tmp_path)
+    with server.state:
+        server.state.capture_series_number_axial = "512"
+        server.state.capture_series_description_axial = "Retyped"
+
+    capture(logic)
+
+    dataset = captured_series(tmp_path)
+    assert dataset.SeriesNumber == 512
+    assert dataset.SeriesDescription == "Retyped"
+
+
+def test_a_number_field_left_empty_falls_back_on_what_was_configured(tmp_path):
+    """Clearing the field is a state to pass through, not a capture to refuse."""
+    server, _, logic = built(tmp_path, "volume", capture_series={"vr": {"number": 409}})
+    with server.state:
+        server.state.capture_series_number_vr = ""
+
+    assert logic.capture.series_for("vr") == (409, "")
 
 
 # --- the frame a cine capture reads -------------------------------------------

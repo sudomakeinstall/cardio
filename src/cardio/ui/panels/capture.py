@@ -5,7 +5,13 @@ from trame.widgets import html
 from trame.widgets import vuetify3 as vuetify
 
 # Internal
-from ...state import VIEWPORTS, screenshot_viewport
+from ...capture import CaptureFormat, writes_series
+from ...state import (
+    VIEWPORTS,
+    capture_series_description,
+    capture_series_number,
+    screenshot_viewport,
+)
 
 VIEWPORT_LABELS = {
     "vr": "3D",
@@ -25,6 +31,24 @@ ANY_AVAILABLE = " || ".join(
 )
 
 OFF_SCREEN = "This viewport is captured only while the layout is showing it"
+
+# Only the DICOM formats write a series, and only a series has a number and a
+# description. Read off the enum rather than tested as a name prefix, so a
+# format that starts writing one is offered these without anything else moving.
+NAMES_SERIES = " || ".join(
+    f"capture_format === '{fmt.value}'" for fmt in CaptureFormat if writes_series(fmt)
+)
+
+UNNAMED = "Left empty, the series is named after the viewport and what it holds"
+
+# A text field swallows its own key events, or they reach the render view's
+# interactor and typing `a` maximizes the axial view. The same guard the console
+# prompt and the rotation name field carry, for the same reason.
+SWALLOW_KEYS = {
+    "__events": ["keydown", "keypress"],
+    "keydown": "$event.stopPropagation(); $event.stopImmediatePropagation();",
+    "keypress": "$event.stopPropagation(); $event.stopImmediatePropagation();",
+}
 
 
 def capture_panel(server, scene):
@@ -50,6 +74,42 @@ def capture_panel(server, scene):
                 disabled=(f"!capture_available.includes('{key}')", False),
                 title=OFF_SCREEN,
             )
+
+    with html.Div(v_if=NAMES_SERIES):
+        vuetify.VListSubheader("Series")
+        for key in VIEWPORTS:
+            available = f"capture_available.includes('{key}')"
+            # The row says why the pair is grey, and says nothing while it is
+            # not: a disabled input passes the pointer through to the row, so
+            # the reason is what shows on the fields that have one.
+            with vuetify.VRow(
+                no_gutters=True,
+                classes="mx-1 mb-2 align-center",
+                title=(f"{available} ? '' : '{OFF_SCREEN}'",),
+            ):
+                with vuetify.VCol(cols="4"):
+                    vuetify.VTextField(
+                        v_model=(capture_series_number(key),),
+                        label=VIEWPORT_LABELS[key],
+                        type="number",
+                        min=0,
+                        density="compact",
+                        hide_details=True,
+                        classes="mr-2",
+                        disabled=(f"!{available}", False),
+                        title=f"SeriesNumber the {VIEWPORT_LABELS[key]} capture is written with",
+                        **SWALLOW_KEYS,
+                    )
+                with vuetify.VCol(cols="8"):
+                    vuetify.VTextField(
+                        v_model=(capture_series_description(key),),
+                        placeholder="Description",
+                        density="compact",
+                        hide_details=True,
+                        disabled=(f"!{available}", False),
+                        title=UNNAMED,
+                        **SWALLOW_KEYS,
+                    )
 
     with vuetify.VRow(justify="center", classes="my-3"):
         vuetify.VBtn(

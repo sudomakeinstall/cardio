@@ -42,6 +42,19 @@ def wants_alpha(fmt: CaptureFormat) -> bool:
     return CaptureFormat(fmt) is CaptureFormat.PNG
 
 
+def writes_series(fmt: CaptureFormat) -> bool:
+    """Whether the format writes a DICOM series, which is named per viewport.
+
+    What decides whether a series number and description are asked for at
+    all: the picture formats carry neither, so offering them alongside one
+    would be offering something no capture would write down.
+    """
+    return CaptureFormat(fmt) in (
+        CaptureFormat.DICOM_RENDERED,
+        CaptureFormat.DICOM_DATA,
+    )
+
+
 def wants_plane(fmt: CaptureFormat) -> bool:
     """Whether the format writes the pixels behind the viewport, not a picture."""
     return CaptureFormat(fmt) is CaptureFormat.DICOM_DATA

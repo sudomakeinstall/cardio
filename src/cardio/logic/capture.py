@@ -3,6 +3,7 @@
 # System
 import asyncio
 import datetime as dt
+import logging
 
 # Third Party
 import pydicom as pd
@@ -15,17 +16,26 @@ from ..capture import (
     CaptureFormat,
     Context,
     WindowFrames,
+    repeated_numbers,
     wants_alpha,
     wants_plane,
     writer_for,
+    writes_series,
 )
 from ..capture.dicom import IDENTITY_TAGS
 from ..capture.geometry import plane_from_reslice
 from ..capture.mosaic import compose
 from ..reslice import VIEW_TRANSFORMS
-from ..state import VIEWPORTS, screenshot_viewport
+from ..state import (
+    VIEWPORTS,
+    capture_series_description,
+    capture_series_number,
+    screenshot_viewport,
+)
 from ..view import Layout
 from .base import Controller
+
+logger = logging.getLogger(__name__)
 
 # The one viewport the capture and the layout call different things.  Every
 # other name is shared, so this is the whole of the translation.
@@ -76,6 +86,14 @@ def written_files(directory, viewport: str) -> list:
     return sorted(directory.glob(f"{viewport}.*"))
 
 
+def as_number(value, fallback: int) -> int:
+    """``value`` as a series number, or ``fallback`` if it is not one."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
 def summary_of(written: list[str], directory) -> str:
     """The one line the drawer shows about a finished capture."""
     if not written:
@@ -86,7 +104,11 @@ def summary_of(written: list[str], directory) -> str:
 class CaptureController(Controller):
     """Cine capture and rotation serialisation."""
 
-    seeds = ("capture_format",)
+    seeds = (
+        "capture_format",
+        *(capture_series_number(viewport) for viewport in VIEWPORTS),
+        *(capture_series_description(viewport) for viewport in VIEWPORTS),
+    )
 
     def register(self):
         # The layout decides which viewports can be captured, and the drawer
@@ -223,8 +245,47 @@ class CaptureController(Controller):
             return None
         return source(viewport, volume, frame)
 
-    def _context(self, directory, viewport: str, number: int, identity, reference):
+    def series_for(self, viewport: str) -> tuple[int, str]:
+        """What ``viewport``'s exported series is called: its number and name.
+
+        Read from state rather than from the scene, so that a number typed into
+        the drawer is the one the next capture is written with -- the scene is
+        only where the session opened.
+
+        A number field hands back whatever was typed into it, empty included,
+        so what the scene configured stands in for anything that is not one.
+        """
         state = self.server.state
+        configured = self.scene.capture_series.of(viewport)
+        typed = getattr(state, capture_series_number(viewport), configured.number)
+        description = getattr(
+            state, capture_series_description(viewport), configured.description
+        )
+        return as_number(typed, configured.number), str(description or "")
+
+    def report_series(self, viewports) -> None:
+        """Say what each viewport is about to be written as, and flag a clash.
+
+        Two series sharing a number within one study is the user's to allow --
+        a viewer merely sorts them together -- so this says so and writes them
+        anyway.
+        """
+        numbers = {}
+        for viewport in viewports:
+            number, description = self.series_for(viewport)
+            numbers[viewport] = number
+            named = f", {description!r}" if description else ""
+            logger.info(f"Capturing {viewport} as DICOM series {number}{named}.")
+
+        for number, sharing in repeated_numbers(numbers).items():
+            logger.warning(
+                f"Viewports {', '.join(sharing)} are all being written as series "
+                f"{number}; a viewer will not tell them apart."
+            )
+
+    def _context(self, directory, viewport: str, identity, reference):
+        state = self.server.state
+        number, description = self.series_for(viewport)
         return Context(
             directory=directory,
             viewport=viewport,
@@ -233,6 +294,7 @@ class CaptureController(Controller):
             level=getattr(state, "mpr_level", self.scene.mpr_level),
             identity=identity,
             series_number=number,
+            series_description=description,
             frame_of_reference=reference,
             has_plane=viewport in self.plane_sources,
         )
@@ -266,11 +328,12 @@ class CaptureController(Controller):
             name: WindowFrames(window, alpha=wants_alpha(fmt))
             for name, window in windows.items()
         }
+        if writes_series(fmt):
+            self.report_series(windows)
+
         writers = {
-            name: writer_for(
-                fmt, self._context(directory, name, number, identity, reference)
-            )
-            for number, name in enumerate(windows, start=1)
+            name: writer_for(fmt, self._context(directory, name, identity, reference))
+            for name in windows
         }
         planes = wants_plane(fmt)
 

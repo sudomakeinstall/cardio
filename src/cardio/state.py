@@ -84,3 +84,13 @@ def screenshot_viewport(viewport: str) -> str:
     something in the scene. It is spelled here for the same reason as the rest.
     """
     return f"screenshot_viewport_{viewport}"
+
+
+def capture_series_number(viewport: str) -> str:
+    """The SeriesNumber a DICOM capture of ``viewport`` is written with."""
+    return f"capture_series_number_{viewport}"
+
+
+def capture_series_description(viewport: str) -> str:
+    """The SeriesDescription a DICOM capture of ``viewport`` is written with."""
+    return f"capture_series_description_{viewport}"
