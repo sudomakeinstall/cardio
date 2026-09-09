@@ -1,11 +1,11 @@
 """Fitting the MPR views to a set of labels.
 
-The fit has to hold the labels inside the viewport without moving the crosshair,
-which is what makes it different from every other fit in the app: the camera
-looks at the reslice origin and stays there, so the box that has to be brought
-inside is measured from the origin rather than from the labels' own middle. What
-is checked here is that arithmetic, and that the cloud it measures really does
-cover the voxels -- at every frame, not only the one on screen.
+The camera looks at the reslice origin and never moves off it, so the fit frames
+the labels by sliding the origin onto the middle of their shadow and then sizing
+the viewport to the half-span from there. The slide runs along the fitted plane's
+own two axes, which leaves that plane cutting where it did. What is checked here
+is that arithmetic, and that the cloud it measures really does cover the voxels
+-- at every frame, not only the one on screen.
 """
 
 # Third Party
@@ -18,7 +18,7 @@ from cardio.reslice import VIEW_TRANSFORMS
 from cardio.segmentation import (
     index_to_world,
     label_mask,
-    plane_half_extent,
+    plane_shadow,
     voxel_corner_cloud,
     voxel_shell,
 )
@@ -79,17 +79,14 @@ def test_a_window_that_was_never_sized_cannot_be_fitted():
 # -------------------------------------------------------------- the shadow ---
 
 
-def test_the_extent_is_measured_from_the_origin_not_from_the_cloud():
-    """The crosshair does not move, so a lopsided cloud needs the far edge.
-
-    A box lying entirely to one side has to be fitted as though it were twice
-    as wide, because the half of the viewport nearer the origin is wasted.
-    """
+def test_a_lopsided_cloud_is_a_centre_offset_from_the_origin():
+    """What the fit moves the origin by, and what it then measures against."""
     cloud = np.array([[10.0, 0.0, 0.0], [20.0, 0.0, 0.0]])
 
-    reach = plane_half_extent(cloud, np.eye(3), np.zeros(3))
+    centre, half_span = plane_shadow(cloud, np.eye(3), np.zeros(3))
 
-    assert reach == pytest.approx((20.0, 0.0))
+    assert centre == pytest.approx((15.0, 0.0))
+    assert half_span == pytest.approx((5.0, 0.0))
 
 
 def test_the_extent_is_taken_in_the_plane_s_own_axes():
@@ -97,25 +94,26 @@ def test_the_extent_is_taken_in_the_plane_s_own_axes():
     frame = VIEW_TRANSFORMS["axial"]
     normal = frame[:, 2]
 
-    reach = plane_half_extent(np.array([normal * 30.0]), frame, np.zeros(3))
+    centre, half_span = plane_shadow(np.array([normal * 30.0]), frame, np.zeros(3))
 
-    assert reach == pytest.approx((0.0, 0.0))
+    assert centre == pytest.approx((0.0, 0.0))
+    assert half_span == pytest.approx((0.0, 0.0))
 
 
 def test_a_turned_plane_sees_a_turned_shadow():
     frame = rotation_about_z(45.0) @ VIEW_TRANSFORMS["axial"]
     cloud = np.array([[10.0, 10.0, 0.0]])
 
-    turned = plane_half_extent(cloud, frame, np.zeros(3))
-    square = plane_half_extent(cloud, VIEW_TRANSFORMS["axial"], np.zeros(3))
+    turned, _ = plane_shadow(cloud, frame, np.zeros(3))
+    square, _ = plane_shadow(cloud, VIEW_TRANSFORMS["axial"], np.zeros(3))
 
-    assert max(turned) == pytest.approx(np.hypot(10.0, 10.0))
-    assert max(square) == pytest.approx(10.0)
+    assert max(abs(turned)) == pytest.approx(np.hypot(10.0, 10.0))
+    assert max(abs(square)) == pytest.approx(10.0)
 
 
 def test_an_empty_cloud_has_no_extent():
-    assert plane_half_extent(None, np.eye(3), np.zeros(3)) is None
-    assert plane_half_extent(np.zeros((0, 3)), np.eye(3), np.zeros(3)) is None
+    assert plane_shadow(None, np.eye(3), np.zeros(3)) is None
+    assert plane_shadow(np.zeros((0, 3)), np.eye(3), np.zeros(3)) is None
 
 
 # --------------------------------------------------------------- the cloud ---
@@ -261,32 +259,71 @@ def scales(scene):
     return [scene.mpr_views.world_per_pixel(view) for view in scene.mpr_views]
 
 
+def reach(logic):
+    """The labels' farthest edge from the origin, in the plane being fitted."""
+    centre, half_span, _ = logic.zoom.shadow()
+    return np.abs(centre) + half_span
+
+
+def filled(logic, scene):
+    """The share of the fitted viewport the labels take up in each direction."""
+    views = scene.mpr_views
+    plane = logic.server.state.zoom_plane
+    width, height = views.renderer(plane).GetSize()
+    per_pixel = views.world_per_pixel(plane)
+    edge = reach(logic)
+    return edge[0] / (per_pixel * width / 2), edge[1] / (per_pixel * height / 2)
+
+
 def test_the_fit_brings_the_labels_to_the_share_of_the_viewport_asked_for(tmp_path):
     _, scene, logic = locked_app(tmp_path, fill=80)
 
     logic.dispatch("zoom_to_labels")
 
-    views = scene.mpr_views
-    width, height = views.renderer("axial").GetSize()
-    per_pixel = views.world_per_pixel("axial")
-    reach = logic.zoom.half_extent()
-
-    filled = (reach[0] / (per_pixel * width / 2), reach[1] / (per_pixel * height / 2))
-    assert max(filled) == pytest.approx(0.80)
-    assert max(filled) >= min(filled)
+    share = filled(logic, scene)
+    assert max(share) == pytest.approx(0.80)
+    assert max(share) >= min(share)
 
 
-def test_the_fit_leaves_the_crosshair_where_it_was(tmp_path):
-    """The whole reason the box is measured from the origin rather than centred."""
-    server, scene, logic = locked_app(tmp_path)
-    before = list(server.state.mpr_origin)
+def test_the_fit_slides_the_crosshair_onto_the_middle_of_the_shadow(tmp_path):
+    """The whole reason the fit is measured against the half-span."""
+    _, scene, logic = locked_app(tmp_path)
+    assert max(abs(value) for value in logic.zoom.shadow()[0]) > 0.0
 
     logic.dispatch("zoom_to_labels")
 
-    assert server.state.mpr_origin == before
+    assert logic.zoom.shadow()[0] == pytest.approx((0.0, 0.0), abs=1e-9)
+    # The camera is what stays put: it looks at the reslice frame's own origin,
+    # and the origin moving is the picture sliding under it.
     for view in scene.mpr_views:
         camera = scene.mpr_views.renderer(view).GetActiveCamera()
         assert camera.GetFocalPoint() == pytest.approx((0.0, 0.0, 0.0))
+
+
+def test_the_slide_stays_in_the_plane_being_fitted(tmp_path):
+    """The fitted plane goes on cutting where it did; only the crosshair moves."""
+    server, _, logic = locked_app(tmp_path)
+    convention = logic.zoom.convention
+    before = np.array(convention.point_to_itk(server.state.mpr_origin))
+    normal = logic.zoom.shadow()[2][:, 2]
+
+    logic.dispatch("zoom_to_labels")
+
+    after = np.array(convention.point_to_itk(server.state.mpr_origin))
+    assert np.linalg.norm(after - before) > 0.0
+    assert (after - before) @ normal == pytest.approx(0.0, abs=1e-9)
+
+
+def test_fitting_a_second_time_changes_nothing(tmp_path):
+    """The slide is onto a centre the fit has already reached."""
+    server, scene, logic = locked_app(tmp_path)
+    logic.dispatch("zoom_to_labels")
+    settled, left = list(server.state.mpr_origin), scales(scene)
+
+    logic.dispatch("zoom_to_labels")
+
+    assert server.state.mpr_origin == pytest.approx(settled)
+    assert scales(scene) == pytest.approx(left)
 
 
 def test_all_three_views_move_by_the_one_factor(tmp_path):
@@ -301,16 +338,31 @@ def test_all_three_views_move_by_the_one_factor(tmp_path):
     assert factors == pytest.approx([factors[0]] * 3)
 
 
-def test_a_held_fit_follows_the_origin(tmp_path):
-    server, scene, _ = locked_app(tmp_path)
+def test_a_held_fit_pulls_the_origin_back_onto_the_centre(tmp_path):
+    """The lock owns the framing, so an origin moved under it is moved back.
+
+    The scale does not have to change for that: the labels span what they span
+    however far the crosshair has wandered off their middle.
+    """
+    server, scene, logic = locked_app(tmp_path)
     server.state.zoom_locked = True
     server.state.flush()
+    convention = logic.zoom.convention
     held = scales(scene)
+    settled = np.array(convention.point_to_itk(server.state.mpr_origin))
+    frame = logic.zoom.shadow()[2]
 
     server.state.mpr_origin = [value + 4.0 for value in server.state.mpr_origin]
     server.state.flush()
 
-    assert scales(scene) != pytest.approx(held)
+    moved = np.array(convention.point_to_itk(server.state.mpr_origin)) - settled
+    # Back onto the centre along the plane's own axes; the third axis is left
+    # where it was put, which is what a snap lock underneath still owns.
+    assert moved @ frame[:, 0] == pytest.approx(0.0, abs=1e-9)
+    assert moved @ frame[:, 1] == pytest.approx(0.0, abs=1e-9)
+    assert moved @ frame[:, 2] != pytest.approx(0.0)
+    assert scales(scene) == pytest.approx(held)
+    assert logic.zoom.shadow()[0] == pytest.approx((0.0, 0.0), abs=1e-9)
 
 
 def test_a_fit_that_is_not_held_stays_where_the_user_left_it(tmp_path):
@@ -338,12 +390,7 @@ def test_a_held_fit_survives_a_turn(tmp_path):
     server.state.mpr_rotation_data = data
     server.state.flush()
 
-    reach = logic.zoom.half_extent()
-    views = scene.mpr_views
-    width, height = views.renderer("axial").GetSize()
-    per_pixel = views.world_per_pixel("axial")
-    filled = (reach[0] / (per_pixel * width / 2), reach[1] / (per_pixel * height / 2))
-    assert max(filled) == pytest.approx(0.80)
+    assert max(filled(logic, scene)) == pytest.approx(0.80)
 
 
 def test_a_configured_lock_fits_once_the_views_are_real(tmp_path):
@@ -353,12 +400,8 @@ def test_a_configured_lock_fits_once_the_views_are_real(tmp_path):
     assert server.state.zoom_locked is True
 
     logic.zoom.refit()
-    reach = logic.zoom.half_extent()
-    views = scene.mpr_views
-    width, height = views.renderer("axial").GetSize()
-    per_pixel = views.world_per_pixel("axial")
-    filled = (reach[0] / (per_pixel * width / 2), reach[1] / (per_pixel * height / 2))
-    assert max(filled) == pytest.approx(0.80)
+
+    assert max(filled(logic, scene)) == pytest.approx(0.80)
 
 
 def test_nothing_is_fitted_to_a_selection_that_is_empty(tmp_path):
@@ -368,7 +411,7 @@ def test_nothing_is_fitted_to_a_selection_that_is_empty(tmp_path):
 
     logic.dispatch("zoom_to_labels")
 
-    assert logic.zoom.zoom_factor() is None
+    assert logic.zoom.shadow() is None
     assert scales(scene) == pytest.approx(left)
 
 

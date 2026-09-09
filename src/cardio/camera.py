@@ -109,9 +109,10 @@ def fit_factor(
     """How much to zoom so a box about the origin fills ``fill`` of the viewport.
 
     ``half_extent`` is how far the box reaches from the origin along the view's
-    own right and up axes, which is all a fit has to go on: the camera looks at
-    the origin and is never moved off it, so what has to be brought inside the
-    viewport is the farthest edge in each direction rather than the box's width.
+    own right and up axes. The camera looks at the origin and is never moved off
+    it, so a fit is made by moving the origin onto the box's centre and passing
+    the half-width from there; a caller that leaves the origin where it is has
+    to pass the farthest edge instead, and buys the asymmetry as empty space.
 
     Sized through ``world_per_pixel`` rather than the parallel scale, so the one
     piece of arithmetic serves the perspective MPR cameras as well as a parallel

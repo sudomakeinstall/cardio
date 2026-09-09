@@ -3,14 +3,21 @@
 # System
 import logging
 
+# Third Party
+import numpy as np
+
 # Internal
 from ..action import action
 from ..camera import fit_factor
 from ..reslice import VIEW_TRANSFORMS, VIEWS
-from ..segmentation import plane_half_extent
+from ..segmentation import plane_shadow
 from .base import Controller
 
 logger = logging.getLogger(__name__)
+
+# How far the origin has to be off the shadow's centre before the fit moves it.
+# A tenth of a millimetre is below the finest voxel anybody reformats at.
+RECENTRE_TOLERANCE = 0.1
 
 
 class ZoomController(Controller):
@@ -30,6 +37,7 @@ class ZoomController(Controller):
     def __init__(self, app):
         super().__init__(app)
         self._published_seg_label = None
+        self._refitting = False
 
     def register(self):
         if not self.scene.segmentations:
@@ -139,11 +147,13 @@ class ZoomController(Controller):
         if self._publish_available_labels(seg):
             self.server.state.zoom_labels = []
 
-    def half_extent(self):
-        """How far the chosen labels reach from the origin, in the chosen plane.
+    def shadow(self):
+        """The chosen labels' shadow on the chosen plane, and that plane's basis.
 
-        None whenever there is nothing to fit: no segmentation, no labels, or a
-        label set the series never carries.
+        ``(centre, half_span, frame)``, the first two in the plane's own right
+        and up axes and relative to the current origin. None whenever there is
+        nothing to fit: no segmentation, no labels, or a label set the series
+        never carries.
         """
         state = self.server.state
         labels = list(getattr(state, "zoom_labels", []) or [])
@@ -160,23 +170,30 @@ class ZoomController(Controller):
         # rotation math is.
         frame = self.app.rotations.rotation_matrix() @ VIEW_TRANSFORMS[plane]
         origin = self.convention.point_to_itk(state.mpr_origin)
-        return plane_half_extent(seg.label_cloud(labels), frame, origin)
+        shadow = plane_shadow(seg.label_cloud(labels), frame, origin)
+        if shadow is None:
+            return None
 
-    def zoom_factor(self) -> float | None:
-        """The factor that brings the chosen labels inside the chosen viewport.
+        centre, half_span = shadow
+        return centre, half_span, frame
 
-        None whenever there is nothing to fit, and whenever the window the fit
-        is measured against has never been sized -- which it has not been until
-        a client has connected and laid the viewports out.
+    def zoom_factor(self, half_span) -> float | None:
+        """The factor that brings ``half_span`` inside the chosen viewport.
+
+        Measured about the origin, which ``zoom_to_labels`` has put on the
+        shadow's centre by the time this is asked.
+
+        None whenever the window the fit is measured against has never been
+        sized -- which it has not been until a client has connected and laid
+        the viewports out.
         """
         views = self.scene.mpr_views
-        reach = self.half_extent()
-        if views is None or reach is None:
+        if views is None:
             return None
 
         plane = self.server.state.zoom_plane
         return fit_factor(
-            reach,
+            tuple(half_span),
             views.renderer(plane).GetSize(),
             views.world_per_pixel(plane),
             self.server.state.zoom_fill / 100.0,
@@ -184,7 +201,18 @@ class ZoomController(Controller):
 
     @action("zoom_to_labels")
     def zoom_to_labels(self):
-        """Fit the views to the chosen labels' shadow on the chosen plane.
+        """Frame the chosen labels' shadow on the chosen plane.
+
+        The origin slides onto the shadow's centre first, and the fit is then
+        measured against the half-span rather than against the farthest edge:
+        a crosshair snapped to one end of what is being framed would otherwise
+        cost the fit a viewport's worth of empty space at the other.
+
+        The slide is along the plane's own two axes, so the plane being fitted
+        goes on cutting where it did and only the crosshair moves within it.
+        The other two views do re-cut, that pair of axes being the axes they
+        scroll along -- with a snap lock also on, snap owns the origin along
+        the third axis and the fit owns it along these two.
 
         Sized against one plane and applied to all three, which is how the MPR
         views already share a zoom: each keeps the absolute scale its own fit
@@ -195,12 +223,32 @@ class ZoomController(Controller):
         is locked -- that guard is there to stop a drag fighting the lock, and
         this is the thing the lock exists to apply.
         """
-        factor = self.zoom_factor()
+        shadow = self.shadow()
+        if shadow is None:
+            return
+
+        centre, half_span, frame = shadow
+        factor = self.zoom_factor(half_span)
         if factor is None:
             return
 
+        self._recentre(centre, frame)
         self.scene.mpr_views.zoom(factor)
         self.server.controller.view_update()
+
+    def _recentre(self, centre, frame):
+        """Slide the origin onto ``centre``, given in ``frame``'s first two axes.
+
+        A shift small enough to make no difference to the picture is skipped
+        rather than written: the fit settles on a centre it has already reached,
+        and re-writing the origin there would only wake every listener on it.
+        """
+        if np.linalg.norm(centre) < RECENTRE_TOLERANCE:
+            return
+
+        origin = self.convention.point_to_itk(self.server.state.mpr_origin)
+        moved = np.asarray(origin, dtype=float) + frame[:, :2] @ centre
+        self.app.mpr.set_origin([float(value) for value in moved])
 
     @property
     def locked(self) -> bool:
@@ -219,6 +267,17 @@ class ZoomController(Controller):
         MPR windows are built after Logic is, so at seeding time a configured
         lock has nothing to fit against; the second call, once the views are
         real, is what gives it something.
+
+        The guard is for the origin listener: the fit writes the origin, and a
+        held fit would otherwise be woken by its own recentring. One pass is
+        all it would take -- the shift is zero once the origin is on the centre
+        -- but the reentry would be inside the flush that provoked it.
         """
-        if self.locked:
+        if not self.locked or self._refitting:
+            return
+
+        self._refitting = True
+        try:
             self.zoom_to_labels()
+        finally:
+            self._refitting = False

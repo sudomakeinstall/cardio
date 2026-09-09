@@ -200,24 +200,25 @@ def voxel_corner_cloud(image_data, labels: ty.Sequence[int]) -> np.ndarray | Non
     return corners @ matrix.T + origin
 
 
-def plane_half_extent(cloud, frame, origin) -> tuple[float, float] | None:
-    """How far ``cloud`` reaches from ``origin``, along a plane's own two axes.
+def plane_shadow(cloud, frame, origin):
+    """``cloud``'s shadow on a plane, as a centre and a half-span from ``origin``.
 
     ``frame``'s first two columns are the plane's right and up directions in
     LPS -- the basis ``MPRController.pan_vectors`` slides a view in -- so a
     point's shadow on the plane is its coordinates in that basis.
 
-    Only the farthest reach in each direction is wanted, and it is measured from
-    ``origin`` rather than from the cloud's own middle: the camera looks at the
-    origin and is never moved off it, so what a fit has to clear is the edge
-    that reaches the most, whichever side of the crosshair it falls on.
+    Both halves are wanted because the fit moves the origin onto the centre
+    before measuring against the half-span: a box that lies to one side of the
+    crosshair is framed by sliding the crosshair onto it, not by widening the
+    box until it is symmetric about where the crosshair happened to be.
     """
     if cloud is None or not len(cloud):
         return None
 
     axes = np.asarray(frame, dtype=np.float64)[:, :2]
-    projected = np.abs((np.asarray(cloud) - np.asarray(origin)) @ axes)
-    return tuple(float(value) for value in projected.max(axis=0))
+    projected = (np.asarray(cloud) - np.asarray(origin)) @ axes
+    low, high = projected.min(axis=0), projected.max(axis=0)
+    return (high + low) / 2.0, (high - low) / 2.0
 
 
 def principal_axes(
