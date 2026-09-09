@@ -203,6 +203,19 @@ Every line below `do` is the line the console printed, under a prefix, so a
 script is the log copied rather than rewritten -- and a line you type at the
 prompt is a line you can paste into one.
 
+A `set_state` key may name a place *inside* a document key rather than the
+whole of it, which is how one rotation in a stack of them is a line short
+enough to read and to type:
+
+```python
+do.set_state(key='mpr_rotation_data.angles_list.1.visible', value=False)
+do.set_state(key='mpr_rotation_data.angles_list.0.angle', value=45.0)
+```
+
+The path is dotted, and a number in it indexes a list.  A value that is not a
+structure is still written whole, so a range slider stays one line holding its
+pair rather than two lines saying which end moved.
+
 The `.toml` written beside it is the scene as the app *opened*, not as it ended
 up, so running the script does the session again rather than doing it twice.
 The two are meant to travel together; the script finds the config beside

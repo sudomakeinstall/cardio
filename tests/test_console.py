@@ -7,6 +7,7 @@ coalesces, what is bounded, and what comes back out as something to re-run.
 """
 
 # System
+import copy
 import datetime as dt
 import itertools
 
@@ -511,6 +512,209 @@ def test_the_same_key_dragged_is_one_line(session):
     (entry,) = log_of(session).entries
     assert entry["count"] == 3
     assert entry["text"] == "set_state(key='tile_cols', value=4)"
+
+
+# ------------------------------------------- a place inside a document key ----
+#
+# One key holds a document of its own. The rotation panel binds paths within it
+# under DeepReactive, which syncs the whole variable -- so the app is handed the
+# entire sequence to report that one field of one step moved. What is checked
+# here is that the log says the field.
+
+
+def rotations(session, steps=2, clear=True):
+    """A session holding ``steps`` rotations.
+
+    The log is wiped by default, so that what a test does next is the only
+    thing in it. A replay wants the rotations its edits are made to, and asks
+    to keep them.
+    """
+    session.ready()
+    for axis in "ZXY"[:steps]:
+        session.do("add_rotation", axis=axis)
+    if clear:
+        session.do("clear_console")
+    return session
+
+
+def edited(session, index, **fields):
+    """Move one step's fields the way a DeepReactive widget does.
+
+    The whole variable comes back with one thing different in it, which is all
+    the client is able to say.
+    """
+    data = copy.deepcopy(session.server.state.mpr_rotation_data)
+    data["angles_list"][index].update(fields)
+    moved(session, mpr_rotation_data=data)
+
+
+def test_a_step_within_the_sequence_is_named_rather_than_repeated(session):
+    """The whole feature: the line says the field, not the document holding it."""
+    rotations(session)
+
+    edited(session, 1, visible=False)
+
+    assert texts(session) == [
+        "set_state(key='mpr_rotation_data.angles_list.1.visible', value=False)"
+    ]
+
+
+def test_the_line_about_a_step_is_a_line_that_can_be_run(session):
+    rotations(session)
+    edited(session, 1, visible=False)
+
+    (line,) = texts(session)
+
+    assert console.parse_call(line) == (
+        "set_state",
+        [],
+        {"key": "mpr_rotation_data.angles_list.1.visible", "value": False},
+    )
+
+
+def test_running_that_line_moves_the_step_it_names(session):
+    rotations(session)
+
+    session.do("set_state", key="mpr_rotation_data.angles_list.1.visible", value=False)
+
+    steps = session.server.state.mpr_rotation_data["angles_list"]
+    assert [step["visible"] for step in steps] == [True, False]
+
+
+def test_a_path_that_leads_nowhere_says_so(session):
+    rotations(session)
+
+    session.do("run_command", text="set_state(key='mpr_rotation_data.nope', value=1)")
+
+    assert (
+        "mpr_rotation_data has no 'nope'; it holds angles_list, metadata, mpr_origin"
+        in texts(session)
+    )
+
+
+def test_a_path_into_session_state_is_refused_like_a_key(session):
+    """The head of the path is the key, and the same rule applies to it."""
+    session.ready()
+
+    session.do("run_command", text="set_state(key='playing.0', value=1)")
+
+    assert "'playing' is not a document key" in texts(session)
+
+
+def test_two_fields_of_one_step_are_two_lines(session):
+    rotations(session)
+
+    edited(session, 0, angle=45.0, visible=False)
+
+    assert sorted(texts(session)) == [
+        "set_state(key='mpr_rotation_data.angles_list.0.angle', value=45.0)",
+        "set_state(key='mpr_rotation_data.angles_list.0.visible', value=False)",
+    ]
+
+
+def test_dragging_one_step_is_one_line(session):
+    """The group is the path, so a drag coalesces the way every gesture does."""
+    rotations(session)
+
+    for angle in (10.0, 20.0, 30.0):
+        edited(session, 0, angle=angle)
+
+    (entry,) = log_of(session).entries
+    assert entry["count"] == 3
+    assert (
+        entry["text"]
+        == "set_state(key='mpr_rotation_data.angles_list.0.angle', value=30.0)"
+    )
+
+
+def test_two_steps_dragged_in_turn_stay_two_lines(session):
+    rotations(session)
+
+    edited(session, 0, angle=10.0)
+    edited(session, 1, angle=20.0)
+
+    assert len(texts(session)) == 2
+
+
+def test_a_step_added_by_an_action_rebases_what_the_next_edit_compares_with(session):
+    """The cache is kept up to date even while nothing is being written down.
+
+    An action's own writes are hidden from the log, but they still move the
+    sequence -- and an edit compared against what was there before the action
+    would report the action as well.
+    """
+    rotations(session)
+
+    session.do("add_rotation", axis="Y")
+    session.do("clear_console")
+    edited(session, 2, visible=False)
+
+    assert texts(session) == [
+        "set_state(key='mpr_rotation_data.angles_list.2.visible', value=False)"
+    ]
+
+
+def test_a_sequence_that_changed_length_is_reported_whole(session):
+    """There is no naming which entry a shorter list is missing."""
+    rotations(session)
+
+    data = copy.deepcopy(session.server.state.mpr_rotation_data)
+    data["angles_list"].pop()
+    moved(session, mpr_rotation_data=data)
+
+    (line,) = texts(session)
+    assert line.startswith("set_state(key='mpr_rotation_data.angles_list', value=[")
+
+
+def test_switching_units_is_the_switch_and_not_what_it_re_expresses(session):
+    """Every angle is rewritten by the listener; the switch is what was asked for.
+
+    Replaying the switch does the conversion, which is a truer account of it
+    than a script asserting the numbers it came out with.
+    """
+    rotations(session)
+
+    moved(session, angle_units="degrees")
+
+    assert texts(session) == ["set_state(key='angle_units', value='degrees')"]
+
+
+def test_switching_the_index_order_is_the_switch_alone(session):
+    rotations(session)
+
+    moved(session, index_order="roma")
+
+    assert texts(session) == ["set_state(key='index_order', value='roma')"]
+
+
+def test_a_step_edited_after_a_switch_is_still_written_down(session):
+    """A consequence covers the flush that follows it, and not the app's future."""
+    rotations(session)
+    moved(session, angle_units="degrees")
+    session.do("clear_console")
+
+    edited(session, 1, visible=False)
+
+    assert texts(session) == [
+        "set_state(key='mpr_rotation_data.angles_list.1.visible', value=False)"
+    ]
+
+
+def test_a_session_edited_through_the_rotation_panel_replays(tmp_path_factory):
+    """The point of the smaller line: it is still the whole of what was done."""
+    first = session_on(tmp_path_factory.mktemp("first"))
+    rotations(first, clear=False)
+    edited(first, 0, angle=45.0)
+    edited(first, 1, visible=False)
+
+    second = session_on(tmp_path_factory.mktemp("second"))
+    second.ready()
+    second.run(log_of(first).script)
+
+    assert (
+        second.server.state.mpr_rotation_data["angles_list"]
+        == first.server.state.mpr_rotation_data["angles_list"]
+    )
 
 
 def test_the_cameras_moving_is_not_something_anybody_asked_for(session):

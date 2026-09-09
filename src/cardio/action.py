@@ -22,6 +22,9 @@ import typing as ty
 import pydantic as pc
 from trame.app import asynchronous
 
+# Internal
+from .keypath import same
+
 
 def action(name: str):
     """Declare a controller method as the named action ``name``."""
@@ -117,19 +120,6 @@ class Change:
     @property
     def changed(self) -> bool:
         return bool(self.before or self.after)
-
-
-def same(one, other) -> bool:
-    """Whether two state values are the same one.
-
-    Some of them are arrays, which do not answer ``==`` with a bool.
-    """
-    if one is other:
-        return True
-    try:
-        return bool(one == other)
-    except (ValueError, TypeError):
-        return repr(one) == repr(other)
 
 
 class Journal:

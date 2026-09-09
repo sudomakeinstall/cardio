@@ -13,6 +13,7 @@ which cost nothing to be told.
 
 # System
 import contextlib as cl
+import copy
 import datetime as dt
 import time
 import typing as ty
@@ -21,7 +22,7 @@ import typing as ty
 import pydantic as pc
 
 # Internal
-from .. import scripting
+from .. import keypath, scripting
 from ..action import action
 from ..console import TIME_FORMAT, Log, parse_call
 from .base import Controller
@@ -52,6 +53,16 @@ FOLLOWS = frozenset({"cameras"})
 # asked for was to play, and that is already a line of its own.
 DRIVEN = {"frame": ("playing", "capture_running")}
 
+# Keys that another key's change rewrites wholesale, and what rewrites them.
+# Switching the units or the index order re-expresses every angle in the
+# sequence; that switch is already a line, and the rewrite is what the line
+# means rather than a second thing anybody asked for.
+#
+# The rewrite is a listener's doing, so it lands in the flush after the one that
+# set it off rather than in the same one -- which is why what was written down
+# last time counts here as well as what moved this time.
+CONSEQUENCE = {"mpr_rotation_data": ("angle_units", "index_order")}
+
 
 def _message(exc: Exception) -> str:
     """What a refusal says, without the quotes ``KeyError`` prints around it."""
@@ -71,6 +82,8 @@ class ConsoleController(Controller):
         self._published = 0.0
         self._applying = 0
         self._armed = False
+        self._seen: dict[str, ty.Any] = {}
+        self._written = set()
 
     def register(self):
         self.app.actions.observe(self._observed)
@@ -148,12 +161,43 @@ class ConsoleController(Controller):
     def _arm(self, **kwargs):
         """Start recording: what came before was the app being built."""
         self._armed = True
+        self._remember(self.app.document_keys())
 
-    def _asked_for(self, key: str) -> bool:
+    def _asked_for(self, key: str, moved: set[str]) -> bool:
         """Whether ``key`` moving is a thing anybody asked for."""
         if key in FOLLOWS:
             return False
+        if moved & set(CONSEQUENCE.get(key, ())):
+            return False
         return not any(self.server.state[guard] for guard in DRIVEN.get(key, ()))
+
+    def _remember(self, keys) -> None:
+        """Keep what a later change to ``keys`` will be compared against.
+
+        Only the keys a path could name something inside, which is one small
+        dict today. Copying every document key is what the journal does and
+        what this must not: the console is armed for the whole session, and a
+        drag reaches it once per mouse move.
+        """
+        for key in keys:
+            value = self.server.state[key]
+            if keypath.nested(value):
+                self._seen[key] = copy.deepcopy(value)
+            else:
+                self._seen.pop(key, None)
+
+    def _calls(self, key: str) -> list[tuple[str, ty.Any]]:
+        """What to write down about ``key`` having moved.
+
+        The whole of it, unless there is a previous value to compare against
+        and both are structures -- in which case the parts that moved, each
+        named by where it sits, which is a line short enough to read and to
+        type back.
+        """
+        value = self.server.state[key]
+        if key not in self._seen:
+            return [(key, value)]
+        return keypath.changes(self._seen[key], value, key)
 
     def _document_moved(self, **state):
         """Write down what moved with nobody having asked for it by name.
@@ -163,19 +207,31 @@ class ConsoleController(Controller):
         Recorded as the action that would do it again, so that a log of a
         session driven entirely from the drawer still replays.
         """
+        moved = set(self.server.state.modified_keys) & set(self.app.document_keys())
+
+        # Re-based even when nothing is written down, so that the next change a
+        # person makes is compared with what an action left rather than with
+        # whatever was there before it ran.
         if not self._armed or self._applying:
+            self._remember(moved)
+            self._written = set()
             return
 
-        moved = set(self.server.state.modified_keys) & set(self.app.document_keys())
         started = False
+        written = set()
         for key in sorted(moved):
-            if not self._asked_for(key):
+            if not self._asked_for(key, moved | self._written):
                 continue
-            started |= self.log.record(
-                SET_STATE,
-                {"key": key, "value": self.server.state[key]},
-                group=f"{SET_STATE}:{key}",
-            )
+            for path, value in self._calls(key):
+                started |= self.log.record(
+                    SET_STATE,
+                    {"key": path, "value": value},
+                    group=f"{SET_STATE}:{path}",
+                )
+            written.add(key)
+
+        self._remember(moved)
+        self._written = written
 
         if started or time.monotonic() - self._published >= PUBLISH_INTERVAL:
             self.publish()
@@ -188,19 +244,27 @@ class ConsoleController(Controller):
 
     @action(SET_STATE)
     def set_state(self, key: str, value: ty.Any):
-        """Put one document key where it is being asked to be.
+        """Put one document key, or one place inside it, where it is asked to be.
 
         The way back in for everything the drawer does by binding state
         directly. The widgets still write their keys themselves -- what this is
         for is that the line the console wrote about it is a line that can be
         run, which is the whole of what makes a log a script.
 
+        ``key`` may name a place within the value rather than the whole of it:
+        one rotation's visibility is a thing to ask for, and the sequence it
+        sits in is not a thing to have to spell out to ask.
+
         Confined to the document: session state is not a thing a script has any
         business reaching into, and a mistyped key should say so.
         """
-        if key not in self.app.document_keys():
-            raise ValueError(f"{key!r} is not a document key")
-        self.server.state[key] = value
+        name, segments = keypath.split(key)
+        if name not in self.app.document_keys():
+            raise ValueError(f"{name!r} is not a document key")
+
+        if segments:
+            value = keypath.write(self.server.state[name], segments, value, name)
+        self.server.state[name] = value
 
     @action("clear_console")
     def clear_console(self):
