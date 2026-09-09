@@ -14,7 +14,7 @@ class ObjectState:
     """The state keys for one renderable object.
 
     ``kind`` distinguishes the per-type keys (a mesh and a volume may share a
-    label); the clip keys are keyed by label alone, as they always have been.
+    label); the clip bounds are keyed by label alone, as they always have been.
     """
 
     kind: str
@@ -31,10 +31,6 @@ class ObjectState:
     @property
     def clipping(self) -> str:
         return f"{self.kind}_clipping_{self.label}"
-
-    @property
-    def clip_panel(self) -> str:
-        return f"clip_panel_{self.label}"
 
     @property
     def clip_x(self) -> str:
@@ -63,8 +59,14 @@ class ObjectState:
         return f"volume_preset_{self.label}"
 
     @property
-    def preset_panel(self) -> str:
-        return f"preset_panel_{self.label}"
+    def detail_panel(self) -> str:
+        """Whether this object's row is opened to the controls it hides.
+
+        One key for the whole disclosure: the transfer function and the crop
+        bounds used to be two panels, each with a title bar of its own above
+        an object already named by the row over them.
+        """
+        return f"{self.kind}_detail_panel_{self.label}"
 
     @property
     def mpr_overlay(self) -> str:

@@ -3,7 +3,10 @@
 # Internal
 from ..state import ObjectState
 from ..view import Theme
-from ..volume_property_presets import load_volume_property_preset
+from ..volume_property_presets import (
+    list_volume_property_presets,
+    load_volume_property_preset,
+)
 from .base import Controller
 
 
@@ -29,6 +32,10 @@ class VisibilityController(Controller):
 
     def seed(self):
         super().seed()
+        self.server.state.volume_preset_items = [
+            {"title": description, "value": key}
+            for key, description in list_volume_property_presets().items()
+        ]
         self.apply_background_color(self.server.state.theme_mode)
 
     def sync_visibility(self, **kwargs):

@@ -83,7 +83,7 @@ class ClippingController(Controller):
 
         for obj in self.scene.renderables:
             keys = ObjectState.of(obj)
-            state[keys.clip_panel] = []
+            state[keys.detail_panel] = False
 
             if not obj.actors:
                 continue
@@ -93,6 +93,3 @@ class ClippingController(Controller):
             bounds = obj.crop or obj.combined_bounds
             for key, low in zip(keys.clip_bounds, (0, 2, 4)):
                 state[key] = [bounds[low], bounds[low + 1]]
-
-        for volume in self.scene.volumes:
-            state[ObjectState.of(volume).preset_panel] = []

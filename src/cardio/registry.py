@@ -225,6 +225,7 @@ ITEMS = _declare(
     snap_available_labels="the labels present in the segmentation snap is aimed at",
     tile_sizes="the grid sizes offered, fixed at build time",
     volume_items="one entry per volume in the scene",
+    volume_preset_items="the transfer function presets, spelled for the picker",
     zoom_available_labels="the labels present in the segmentation the fit is aimed at",
     zoom_plane_items="the three MPR planes, spelled for the picker",
 )

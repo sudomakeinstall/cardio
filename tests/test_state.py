@@ -38,7 +38,6 @@ def test_per_type_keys_carry_the_kind():
 
 
 def test_clip_keys_are_keyed_by_label_alone():
-    assert MESH.clip_panel == "clip_panel_BL"
     assert MESH.clip_bounds == ("clip_x_BL", "clip_y_BL", "clip_z_BL")
 
 
@@ -53,7 +52,7 @@ def test_clip_controls_covers_the_toggle_and_all_three_axes():
 
 def test_volume_and_segmentation_specific_keys():
     assert VOLUME.preset == "volume_preset_CCTA"
-    assert VOLUME.preset_panel == "preset_panel_CCTA"
+    assert VOLUME.detail_panel == "volume_detail_panel_CCTA"
     assert SEG.mpr_overlay == "mpr_segmentation_overlay_labels"
 
 
@@ -76,7 +75,7 @@ def test_of_reads_kind_and_label_off_an_object():
 
 @pytest.mark.parametrize(
     "key",
-    ["visibility", "clipping", "clip_panel", "clip_x", "preset", "mpr_overlay"],
+    ["visibility", "clipping", "detail_panel", "clip_x", "preset", "mpr_overlay"],
 )
 def test_every_key_is_a_valid_python_identifier(key):
     """trame state names are also attribute names, so they must not contain

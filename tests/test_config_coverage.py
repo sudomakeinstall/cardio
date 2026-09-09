@@ -50,14 +50,17 @@ PER_OBJECT = {
     "keys.visibility": (Object, "visibility"),
 }
 
+# The keywords whose value is the key itself rather than a (key, default)
+# pair, so that a computed one is seen here as a binding and not as markup.
+BARE_BINDINGS = frozenset({"v_model", "v_show"})
+
 COMPUTED_KEYS = {
     "visible_key": "the shared sheet dialog's v-model; both sheets are in the registry",
     "screenshot_viewport(key)": "Scene.screenshot_viewports, via the widget default",
     "capture_series_number(key)": "Scene.capture_series, one entry per viewport",
     "capture_series_description(key)": "Scene.capture_series, one entry per viewport",
     "key": "clip bounds, derived from each object's geometry",
-    "keys.clip_panel": "whether a clip subpanel is expanded is browsing state",
-    "keys.preset_panel": "whether a preset subpanel is expanded is browsing state",
+    "keys.detail_panel": "whether an object's row is opened is browsing state",
     "variable": "the snap group and tile size loops, all named in the registry",
     "f'mpr_rotation_data.angles_list[{i}].angle'": "a step within the sequence",
     "f'mpr_rotation_data.angles_list[{i}].axis'": "a step within the sequence",
@@ -77,12 +80,13 @@ def _binding_target(node: ast.keyword):
     """The key a widget keyword binds, or None if it binds no state.
 
     A binding is either ``key=("name", default)`` or, for ``v_model`` alone, a
-    bare expression. Anything else -- a vue expression over state, a literal --
-    is not a declaration and is left to the other checks.
+    bare expression, which ``v_model`` and ``v_show`` both take. Anything else
+    -- a vue expression over state, a literal -- is not a declaration and is
+    left to the other checks.
     """
     if isinstance(node.value, ast.Tuple) and node.value.elts:
         return node.value.elts[0]
-    if node.arg == "v_model":
+    if node.arg in BARE_BINDINGS:
         return node.value
     return None
 
@@ -106,7 +110,7 @@ def _ui_bindings() -> tuple[set[str], set[str]]:
                 if isinstance(target, ast.Constant) and isinstance(target.value, str):
                     if target.value.isidentifier():
                         named.add(target.value)
-                elif node.arg == "v_model":
+                elif node.arg in BARE_BINDINGS:
                     computed.add(ast.unparse(target))
             elif isinstance(node, ast.Assign):
                 for assigned in node.targets:

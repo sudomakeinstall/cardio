@@ -181,7 +181,7 @@ def test_every_object_gets_its_state_keys_registered(read_only_app):
         keys = ObjectState.of(obj)
         assert hasattr(server.state, keys.visibility), keys.visibility
         assert hasattr(server.state, keys.clipping), keys.clipping
-        assert hasattr(server.state, keys.clip_panel), keys.clip_panel
+        assert hasattr(server.state, keys.detail_panel), keys.detail_panel
         for key in keys.clip_bounds:
             assert hasattr(server.state, key), key
 
@@ -191,7 +191,6 @@ def test_volume_and_segmentation_specific_keys_are_registered(read_only_app):
 
     for volume in scene.volumes:
         assert hasattr(server.state, ObjectState.of(volume).preset)
-        assert hasattr(server.state, ObjectState.of(volume).preset_panel)
 
     for seg in scene.segmentations:
         assert hasattr(server.state, ObjectState.of(seg).mpr_overlay)
@@ -980,14 +979,14 @@ def test_a_series_is_named_only_where_there_is_a_series(read_only_app):
     assert "'png'" not in guard.group(1)
 
 
-def _appearance_group(html: str, condition: str) -> str:
-    """The markup inside the appearance group guarded by ``condition``.
+def _div_body(html: str, attribute: str) -> str:
+    """The markup inside the div carrying ``attribute``.
 
-    Each group holds a nested div for its heading, so the region cannot be cut
-    by matching up to the first closing tag; the depth has to be counted.
+    These divs hold divs of their own -- a group holds its heading, a row its
+    disclosure -- so the region cannot be cut by matching up to the first
+    closing tag; the depth has to be counted.
     """
-    opening = html.index(f'v-if="{condition}"')
-    start = html.index(">", opening) + 1
+    start = html.index(">", html.index(attribute)) + 1
 
     depth = 1
     for tag in re.finditer(r"<(/?)div\b", html[start:]):
@@ -995,7 +994,12 @@ def _appearance_group(html: str, condition: str) -> str:
         if depth == 0:
             return html[start : start + tag.start()]
 
-    raise AssertionError(f"no closing tag for the group guarded by {condition}")
+    raise AssertionError(f"no closing tag for the div carrying {attribute}")
+
+
+def _appearance_group(html: str, condition: str) -> str:
+    """The markup inside the appearance group guarded by ``condition``."""
+    return _div_body(html, f'v-if="{condition}"')
 
 
 def test_the_volume_rendering_controls_go_with_the_view_they_act_on(read_only_app):
@@ -1027,6 +1031,42 @@ def test_the_overlay_controls_go_with_the_cuts_they_are_drawn_on(read_only_app):
     for seg in scene.segmentations:
         assert f'v-model="{ObjectState.of(seg).mpr_overlay}"' in body, seg.label
     assert "clip_depth" not in body
+
+
+def test_an_object_is_one_row_of_icons_under_its_own_label(read_only_app):
+    """The row names the object once, so the toggles on it need no labels of
+    their own -- which is what a labelled checkbox per toggle, per object, and
+    a subheader per type had grown to.
+    """
+    _, scene, _, ui = read_only_app
+    body = _appearance_group(ui.layout.html, common.RENDERING_ACTIVE)
+
+    for obj in scene.renderables:
+        keys = ObjectState.of(obj)
+        toggles = re.findall(rf'<VCheckbox[^>]*v-model="{keys.visibility}"[^>]*>', body)
+        assert len(toggles) == 1, obj.label
+        assert 'trueIcon="mdi-eye"' in toggles[0]
+        assert "label=" not in toggles[0]
+
+    for heading in ("Meshes", "Volumes", "Segmentations"):
+        assert heading not in body
+
+
+def test_what_a_row_hides_is_that_row_own_controls(read_only_app):
+    """One disclosure per object, holding what will not fit on its line.
+
+    The transfer function and the crop bounds were a titled panel each, both
+    of them naming an object the row above had already named.
+    """
+    _, scene, _, ui = read_only_app
+    body = _appearance_group(ui.layout.html, common.RENDERING_ACTIVE)
+
+    for volume in scene.volumes:
+        keys = ObjectState.of(volume)
+        details = _div_body(body, f'v-show="{keys.detail_panel}"')
+        assert f'v-model="{keys.preset}"' in details
+        for key in keys.clip_bounds:
+            assert f'v-model="{key}"' in details
 
 
 def test_each_appearance_group_names_the_view_it_acts_on(read_only_app):
