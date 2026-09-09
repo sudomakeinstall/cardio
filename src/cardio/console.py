@@ -49,10 +49,16 @@ def literal(value):
     return pydantic_core.to_jsonable_python(value)
 
 
-def format_call(name: str, arguments: dict) -> str:
-    """One action as the call that asks for it."""
+def format_call(name: str, arguments: dict, prefix: str = "") -> str:
+    """One action as the call that asks for it.
+
+    ``prefix`` is what the call is asked of, which a script needs and the panel
+    does not. It is the whole of the difference between the line the console
+    printed and the line the exported script holds -- which is what lets a log
+    be copied into a script rather than translated into one.
+    """
     spelled = ", ".join(f"{key}={literal(value)!r}" for key, value in arguments.items())
-    return f"{name}({spelled})"
+    return f"{prefix}{name}({spelled})"
 
 
 def _value(node, where: str):
@@ -180,8 +186,11 @@ class Log:
         self._entries: collections.deque[Entry] = collections.deque(maxlen=limit)
         self._now = now
         self._counted = 0
+        self._dropped = 0
 
     def _add(self, kind: str, at: dt.datetime, **fields) -> Entry:
+        if len(self._entries) == self._entries.maxlen:
+            self._dropped += 1
         self._counted += 1
         entry = Entry(n=self._counted, seen=at, kind=kind, **fields)
         self._entries.append(entry)
@@ -217,7 +226,19 @@ class Log:
         self._add(ERROR, self._now(), message=message)
 
     def clear(self) -> None:
+        self._dropped += len(self._entries)
         self._entries.clear()
+
+    @property
+    def dropped(self) -> int:
+        """How many lines the log no longer holds, whether cleared or aged out.
+
+        A script is only what the log still has. Once anything has left it --
+        pushed off the far end, or thrown away -- the script no longer starts
+        where the session started, and something that says so is better than a
+        file that looks complete.
+        """
+        return self._dropped
 
     @property
     def entries(self) -> list[dict]:

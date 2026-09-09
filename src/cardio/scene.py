@@ -123,6 +123,13 @@ class Scene(ps.BaseSettings):
         default="%Y-%m-%d-%H-%M-%S",
         description="Timestamp format for serialized data subdirectories",
     )
+    headless_size: tuple[int, int] = pc.Field(
+        default=(1024, 1024),
+        description=(
+            "Size every render window opens at when no browser is sizing it. "
+            "CLI usage: --headless-size '[1920,1080]'"
+        ),
+    )
     background: Background = pc.Field(
         default_factory=Background,
         description='Background colors. CLI usage: \'{"light": [0.8, 0.9, 1.0], "dark": [0.1, 0.1, 0.2]}\'',
@@ -432,6 +439,11 @@ class Scene(ps.BaseSettings):
     def rotations_directory(self) -> pl.Path:
         """Computed property that returns the rotations subdirectory."""
         return self.serialization_directory / "rotations"
+
+    @property
+    def scripts_directory(self) -> pl.Path:
+        """Computed property that returns the scripts subdirectory."""
+        return self.serialization_directory / "scripts"
 
     @property
     def nframes(self) -> int:

@@ -3,12 +3,13 @@
 ``CardioApp`` is this plus a browser. Everything the app can do it can do here,
 because the actions and the state were never the page's -- the page only ever
 pressed the buttons. What a session adds is the two things a browser was
-quietly providing: something to arm the change listeners, and somewhere for an
-action that goes to the background to run.
+quietly providing: something to arm the change listeners, somewhere for an
+action that goes to the background to run, and something to draw.
 """
 
 # System
 import asyncio
+import functools as ft
 import pathlib as pl
 
 # Third Party
@@ -20,7 +21,11 @@ from . import toml
 from .document import scene_from_state, to_toml
 from .logic import Logic
 from .scene import Scene
-from .view import VIEW_FUNCTIONS
+from .view import RENDER_VIEWS, VIEW_FUNCTIONS
+
+# The views a session draws, named as the scene names their windows rather
+# than as the controller names the function that draws each.
+DRAWN_VIEWS = tuple(name.removesuffix("_update") for name in RENDER_VIEWS)
 
 
 def until_settled(work):
@@ -51,11 +56,47 @@ class Session:
         self.scene = scene
         self.logic = Logic(self.server, scene)
 
-        # Without a page nothing assigns these, and trame raises on a
-        # controller function that has no implementation rather than passing
-        # quietly.
-        for name in VIEW_FUNCTIONS:
-            getattr(self.server.controller, name).can_be_empty = True
+        self.bind_views()
+
+    def bind_views(self):
+        """Draw what a page would have drawn, there being no page to draw it.
+
+        ``VtkRemoteView.update`` renders its window and sends the picture on.
+        With nobody assigning these they were left empty, so nothing ever
+        rendered: a capture read a frame buffer that had never been drawn into
+        and wrote a picture of nothing, one file per viewport, all of them
+        black. What a session wants of those functions is the first half.
+
+        ``view_reset_camera`` is the half that is only a page's -- the app
+        poses its own cameras -- and stays empty, which trame otherwise raises
+        on rather than passing quietly.
+        """
+        controller = self.server.controller
+        for name, view in zip(RENDER_VIEWS, DRAWN_VIEWS):
+            setattr(controller, name, ft.partial(self.render, view))
+        controller.view_update = self.render
+
+        for name in set(VIEW_FUNCTIONS) - set(RENDER_VIEWS) - {"view_update"}:
+            getattr(controller, name).can_be_empty = True
+
+    def render(self, *views, **kwargs):
+        """Draw the named views, or every one that has been built.
+
+        Called with whatever trame hands a controller function, which for the
+        ones that are also change listeners is the whole state.
+        """
+        for view in views or DRAWN_VIEWS:
+            window = self.window(view)
+            if window is not None:
+                window.Render()
+
+    def window(self, view: str):
+        """The render window ``view`` draws into, or None before it is built."""
+        if view == "volume":
+            return self.scene.renderWindow
+        if view == "tile":
+            return self.scene.tile_views.window if self.scene.tile_views else None
+        return self.scene.mpr_views[view] if self.scene.mpr_views else None
 
     @classmethod
     def from_config(cls, config_file: pl.Path | str, server=None, **overrides):
@@ -66,6 +107,11 @@ class Session:
     def actions(self):
         """Everything this session can be asked to do."""
         return self.logic.actions
+
+    @property
+    def opened_as(self) -> str:
+        """The config that opens the scene as this session started it."""
+        return self.logic.opened_as
 
     def ready(self):
         """Arm the session, as a browser connecting would.
@@ -79,8 +125,21 @@ class Session:
 
         self.scene.setup_mpr_render_windows()
         self.scene.setup_tile_render_window()
+        self.size_windows()
         self.server.state.ready()
         self.server.controller.finalize_mpr_initialization()
+
+    def size_windows(self):
+        """Give every window a size, since no browser is going to.
+
+        A page sizes its render windows over the wire as it lays them out, and
+        without one they stay at nothing by nothing -- which renders, and
+        captures, an image zero pixels wide. Done before the state is armed so
+        that the fits which follow measure the window a script will actually
+        get.
+        """
+        for view in DRAWN_VIEWS:
+            self.window(view).SetSize(*self.scene.headless_size)
 
     def scene_now(self) -> Scene:
         """The scene as the session currently stands, ready to be reopened."""

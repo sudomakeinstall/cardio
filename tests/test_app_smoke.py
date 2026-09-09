@@ -221,6 +221,7 @@ ACTIONS = {
     "rotate_view",
     "run_command",
     "save_rotation_angles",
+    "save_script",
     "screenshot",
     "scroll_slice",
     "set_state",

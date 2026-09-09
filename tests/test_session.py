@@ -12,7 +12,9 @@ import itertools
 import pathlib as pl
 
 # Third Party
+import numpy as np
 import pytest
+from PIL import Image
 
 # Internal
 from cardio.scene import Scene
@@ -55,12 +57,33 @@ def test_arming_is_what_makes_an_action_reach_the_renderer(session):
     assert session.scene.mpr_rotation_sequence.angles_list[0].axis == "Z"
 
 
-def test_the_view_functions_may_have_no_implementation(session):
-    """With no page, nothing assigns them, and trame raises on those by default."""
+def test_every_view_function_can_be_called_without_a_page(session):
+    """The ones that draw, draw; the one that is only a page's stays empty.
+
+    Trame raises on a controller function with no implementation rather than
+    passing quietly, so this is what says a session has answered for all of
+    them.
+    """
     session.ready()
 
     for name in VIEW_FUNCTIONS:
         assert getattr(session.server.controller, name)() is None
+
+
+def test_asking_a_view_to_update_draws_it(session):
+    """A page renders as it pushes each view on; with no page, this does.
+
+    Watched rather than measured: what is being checked is that the call
+    reaches a render at all, which an empty implementation would not.
+    """
+    session.ready()
+    window = session.window("axial")
+    renders = []
+    window.AddObserver("StartEvent", lambda *_: renders.append(1))
+
+    session.server.controller.axial_update()
+
+    assert renders, "the update did not render"
 
 
 def test_an_action_sets_off_the_listeners_it_would_from_a_button(session):
@@ -116,6 +139,37 @@ def test_a_capture_has_written_before_the_next_action_begins(tmp_path):
     assert written, "the capture wrote nothing"
     assert session.server.state.capture_ok
     assert not session.server.state.capture_running
+
+
+def test_a_headless_capture_is_a_picture_of_something(tmp_path):
+    """The two halves a page was quietly providing: a size, and a render.
+
+    Without a size the windows are nothing by nothing; without a render the
+    frame buffer is one nothing has drawn into. Either way a capture still
+    writes a file per viewport, and a test counting names would call it a
+    success -- so this one looks at the pixels.
+    """
+    out = tmp_path / "out"
+    session = session_on(tmp_path, serialization_directory=out)
+
+    session.do("screenshot")
+
+    written = sorted(out.glob("screenshots/*/*/*"))
+    assert written, "the capture wrote nothing"
+    for path in written:
+        pixels = np.asarray(Image.open(path).convert("L"))
+        width, height = session.scene.headless_size
+        assert pixels.shape == (height, width), path
+        assert pixels.max(), f"{path.parent.name} is a picture of nothing"
+
+
+def test_the_size_a_session_renders_at_is_configured(tmp_path):
+    session = session_on(tmp_path, headless_size=(320, 240))
+
+    session.ready()
+
+    assert session.scene.renderWindow.GetSize() == (320, 240)
+    assert session.scene.mpr_views["axial"].GetSize() == (320, 240)
 
 
 def test_a_config_file_is_the_scene(tmp_path):

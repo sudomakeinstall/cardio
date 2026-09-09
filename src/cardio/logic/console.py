@@ -13,6 +13,7 @@ which cost nothing to be told.
 
 # System
 import contextlib as cl
+import datetime as dt
 import time
 import typing as ty
 
@@ -20,14 +21,16 @@ import typing as ty
 import pydantic as pc
 
 # Internal
+from .. import scripting
 from ..action import action
-from ..console import Log, parse_call
+from ..console import TIME_FORMAT, Log, parse_call
 from .base import Controller
 
 # The actions that are about the console rather than about the app. A typed
 # command logs the action it asked for, exactly as the button that does the
 # same thing would; logging the wrapper as well would say everything twice.
-SILENT = frozenset({"run_command", "clear_console"})
+# Saving the log is not a thing anybody means to replay either.
+SILENT = frozenset({"run_command", "clear_console", "save_script"})
 
 # How often a coalescing drag republishes. A new line goes out at once; a line
 # whose count is merely climbing can wait, and waiting is what keeps a gesture
@@ -93,6 +96,8 @@ class ConsoleController(Controller):
         super().seed()
         self.server.state.console_entries = []
         self.server.state.console_input = ""
+        self.server.state.script_saved_at = None
+        self.server.state.script_summary = ""
 
     @property
     def showing(self) -> bool:
@@ -202,6 +207,30 @@ class ConsoleController(Controller):
         """Throw away the log so far."""
         self.log.clear()
         self.publish()
+
+    @action("save_script")
+    def save_script(self):
+        """Write the log out as a script that does the same session again.
+
+        Two files: the calls, and the scene they are asked of. The scene is the
+        one the app opened with rather than the one it is showing -- an action
+        moves the scene under it, so a script replayed against where it ended
+        up would do everything a second time.
+        """
+        recorded = dt.datetime.now().astimezone()
+        actions = self.log.script
+        path = scripting.save(
+            self.scene.scripts_directory,
+            recorded.strftime(self.scene.timestamp_format),
+            actions,
+            self.app.opened_as,
+            recorded,
+            self.log.dropped,
+        )
+
+        with self.server.state as state:
+            state.script_saved_at = recorded.strftime(TIME_FORMAT)
+            state.script_summary = f"{len(actions)} calls to {path.name}"
 
     @action("run_command")
     def run_command(self, text: str):

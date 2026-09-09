@@ -9,6 +9,7 @@ each owning its own slice of trame state.
 import cardio.registry as registry
 
 from ..action import Journal, Registry
+from ..document import to_toml
 from ..scene import Scene
 from .base import Controller
 from .camera import CameraController
@@ -59,6 +60,12 @@ class Logic:
     def __init__(self, server, scene: Scene):
         self.server = server
         self.scene = scene
+
+        # Taken before anything runs, because an action moves the scene under
+        # it -- a rotation added is a rotation the sequence now holds. A script
+        # replayed against where the session ended up would do it all twice, so
+        # what a script needs is the config that opens where it began.
+        self.opened_as = to_toml(scene)
 
         self.console = ConsoleController(self)
         self.view = ViewController(self)

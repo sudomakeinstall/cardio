@@ -43,7 +43,20 @@ def console_panel(server, scene):
                 v_if="console_entries.length",
                 classes="text-caption text-disabled ml-3",
             )
+            html.Span(
+                "{{ script_summary }}",
+                v_if="script_summary",
+                classes="text-caption text-disabled ml-3",
+            )
             vuetify.VSpacer()
+            vuetify.VBtn(
+                icon="mdi-file-export-outline",
+                variant="text",
+                density="compact",
+                title="Save the log as a script",
+                click=server.controller.save_script,
+                disabled=("!console_entries.length",),
+            )
             vuetify.VBtn(
                 icon="mdi-delete-outline",
                 variant="text",
