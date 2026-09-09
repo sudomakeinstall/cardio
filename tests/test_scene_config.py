@@ -2,6 +2,7 @@
 
 # System
 import logging
+import pathlib as pl
 
 # Third Party
 import pydantic as pc
@@ -9,6 +10,7 @@ import pytest
 
 # Internal
 from cardio.playback import Playback
+from cardio.rotation import RotationMetadata, RotationSequence, RotationStep
 from cardio.scene import Scene
 from cardio.snap import Snap, SnapMode
 from cardio.view import CameraLock, DrawerSection, Layout, Theme, View
@@ -344,3 +346,54 @@ def test_only_one_of_the_pair_is_enough_to_drop_the_preset(tmp_path):
 
     assert scene.mpr_window_level_preset is None
     assert scene.mpr_window == 1234.0
+
+
+# ------------------------------------------------- where rotations come from ----
+
+
+def rotation_file(tmp_path) -> pl.Path:
+    """A rotation file holding one named step."""
+    path = tmp_path / "rotations.toml"
+    RotationSequence(
+        metadata=RotationMetadata(),
+        angles_list=[RotationStep(axis="Z", angle=0.5, name="from the file")],
+    ).to_file(path)
+    return path
+
+
+def test_a_named_rotation_file_is_read_over_what_the_config_spelled(tmp_path):
+    """A file is the answer once it is named, which is why saving one writes no
+    sequence beside it."""
+    scene = scene_from_toml(
+        tmp_path,
+        "\n".join(
+            [
+                f'mpr_rotation_file = "{rotation_file(tmp_path)}"',
+                "[[mpr_rotation_sequence.angles_list]]",
+                'axis = "X"',
+                "angle = 1.25",
+                'name = "from the config"',
+            ]
+        ),
+    )
+
+    assert [step.name for step in scene.mpr_rotation_sequence.angles_list] == [
+        "from the file"
+    ]
+
+
+def test_a_rotation_file_that_is_not_there_is_refused(tmp_path):
+    """It used to open on no rotations, which is a strange way to say "mistyped"."""
+    missing = tmp_path / "nowhere.toml"
+
+    with pytest.raises(pc.ValidationError, match="does not exist"):
+        scene_from_toml(tmp_path, f'mpr_rotation_file = "{missing}"')
+
+
+def test_the_refusal_names_the_path_that_was_asked_for(tmp_path):
+    with pytest.raises(pc.ValidationError, match="tempalte.toml"):
+        scene_from_toml(tmp_path, f'mpr_rotation_file = "{tmp_path}/tempalte.toml"')
+
+
+def test_naming_no_rotation_file_is_not_an_error(tmp_path):
+    assert scene_from_toml(tmp_path, "tile_rows = 2").mpr_rotation_file is None

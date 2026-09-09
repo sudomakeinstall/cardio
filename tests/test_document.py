@@ -17,6 +17,7 @@ import tests.test_app_smoke as smoke
 
 # Internal
 from cardio.document import scene_from_state, to_toml
+from cardio.rotation import RotationMetadata, RotationSequence, RotationStep
 from cardio.scene import Scene
 from cardio.session import Session
 from cardio.state import ObjectState
@@ -213,3 +214,76 @@ def test_a_configured_lock_is_kept_even_with_nothing_to_snap_to(tmp_path):
 
     assert reopen.scene.snap.locked
     assert reopen.server.state.snap_locked
+
+
+# ------------------------------------------- where the rotations come from ----
+#
+# A config says where the rotations come from either by naming a file or by
+# spelling the sequence, and never by doing both: the file is read over
+# whatever the config spelled, so writing both would show a sequence that
+# opening it would throw away.
+
+
+def rotation_file(directory: pl.Path, volume_label: str = "") -> pl.Path:
+    """A rotation file holding one named step, for ``volume_label``."""
+    path = directory / "rotations.toml"
+    RotationSequence(
+        metadata=RotationMetadata(volume_label=volume_label),
+        angles_list=[RotationStep(axis="Z", angle=0.5, name="from the file")],
+    ).to_file(path)
+    return path
+
+
+@pytest.fixture
+def from_file(tmp_path) -> Session:
+    """A session opened on a config that names a rotation file."""
+    return session_on(tmp_path, mpr_rotation_file=rotation_file(tmp_path))
+
+
+def test_a_config_naming_a_rotation_file_does_not_also_spell_the_sequence(
+    from_file, tmp_path
+):
+    """Both would be one of them describing an app that opening it would not give."""
+    body = tk.parse(from_file.save(tmp_path / "saved.toml").read_text())
+
+    assert "mpr_rotation_file" in body
+    assert "mpr_rotation_sequence" not in body
+
+
+def test_a_saved_session_reopens_on_the_rotations_the_file_holds(from_file, tmp_path):
+    reopen = reopened(from_file.save(tmp_path / "saved.toml"))
+
+    assert [step.name for step in reopen.scene.mpr_rotation_sequence.angles_list] == [
+        "from the file"
+    ]
+
+
+def test_a_named_file_goes_on_being_where_the_rotations_come_from(from_file, tmp_path):
+    """What was changed in the app is saved by Save Rotations, not by this.
+
+    Deliberate, and worth saying out loud: the alternative is a config that
+    carries a sequence the file would overwrite the moment it was opened.
+    """
+    from_file.do("set_state", key="mpr_rotation_data.angles_list.0.angle", value=1.25)
+
+    reopen = reopened(from_file.save(tmp_path / "saved.toml"))
+
+    assert reopen.scene.mpr_rotation_sequence.angles_list[0].angle == 0.5
+
+
+def test_a_session_with_no_rotation_file_still_saves_its_sequence(driven, tmp_path):
+    """The other half of the rule: with no file named, the sequence is the answer."""
+    body = tk.parse(driven.save(tmp_path / "saved.toml").read_text())
+
+    assert "mpr_rotation_file" not in body
+    assert body["mpr_rotation_sequence"]["angles_list"], "the rotation that was added"
+
+
+def test_a_rotation_file_says_which_volume_it_is_for(tmp_path):
+    """One file and one volume label are a matched pair, which is what makes a
+    config point at a new study by changing the directory alone."""
+    session = session_on(
+        tmp_path, mpr_rotation_file=rotation_file(tmp_path, volume_label="vol")
+    )
+
+    assert session.scene.active_volume_label == "vol"

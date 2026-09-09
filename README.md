@@ -245,6 +245,44 @@ for study in pl.Path("./studies").iterdir():
     do.session.save(study / "as-captured.toml")
 ```
 
+### Where the rotations come from
+
+A config says where the MPR rotations come from in one of two ways, and never
+in both:
+
+```toml
+mpr_rotation_file = "./rotations/template.toml"   # read this file
+```
+
+```toml
+[[mpr_rotation_sequence.angles_list]]             # or spell them here
+axis = "Z"
+angle = 0.5
+```
+
+A named file is read *over* whatever the config spelled, so a config carrying
+both would show a sequence that opening it would throw away.  A saved session
+therefore writes whichever one the scene was opened with -- naming the file if
+there was one, and spelling the sequence if there was not.
+
+This means **rotations you change in the app are not saved by saving the
+session** when a rotation file is named: the file goes on being where they come
+from.  Press *Save Rotations* to write them out as a rotation file of their own,
+under `<serialization_directory>/rotations/<volume>/`, and point the config at
+that.  Rotations have their own format, and it is the one that holds them.
+
+A rotation file may say which volume it is for:
+
+```toml
+[metadata]
+volume_label = "CCTA"
+```
+
+which becomes the active volume, so a config can be pointed at a new study by
+changing the volume's `directory` alone -- as long as its `label` keeps
+matching.  A named file that is not there is refused rather than passed over,
+so a mistyped path says so instead of opening on no rotations at all.
+
 ### Developing
 
 Ensuring you have all required dependencies:

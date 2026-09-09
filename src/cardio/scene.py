@@ -257,8 +257,23 @@ class Scene(ps.BaseSettings):
 
     @pc.model_validator(mode="after")
     def load_rotation_file(self):
-        """Load rotation sequence from TOML file if specified."""
-        if self.mpr_rotation_file is not None and self.mpr_rotation_file.exists():
+        """Read the rotation sequence from the file the config names.
+
+        Read *over* whatever the config spelled: a file is the answer once it
+        is named, which is why saving a scene that names one does not write a
+        sequence beside it.
+
+        A named file that is not there is refused rather than passed over. It
+        used to leave the app open on no rotations at all, which is a strange
+        way to be told that a path was mistyped -- and mistyping one is what
+        happens when a config is pointed at a new study.
+        """
+        if self.mpr_rotation_file is not None:
+            if not self.mpr_rotation_file.exists():
+                raise ValueError(
+                    f"mpr_rotation_file: {str(self.mpr_rotation_file)!r} does not exist"
+                )
+
             self.mpr_rotation_sequence = RotationSequence.from_file(
                 self.mpr_rotation_file
             )

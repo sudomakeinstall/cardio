@@ -74,5 +74,20 @@ def scene_from_state(state, scene: Scene) -> Scene:
 
 
 def to_toml(scene: Scene) -> str:
-    """``scene`` as a config file -- the same one ``--config`` reads."""
-    return toml.dumps(scene.model_dump(mode="json", exclude_none=True))
+    """``scene`` as a config file -- the same one ``--config`` reads.
+
+    A config says where the rotations come from either by naming a file or by
+    spelling the sequence, and never by doing both: ``load_rotation_file``
+    reads the file over whatever the config said, so a config carrying both
+    would show a sequence that opening it would throw away.
+
+    Which one it is, is whichever the scene was opened with. A named file goes
+    on being where the rotations come from, so what a person changed in the app
+    is not in the saved config -- it is saved by Save Rotations, as a rotation
+    file, which is the format that holds rotations and the one to point at
+    next.
+    """
+    data = scene.model_dump(mode="json", exclude_none=True)
+    if scene.mpr_rotation_file is not None:
+        data.pop("mpr_rotation_sequence", None)
+    return toml.dumps(data)
