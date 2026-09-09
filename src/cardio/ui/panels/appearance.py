@@ -7,15 +7,15 @@ from trame.widgets import vuetify3 as vuetify
 # Internal
 from ...camera import DEPTH_STEP, depth_top
 from ...state import ObjectState
-from ..common import RENDERING_ACTIVE, SLIDER_CLASS, target_group
-
-# What kind of thing a row is, in the only place a row has room to say it: two
-# kinds may carry the same label, and the eye beside either is the same eye.
-KIND_ICONS = {
-    "mesh": "mdi-triangle-outline",
-    "volume": "mdi-cube-outline",
-    "segmentation": "mdi-shape-outline",
-}
+from ..common import (
+    EYE_ICONS,
+    KIND_ICONS,
+    RENDERING_ACTIVE,
+    SLIDER_CLASS,
+    object_row,
+    row_cell,
+    target_group,
+)
 
 
 def volume_rendering_panel(server, scene):
@@ -32,7 +32,7 @@ def volume_rendering_panel(server, scene):
     ):
         clip_depth_slider(scene)
         for obj in scene.renderables:
-            object_row(obj)
+            rendering_row(obj)
 
 
 def clip_depth_slider(scene):
@@ -52,33 +52,22 @@ def clip_depth_slider(scene):
     )
 
 
-def object_row(obj):
+def rendering_row(obj):
     """One object on one line: whether it is drawn, and whether it is cropped.
 
     The two toggles are icons rather than labelled checkboxes because the row
-    is already labelled, once, by the object they both act on.
+    is already labelled, once, by the object they both act on. The eye ends the
+    row it shares with the eye in the slice group, where the same icon means
+    the same thing about a different view.
     """
     keys = ObjectState.of(obj)
     cropping = obj.clipping_enabled
     hidden = obj.kind == "volume" or (cropping and obj.actors)
+    eye_on, eye_off = EYE_ICONS
 
-    with vuetify.VRow(no_gutters=True, classes="align-center flex-nowrap"):
-        with vuetify.VCol(cols="auto"):
-            vuetify.VCheckbox(
-                v_model=keys.visibility,
-                true_icon="mdi-eye",
-                false_icon="mdi-eye-off",
-                title=f"Draw {obj.label} in the rendering",
-                density="compact",
-                hide_details=True,
-            )
-
-        with vuetify.VCol(classes="ps-1 text-body-2 text-truncate"):
-            vuetify.VIcon(KIND_ICONS[obj.kind], size="x-small", classes="mr-2")
-            html.Span(obj.label)
-
+    with object_row(obj.label, KIND_ICONS[obj.kind]):
         if cropping:
-            with vuetify.VCol(cols="auto"):
+            with row_cell():
                 vuetify.VCheckbox(
                     v_model=(keys.clipping,),
                     true_icon="mdi-crop",
@@ -89,7 +78,7 @@ def object_row(obj):
                 )
 
         if hidden:
-            with vuetify.VCol(cols="auto"):
+            with row_cell():
                 vuetify.VBtn(
                     icon=(
                         f"{keys.detail_panel} ? 'mdi-chevron-up' : 'mdi-chevron-down'",
@@ -99,6 +88,16 @@ def object_row(obj):
                     variant="text",
                     density="compact",
                 )
+
+        with row_cell():
+            vuetify.VCheckbox(
+                v_model=keys.visibility,
+                true_icon=eye_on,
+                false_icon=eye_off,
+                title=f"Draw {obj.label} in the rendering",
+                density="compact",
+                hide_details=True,
+            )
 
     if hidden:
         object_details(obj, keys)

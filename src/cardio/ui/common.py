@@ -61,6 +61,39 @@ def section(value, title, icon, **kwargs):
             yield
 
 
+# What kind of thing a row is, in the only place a row has room to say it: two
+# kinds may carry the same label, and the eye at the end of either is the same
+# eye.
+KIND_ICONS = {
+    "mesh": "mdi-triangle-outline",
+    "volume": "mdi-cube-outline",
+    "segmentation": "mdi-shape-outline",
+}
+
+EYE_ICONS = ("mdi-eye", "mdi-eye-off")
+
+
+@cl.contextmanager
+def object_row(label: str, icon: str):
+    """One object on one line: what it is on the left, its toggles on the right.
+
+    The toggles are the caller's, each in a cell of its own, so that a row with
+    nothing to crop and nothing to open still ends where every other row does.
+    """
+    with vuetify.VRow(no_gutters=True, classes="align-center flex-nowrap"):
+        with vuetify.VCol(classes="text-body-2 text-truncate"):
+            vuetify.VIcon(icon, size="x-small", classes="mr-2")
+            html.Span(label)
+        yield
+
+
+@cl.contextmanager
+def row_cell():
+    """One trailing control of an object row, sized to itself."""
+    with vuetify.VCol(cols="auto"):
+        yield
+
+
 GROUP_CLASS = "cardio-group"
 
 

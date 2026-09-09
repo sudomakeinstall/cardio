@@ -1048,6 +1048,11 @@ def test_an_object_is_one_row_of_icons_under_its_own_label(read_only_app):
         assert 'trueIcon="mdi-eye"' in toggles[0]
         assert "label=" not in toggles[0]
 
+        if obj.clipping_enabled:
+            assert body.index(f'v-model="{keys.clipping}"') < body.index(toggles[0]), (
+                f"the eye ends {obj.label}'s row, whatever else is on it"
+            )
+
     for heading in ("Meshes", "Volumes", "Segmentations"):
         assert heading not in body
 
@@ -1067,6 +1072,25 @@ def test_what_a_row_hides_is_that_row_own_controls(read_only_app):
         assert f'v-model="{keys.preset}"' in details
         for key in keys.clip_bounds:
             assert f'v-model="{key}"' in details
+
+
+def test_an_overlay_is_asked_for_the_way_the_rendering_is(read_only_app):
+    """The same question about a different view, so it is asked the same way.
+
+    An overlay toggle was a labelled checkbox while the rendering's was an eye
+    at the end of a row, which made two answers to one question look like two
+    different questions.
+    """
+    _, scene, _, ui = read_only_app
+    body = _appearance_group(ui.layout.html, common.RESLICE_ACTIVE)
+
+    for seg in scene.segmentations:
+        toggle = re.search(
+            rf'<VCheckbox[^>]*v-model="{ObjectState.of(seg).mpr_overlay}"[^>]*>', body
+        )
+        assert toggle is not None, seg.label
+        assert 'trueIcon="mdi-eye"' in toggle.group(0)
+        assert "label=" not in toggle.group(0)
 
 
 def test_each_appearance_group_names_the_view_it_acts_on(read_only_app):
