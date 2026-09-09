@@ -116,8 +116,8 @@ class DrawerSection(str, enum.Enum):
     PLAYBACK = "playback"
     APPEARANCE = "appearance"
     ORIENTATION = "orientation"
-    TILES = "tiles"
     ZOOM = "zoom"
+    TILES = "tiles"
     EXPORT = "export"
 
 
