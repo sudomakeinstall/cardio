@@ -1,4 +1,4 @@
-"""Per-object visibility, transfer function and clipping controls."""
+"""What the volume rendering draws: visibility, transfer functions, cropping."""
 
 # Third Party
 from trame.widgets import vuetify3 as vuetify
@@ -7,7 +7,7 @@ from trame.widgets import vuetify3 as vuetify
 from ...camera import DEPTH_STEP, depth_top
 from ...state import ObjectState
 from ...volume_property_presets import list_volume_property_presets
-from ..common import SLIDER_CLASS, SUBPANEL_CLASS
+from ..common import RENDERING_ACTIVE, SLIDER_CLASS, SUBPANEL_CLASS, target_group
 
 # on/off icons for each type's clip toggle
 CLIP_ICONS = {
@@ -17,15 +17,29 @@ CLIP_ICONS = {
 }
 
 
+def volume_rendering_panel(server, scene):
+    """Everything that reaches the volume rendering's renderer and no other.
+
+    The whole group goes away with the view it acts on, rather than each
+    control in it saying so for itself.
+    """
+    with target_group(
+        "Volume Rendering",
+        "mdi-cube-outline",
+        "Controls the 3D rendering only",
+        v_if=RENDERING_ACTIVE,
+    ):
+        clip_depth_panel(server, scene)
+        appearance_panel(server, scene)
+
+
 def clip_depth_panel(server, scene):
     """The camera's shared near/far range."""
     _, far = scene.renderer.GetActiveCamera().GetClippingRange()
 
-    vuetify.VListSubheader("Camera Depth Range")
-
     vuetify.VRangeSlider(
         v_model=("clip_depth",),
-        label="Near / Far",
+        label="Depth",
         title="Near and far clipping planes of the shared camera",
         classes=SLIDER_CLASS,
         min=DEPTH_STEP,

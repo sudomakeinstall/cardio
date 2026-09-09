@@ -61,6 +61,25 @@ def section(value, title, icon, **kwargs):
             yield
 
 
+GROUP_CLASS = "cardio-group"
+
+
+@cl.contextmanager
+def target_group(title: str, icon: str, subtitle: str, **kwargs):
+    """A run of controls that all act on the same view, named by that view.
+
+    Nothing about a control says which view it changes -- the eye beside a
+    segmentation means the rendering in one of these groups and the overlays
+    on the cuts in the other -- so the grouping is what says it, and the
+    heading names the view rather than the controls under it.
+    """
+    with html.Div(classes=GROUP_CLASS, **kwargs):
+        with html.Div(classes=f"{GROUP_CLASS}-title", title=subtitle):
+            vuetify.VIcon(icon, size="x-small", classes="mr-2")
+            html.Span(title)
+        yield
+
+
 SLIDER_CLASS = "cardio-slider"
 
 SUBPANEL_CLASS = "cardio-subpanel"

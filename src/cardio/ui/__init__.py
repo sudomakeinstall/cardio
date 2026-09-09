@@ -2,29 +2,27 @@
 
 # Third Party
 from trame.ui.vuetify3 import SinglePageWithDrawerLayout
-from trame.widgets import html
 from trame.widgets import vuetify3 as vuetify
 
 # Internal
 from .. import __version__
 from ..scene import Scene
 from ..view import RENDER_VIEWS
-from .common import DRAWER_WIDTH, RENDERING_ACTIVE, drawer_styles, section
+from .common import DRAWER_WIDTH, drawer_styles, section
 from .help import help_dialog
 from .interaction import Interaction
 from .layout import toolbar, viewports
 from .metadata import metadata_dialog
 from .panels import (
-    appearance_panel,
     capture_panel,
-    clip_depth_panel,
     console_panel,
-    overlays_panel,
     playback_panel,
     rotations_panel,
+    slice_views_panel,
     snap_panel,
     tiles_panel,
     volume_panel,
+    volume_rendering_panel,
     zoom_panel,
 )
 
@@ -88,13 +86,10 @@ class UI:
                 playback_panel(self.server, self.scene)
 
             with section("appearance", "Appearance", "mdi-palette-outline"):
-                # Both act on the volume rendering's own renderer, so both go
-                # away with it. The overlays are drawn on the cuts instead and
-                # say so for themselves.
-                with html.Div(v_if=RENDERING_ACTIVE):
-                    clip_depth_panel(self.server, self.scene)
-                    appearance_panel(self.server, self.scene)
-                overlays_panel(self.server, self.scene)
+                # One group per view the controls act on. Each says which view
+                # that is, and goes away with it.
+                volume_rendering_panel(self.server, self.scene)
+                slice_views_panel(self.server, self.scene)
 
             if self.scene.volumes:
                 # Up in every layout: the tile grid is posed by these controls,

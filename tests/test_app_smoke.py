@@ -899,12 +899,9 @@ def test_the_overlay_controls_survive_a_maximized_slice_view(read_only_app):
     """Which is where a person zooms in on the overlay they are judging."""
     _, _, _, ui = read_only_app
 
-    slider = re.search(
-        r'<VSlider[^>]*v-model="mpr_segmentation_opacity"[^>]*>', ui.layout.html
-    )
-    assert slider is not None
-    condition = re.search(r'v-if="([^"]*)"', slider.group(0)).group(1)
-    assert "'axial'" in condition and "'sagittal'" in condition
+    assert "'axial'" in common.RESLICE_ACTIVE and "'sagittal'" in common.RESLICE_ACTIVE
+    body = _appearance_group(ui.layout.html, common.RESLICE_ACTIVE)
+    assert 'v-model="mpr_segmentation_opacity"' in body
 
 
 def test_the_zoom_panel_offers_the_whole_selection(read_only_app):
@@ -983,43 +980,69 @@ def test_a_series_is_named_only_where_there_is_a_series(read_only_app):
     assert "'png'" not in guard.group(1)
 
 
+def _appearance_group(html: str, condition: str) -> str:
+    """The markup inside the appearance group guarded by ``condition``.
+
+    Each group holds a nested div for its heading, so the region cannot be cut
+    by matching up to the first closing tag; the depth has to be counted.
+    """
+    opening = html.index(f'v-if="{condition}"')
+    start = html.index(">", opening) + 1
+
+    depth = 1
+    for tag in re.finditer(r"<(/?)div\b", html[start:]):
+        depth += -1 if tag.group(1) else 1
+        if depth == 0:
+            return html[start : start + tag.start()]
+
+    raise AssertionError(f"no closing tag for the group guarded by {condition}")
+
+
 def test_the_volume_rendering_controls_go_with_the_view_they_act_on(read_only_app):
     """The depth range, the visibility toggles, the transfer functions and the
     crop boxes all reach the volume rendering's renderer and no other, so they
     have nothing to say while a cut is the only thing on screen.
     """
-    _, _, _, ui = read_only_app
+    _, scene, _, ui = read_only_app
 
     named = set(re.findall(r"'([^']*)'", common.RENDERING_ACTIVE))
     assert named == {
         layout.state_value for layout in Layout if Layout.VOLUME in layout.on_screen
     }
 
-    wrapper = re.search(
-        rf'<div v-if="{re.escape(common.RENDERING_ACTIVE)}">(.*?)</div>',
-        ui.layout.html,
-        re.DOTALL,
-    )
-    assert wrapper is not None
-    assert 'v-model="clip_depth"' in wrapper.group(1)
-    assert "Segmentations" in wrapper.group(1)
+    body = _appearance_group(ui.layout.html, common.RENDERING_ACTIVE)
+    assert 'v-model="clip_depth"' in body
+    for obj in scene.renderables:
+        assert f'v-model="{ObjectState.of(obj).visibility}"' in body, obj.label
+    assert "mpr_segmentation_opacity" not in body
 
 
-def test_the_appearance_headings_sit_at_one_level(read_only_app):
-    """They are siblings, and were not drawn as any: the object headings were
-    indented and shrunk, which reads as though they belong to the depth range
-    listed above them.
+def test_the_overlay_controls_go_with_the_cuts_they_are_drawn_on(read_only_app):
+    """The other half of Appearance, and the half a cut on screen is what
+    earns: the overlays are drawn on the cuts, not in the rendering.
+    """
+    _, scene, _, ui = read_only_app
+
+    body = _appearance_group(ui.layout.html, common.RESLICE_ACTIVE)
+    for seg in scene.segmentations:
+        assert f'v-model="{ObjectState.of(seg).mpr_overlay}"' in body, seg.label
+    assert "clip_depth" not in body
+
+
+def test_each_appearance_group_names_the_view_it_acts_on(read_only_app):
+    """Nothing about a control says which view it changes -- the same eye means
+    the rendering in one group and the overlays on the cuts in the other -- so
+    the headings have to, and they used to name the controls instead.
     """
     _, _, _, ui = read_only_app
 
     headings = re.findall(
-        r"<VListSubheader([^>]*)>\s*"
-        r"(?:Camera Depth Range|Volumes|Segmentations|MPR Overlays)",
+        rf'<div class="{common.GROUP_CLASS}-title"[^>]*>.*?<span[^>]*>\s*([^<]*?)\s*</span>',
         ui.layout.html,
+        re.DOTALL,
     )
 
-    assert len(headings) == 4
-    assert not any("pl-4" in attributes for attributes in headings)
+    assert headings == ["Volume Rendering", "Slice Views"]
 
 
 def test_the_orientation_controls_are_reachable_from_every_layout(read_only_app):

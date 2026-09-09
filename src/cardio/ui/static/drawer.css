@@ -76,3 +76,25 @@
     font-family: monospace;
     font-size: 0.8125rem;
 }
+
+/* Which view a control acts on is not written on the control: the same eye
+   means the volume rendering in one group and the overlays on the cuts in the
+   other. The groups are set apart by a rule and a heading rather than by
+   indentation, which would read as nesting under whatever sat above. */
+
+.cardio-group + .cardio-group {
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.cardio-group-title {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.25rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    opacity: 0.7;
+}
