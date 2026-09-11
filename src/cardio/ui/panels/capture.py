@@ -41,6 +41,8 @@ NAMES_SERIES = " || ".join(
 
 UNNAMED = "Left empty, the series is named after the viewport and what it holds"
 
+UNBANNERED = "Left empty, nothing is added to the margin"
+
 # A text field swallows its own key events, or they reach the render view's
 # interactor and typing `a` maximizes the axial view. The same guard the console
 # prompt and the rotation name field carry, for the same reason.
@@ -62,6 +64,19 @@ def capture_panel(server, scene):
             hide_details=True,
             classes="mx-1",
         )
+
+    vuetify.VListSubheader("Banner")
+    with vuetify.VRow(classes="mx-1 mb-1"):
+        vuetify.VTextField(
+            v_model=("capture_banner",),
+            placeholder="NOT FOR CLINICAL USE",
+            density="compact",
+            hide_details=True,
+            classes="mx-1",
+            title="Text written in a band below every captured picture",
+            **SWALLOW_KEYS,
+        )
+    html.Span(UNBANNERED, classes="text-caption text-medium-emphasis mx-2")
 
     vuetify.VListSubheader("Viewports")
     with vuetify.VRow(classes="mx-1 mb-1"):

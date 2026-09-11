@@ -105,6 +105,7 @@ class CaptureController(Controller):
     """Cine capture and rotation serialisation."""
 
     seeds = (
+        "capture_banner",
         "capture_format",
         *(capture_series_number(viewport) for viewport in VIEWPORTS),
         *(capture_series_description(viewport) for viewport in VIEWPORTS),
@@ -143,6 +144,13 @@ class CaptureController(Controller):
     def capture_format(self) -> CaptureFormat:
         return CaptureFormat(
             getattr(self.server.state, "capture_format", self.scene.capture_format)
+        )
+
+    @property
+    def banner(self) -> str:
+        """The line tagged onto the lower margin, or an empty one for none."""
+        return str(
+            getattr(self.server.state, "capture_banner", self.scene.capture_banner)
         )
 
     @property
@@ -297,6 +305,7 @@ class CaptureController(Controller):
             series_description=description,
             frame_of_reference=reference,
             has_plane=viewport in self.plane_sources,
+            banner=self.banner,
         )
 
     def report(self, summary: str, ok: bool):
@@ -324,8 +333,9 @@ class CaptureController(Controller):
 
         identity = self.identity()
         reference = pd.uid.generate_uid()
+        banner = self.banner
         sources = {
-            name: WindowFrames(window, alpha=wants_alpha(fmt))
+            name: WindowFrames(window, alpha=wants_alpha(fmt), banner=banner)
             for name, window in windows.items()
         }
         if writes_series(fmt):

@@ -21,6 +21,7 @@ import numpy as np
 import pydicom as pd
 
 # Internal
+from .banner import stamp_scalars
 from .base import CaptureWriter, Context, Frame, Plane
 from .series import describe
 
@@ -106,6 +107,11 @@ class SeriesWriter(CaptureWriter):
             self.context.viewport, kind, self.context.series_description
         )
         dataset.InstanceNumber = index + 1
+        # Type 3, and the one tag a viewer consults before measuring off an
+        # image: a banner is lettering standing where pixels would otherwise
+        # be, and saying so is the difference between an annotated image and a
+        # falsified one.
+        dataset.BurnedInAnnotation = "YES" if self.context.banner else "NO"
         # Milliseconds into the cycle, which is how the reader orders phases.
         # Rounded because DS holds sixteen characters, and a rate that does not
         # divide the cycle evenly writes more than that in full precision.
@@ -140,6 +146,10 @@ class SliceWriter(SeriesWriter):
     A frame with nothing behind it is skipped rather than written as a picture:
     an MPR view with no active volume is showing nothing, and a series of blank
     greyscale images would only pretend otherwise.
+
+    A banner is appended below the cut rather than drawn across it, so every
+    row the volume was measured from keeps its value and the position the
+    instance declares -- which is that of the first row -- stays true of it.
     """
 
     def add(self, index: int, frame: Frame):
@@ -147,7 +157,9 @@ class SliceWriter(SeriesWriter):
             return
 
         plane = frame.plane
-        stored, slope, intercept = encode(plane.scalars)
+        stored, slope, intercept = encode(
+            stamp_scalars(plane.scalars, self.context.banner)
+        )
 
         localizable = plane.location is not None
         dataset = _dataset(

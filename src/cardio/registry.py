@@ -126,6 +126,7 @@ DOCUMENT = _declare(
             "where the configured poses put them only until something moves"
         ),
     ),
+    capture_banner="capture_banner",
     capture_format="capture_format",
     # A pair per viewport rather than a pair per capture: a capture writes
     # one series for each, and the number and description are what tell them

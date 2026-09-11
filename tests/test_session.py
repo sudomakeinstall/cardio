@@ -17,6 +17,7 @@ import pytest
 from PIL import Image
 
 # Internal
+from cardio.capture.banner import band_height
 from cardio.scene import Scene
 from cardio.session import VIEW_FUNCTIONS, Session
 from tests.test_app_smoke import build_scene, write_objects
@@ -124,6 +125,14 @@ def test_an_unknown_action_is_refused(session):
         session.do("nonsense")
 
 
+def captures(root: pl.Path) -> list[np.ndarray]:
+    """Every still one capture left under ``root``, by viewport, as greyscale."""
+    return [
+        np.asarray(Image.open(path).convert("L"))
+        for path in sorted(root.glob("out/screenshots/*/*/*"))
+    ]
+
+
 def test_a_capture_has_written_before_the_next_action_begins(tmp_path):
     """The one action that returns before it has done anything.
 
@@ -161,6 +170,30 @@ def test_a_headless_capture_is_a_picture_of_something(tmp_path):
         width, height = session.scene.headless_size
         assert pixels.shape == (height, width), path
         assert pixels.max(), f"{path.parent.name} is a picture of nothing"
+
+
+def test_a_banner_is_written_in_a_band_below_the_picture(tmp_path):
+    """Taller by the band, and the band is not blank.
+
+    Compared against the same capture without one rather than a known height,
+    so what the band does to a picture is what is being checked.
+    """
+    banner = "NOT FOR CLINICAL USE"
+    plain, marked = (tmp_path / "plain"), (tmp_path / "marked")
+    plain.mkdir()
+    marked.mkdir()
+
+    session_on(plain, serialization_directory=plain / "out").do("screenshot")
+    session_on(
+        marked, serialization_directory=marked / "out", capture_banner=banner
+    ).do("screenshot")
+
+    for before, after in zip(captures(plain), captures(marked), strict=True):
+        assert after.shape[1] == before.shape[1]
+        assert after.shape[0] == before.shape[0] + band_height(before.shape[1])
+
+        band = after[before.shape[0] :]
+        assert band.min() < band.max(), "the band carries no lettering"
 
 
 def test_the_size_a_session_renders_at_is_configured(tmp_path):

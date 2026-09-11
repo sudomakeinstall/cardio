@@ -33,6 +33,7 @@ from tests.test_app_smoke import build_app, build_scene, write_volume
 # rather than the state key, because that is what a scene is built from.
 MOVED = {
     "active_volume_label": "vol",
+    "capture_banner": "NOT FOR CLINICAL USE",
     "capture_format": "jpeg",
     "capture_series.vr.number": 401,
     "capture_series.vr.description": "rendering series",

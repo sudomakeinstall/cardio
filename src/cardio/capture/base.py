@@ -68,6 +68,11 @@ class Context:
     ``has_plane`` is what the viewport can offer, not what a given frame did:
     the volume render has a camera rather than an image plane, so no format
     can ask it for one.
+
+    ``banner`` is the line tagged onto the lower margin of what gets written,
+    empty for a capture that carries none.  The picture formats receive it
+    already stamped into the frame; it is carried here for the writers that
+    have to say in their own terms that it is there.
     """
 
     directory: pl.Path
@@ -80,6 +85,7 @@ class Context:
     series_description: str = ""
     frame_of_reference: str = ""
     has_plane: bool = True
+    banner: str = ""
 
 
 class CaptureWriter:

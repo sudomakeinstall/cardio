@@ -1094,6 +1094,13 @@ def test_nothing_offers_to_fit_a_selection_that_is_empty(read_only_app):
     assert 'disabled="!(zoom_labels.length > 0)"' in slider.group(0)
 
 
+def test_the_export_panel_offers_a_banner(read_only_app):
+    """The line tagged onto the margin is editable while the session runs."""
+    _, _, _, ui = read_only_app
+
+    assert re.search(r'v-model="capture_banner"', ui.layout.html)
+
+
 def test_the_export_panel_asks_how_each_series_is_to_be_named(read_only_app):
     """A series is named per viewport, so the panel needs a pair for each."""
     _, _, _, ui = read_only_app

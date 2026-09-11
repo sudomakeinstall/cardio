@@ -214,6 +214,14 @@ class Scene(ps.BaseSettings):
             + ". CLI usage: --capture-format jpeg"
         ),
     )
+    capture_banner: str = pc.Field(
+        default="",
+        description=(
+            "A line tagged onto the lower margin of everything a capture "
+            "writes, in a band below the picture rather than over it. Empty "
+            'adds nothing. CLI usage: --capture-banner "NOT FOR CLINICAL USE"'
+        ),
+    )
     capture_series: SeriesTags = pc.Field(
         default_factory=SeriesTags,
         description=(

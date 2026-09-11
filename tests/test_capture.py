@@ -19,6 +19,13 @@ from vtk.util import numpy_support as vtknp
 # Internal
 from cardio import Scene, dicom
 from cardio.capture import CaptureFormat, Context, Frame, Plane, image_to_array
+from cardio.capture.banner import (
+    band_height,
+    coverage,
+    stamp_image,
+    stamp_rgb,
+    stamp_scalars,
+)
 from cardio.capture.dicom import SecondaryCaptureWriter, SliceWriter, encode
 from cardio.capture.formats import WRITERS, writer_for, writes_series
 from cardio.capture.geometry import plane_from_reslice, reslice_axes
@@ -402,6 +409,84 @@ def test_a_secondary_capture_holds_the_picture(tmp_path):
     assert (dataset.Rows, dataset.Columns) == (6, 8)
     assert np.array_equal(dataset.pixel_array, image_to_array(rgb_frame().image))
     assert "ImagePositionPatient" not in dataset
+
+
+# --- the banner on the lower margin -------------------------------------------
+
+BANNER = "NOT FOR CLINICAL USE"
+
+# Wide enough that the default font fits the banner without shrinking to
+# nothing, and shallow enough that the band is the larger part of the result.
+BLOCK_ROWS = 40
+BLOCK_COLUMNS = 160
+
+
+def rgb_block(components=3, value=90) -> np.ndarray:
+    """A flat picture, so anything the band puts down is the only variation."""
+    return np.full((BLOCK_ROWS, BLOCK_COLUMNS, components), value, np.uint8)
+
+
+def test_a_banner_adds_a_band_below_the_picture():
+    block = rgb_block()
+    stamped = stamp_rgb(block, BANNER)
+
+    assert stamped.shape == (BLOCK_ROWS + band_height(BLOCK_COLUMNS), BLOCK_COLUMNS, 3)
+    assert np.array_equal(stamped[:BLOCK_ROWS], block)
+
+
+def test_the_band_carries_lettering():
+    band = stamp_rgb(rgb_block(), BANNER)[BLOCK_ROWS:]
+
+    assert band.min() < band.max()
+
+
+def test_alpha_is_opaque_across_the_band():
+    band = stamp_rgb(rgb_block(components=4), BANNER)[BLOCK_ROWS:]
+
+    assert np.all(band[..., 3] == 255)
+
+
+def test_a_banner_too_long_for_the_width_is_still_a_band_of_it():
+    """The fit gives up rather than widening the picture to suit the caption."""
+    band = coverage(BANNER * 20, BLOCK_COLUMNS)
+
+    assert band.shape == (band_height(BLOCK_COLUMNS), BLOCK_COLUMNS)
+
+
+def test_the_band_stays_within_the_values_the_cut_holds():
+    scalars = (np.arange(BLOCK_ROWS * BLOCK_COLUMNS) % 500 - 200).astype(np.int16)
+    scalars = scalars.reshape(BLOCK_ROWS, BLOCK_COLUMNS)
+    stamped = stamp_scalars(scalars, BANNER)
+
+    assert stamped.dtype == scalars.dtype
+    assert stamped.shape == (BLOCK_ROWS + band_height(BLOCK_COLUMNS), BLOCK_COLUMNS)
+    assert np.array_equal(stamped[:BLOCK_ROWS], scalars)
+
+    band = stamped[BLOCK_ROWS:]
+    assert band.min() >= scalars.min()
+    assert band.max() <= scalars.max()
+    assert band.min() < band.max()
+
+
+def test_a_stamped_capture_keeps_the_picture_the_right_way_up():
+    stamped = stamp_image(rgb_frame(rows=6, columns=BLOCK_COLUMNS).image, BANNER)
+    array = image_to_array(stamped)
+
+    assert array.shape == (6 + band_height(BLOCK_COLUMNS), BLOCK_COLUMNS, 3)
+    # The marked bottom row of the picture, with the band below it rather than
+    # over it.
+    assert np.all(array[5] == 255)
+
+
+def test_an_empty_banner_adds_nothing():
+    block = rgb_block()
+    assert np.array_equal(stamp_rgb(block, ""), block)
+
+    scalars = np.arange(120, dtype=np.int16).reshape(10, 12)
+    assert np.array_equal(stamp_scalars(scalars, ""), scalars)
+
+    image = rgb_frame().image
+    assert stamp_image(image, "") is image
 
 
 # --- stills and animations ----------------------------------------------------
@@ -820,6 +905,52 @@ def test_a_number_field_left_empty_falls_back_on_what_was_configured(tmp_path):
         server.state.capture_series_number_vr = ""
 
     assert logic.capture.series_for("vr") == (409, "")
+
+
+# --- the banner a capture is written with -------------------------------------
+
+
+def banner_root(tmp_path, name: str) -> pl.Path:
+    """A root of its own, so two captures can be compared side by side."""
+    root = pl.Path(tmp_path) / name
+    root.mkdir()
+    return root
+
+
+def test_a_capture_of_the_values_carries_the_band_and_says_so(tmp_path):
+    """The cut keeps every row it was measured from, and gains the band below."""
+    plain = banner_root(tmp_path, "plain")
+    _, logic = exporting(plain)
+    capture(logic)
+    before = captured_series(plain)
+
+    marked = banner_root(tmp_path, "marked")
+    _, logic = exporting(marked, capture_banner=BANNER)
+    capture(logic)
+    after = captured_series(marked)
+
+    assert before.BurnedInAnnotation == "NO"
+    assert after.BurnedInAnnotation == "YES"
+    assert after.Columns == before.Columns
+    assert after.Rows == before.Rows + band_height(before.Columns)
+    assert np.array_equal(after.pixel_array[: before.Rows], before.pixel_array)
+
+
+def test_the_configured_banner_reaches_the_drawer(tmp_path):
+    server, _, _ = built(tmp_path, capture_banner=BANNER)
+
+    assert server.state.capture_banner == BANNER
+
+
+def test_what_the_drawer_holds_is_the_banner_that_is_written(tmp_path):
+    """Retyped rather than reconfigured, as the series naming is."""
+    server, logic = exporting(tmp_path)
+    with server.state:
+        server.state.capture_banner = BANNER
+
+    capture(logic)
+
+    assert captured_series(tmp_path).BurnedInAnnotation == "YES"
 
 
 # --- the frame a cine capture reads -------------------------------------------
