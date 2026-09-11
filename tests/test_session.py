@@ -181,8 +181,6 @@ def test_a_config_file_is_the_scene(tmp_path):
                 "mpr_window = 1234.0",
                 "mpr_level = 56.0",
                 "mpr_segmentation_opacity = 0.25",
-                "tile_rows = 2",
-                "tile_cols = 4",
                 "active_volume_label = 'vol'",
                 "[[volumes]]",
                 "label = 'vol'",
@@ -190,6 +188,9 @@ def test_a_config_file_is_the_scene(tmp_path):
                 "file_paths = ['vol0.nii.gz']",
                 "[view]",
                 "theme = 'light'",
+                "[tile]",
+                "rows = 2",
+                "cols = 4",
             ]
         )
     )
@@ -209,15 +210,15 @@ def test_a_scene_built_after_a_config_read_is_not_still_reading_it(tmp_path):
     """The sources are handed to pydantic as class attributes and taken back."""
     directory = write_objects(tmp_path)
     config = tmp_path / "cardio.toml"
-    config.write_text("tile_rows = 2")
+    config.write_text("[tile]\nrows = 2")
 
-    assert Scene.load(config_file=config).tile_rows == 2
+    assert Scene.load(config_file=config).tile.rows == 2
 
     assert (
         Scene(
             volumes=[
                 {"label": "vol", "directory": directory, "file_paths": ["vol0.nii.gz"]}
             ]
-        ).tile_rows
+        ).tile.rows
         == 3
     )

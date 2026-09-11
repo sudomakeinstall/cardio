@@ -396,4 +396,4 @@ def test_the_refusal_names_the_path_that_was_asked_for(tmp_path):
 
 
 def test_naming_no_rotation_file_is_not_an_error(tmp_path):
-    assert scene_from_toml(tmp_path, "tile_rows = 2").mpr_rotation_file is None
+    assert scene_from_toml(tmp_path, "[tile]\nrows = 2").mpr_rotation_file is None

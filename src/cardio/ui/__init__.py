@@ -103,8 +103,10 @@ class UI:
                     with section("zoom", "Zoom", "mdi-fit-to-screen-outline"):
                         zoom_panel(self.server, self.scene)
 
-                    with section("tiles", "Tile View", "mdi-view-grid-outline"):
-                        tiles_panel(self.server, self.scene)
+                # Not nested under the segmentations: the parallel sources step
+                # the volume's own cut along its normal, and want nothing else.
+                with section("tiles", "Tile View", "mdi-view-grid-outline"):
+                    tiles_panel(self.server, self.scene)
 
             with section("export", "Export", "mdi-video-outline"):
                 capture_panel(self.server, self.scene)

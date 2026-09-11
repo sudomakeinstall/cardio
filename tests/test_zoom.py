@@ -19,6 +19,7 @@ from cardio.segmentation import (
     index_to_world,
     label_mask,
     plane_shadow,
+    trimmed_bounds,
     voxel_corner_cloud,
     voxel_shell,
 )
@@ -98,6 +99,32 @@ def test_the_extent_is_taken_in_the_plane_s_own_axes():
 
     assert centre == pytest.approx((0.0, 0.0))
     assert half_span == pytest.approx((0.0, 0.0))
+
+
+def test_an_untrimmed_shadow_covers_every_point():
+    cloud = np.array([[0.0, 0.0, 0.0]] * 999 + [[100.0, 0.0, 0.0]])
+    _, half_span = plane_shadow(cloud, np.eye(3), np.zeros(3))
+    assert half_span[0] == pytest.approx(50.0)
+
+
+def test_trimming_drops_the_tail_that_sets_the_extent():
+    """A stray voxel is a vanishing share of a cloud and yet its whole extent."""
+    cloud = np.array([[0.0, 0.0, 0.0]] * 999 + [[100.0, 0.0, 0.0]])
+    _, half_span = plane_shadow(cloud, np.eye(3), np.zeros(3), percentile=99.0)
+    assert half_span[0] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_trimming_is_off_until_it_is_asked_for():
+    projected = np.array([[0.0], [1.0], [100.0]])
+    low, high = trimmed_bounds(projected)
+    assert (low, high) == (pytest.approx([0.0]), pytest.approx([100.0]))
+
+
+def test_a_trim_takes_the_same_share_off_each_end():
+    projected = np.array([[float(value)] for value in range(101)])
+    low, high = trimmed_bounds(projected, 98.0)
+    assert low == pytest.approx([1.0])
+    assert high == pytest.approx([99.0])
 
 
 def test_a_turned_plane_sees_a_turned_shadow():

@@ -151,6 +151,7 @@ DOCUMENT = _declare(
     frame="current_frame",
     help_overlay_visible="view.help_visible",
     incrementing="playback.incrementing",
+    label_percentile="label_percentile",
     index_order="mpr_rotation_sequence.metadata.index_order",
     maximized_view="view.layout",
     metadata_overlay_visible="view.metadata_visible",
@@ -176,8 +177,23 @@ DOCUMENT = _declare(
     ),
     snap_traverse="snap.traverse",
     theme_mode="view.theme",
-    tile_cols="tile_cols",
-    tile_rows="tile_rows",
+    tile_cols="tile.cols",
+    tile_labels="tile.labels",
+    tile_plane="tile.plane",
+    tile_reverse="tile.reverse",
+    tile_rows="tile.rows",
+    tile_seg_label=(
+        "tile.segmentation_label",
+        "an empty one means the first segmentation, and a scene may have none",
+    ),
+    tile_source=(
+        "tile.source",
+        (
+            "two of the three sources read a segmentation, so a scene without "
+            "one is seeded onto the third whatever it asked for"
+        ),
+    ),
+    tile_spacing="tile.spacing",
     zoom_fill="zoom.fill",
     zoom_labels="zoom.labels",
     zoom_locked="zoom.locked",
@@ -223,6 +239,10 @@ ITEMS = _declare(
     mpr_presets="the window/level presets, spelled for the picker",
     segmentation_items="one entry per segmentation in the scene",
     snap_available_labels="the labels present in the segmentation snap is aimed at",
+    tile_available_labels=(
+        "the labels present in the segmentation the stack is measured against"
+    ),
+    tile_plane_items="the three MPR planes, spelled for the picker",
     tile_sizes="the grid sizes offered, fixed at build time",
     volume_items="one entry per volume in the scene",
     volume_preset_items="the transfer function presets, spelled for the picker",

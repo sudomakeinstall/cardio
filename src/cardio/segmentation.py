@@ -200,7 +200,30 @@ def voxel_corner_cloud(image_data, labels: ty.Sequence[int]) -> np.ndarray | Non
     return corners @ matrix.T + origin
 
 
-def plane_shadow(cloud, frame, origin):
+def trimmed_bounds(projected, percentile: float = 100.0):
+    """The extent of ``projected``, less the tails outside ``percentile``.
+
+    ``percentile`` is how much of the cloud the bounds have to cover, centred:
+    100 is the true extent, 99.9 drops the outermost twentieth of a percent at
+    each end. A handful of mislabelled voxels at the edge of the image is a
+    vanishing share of a cloud and yet sets its whole extent, so a fit measured
+    off one is a fit to the artifact.
+
+    Trimming is off by default, because dropping what a label claims is a thing
+    to ask for rather than a thing to discover: a genuinely thin structure
+    looks exactly like a tail.
+    """
+    if percentile >= 100.0:
+        return projected.min(axis=0), projected.max(axis=0)
+
+    tail = (100.0 - percentile) / 2.0
+    return (
+        np.percentile(projected, tail, axis=0),
+        np.percentile(projected, 100.0 - tail, axis=0),
+    )
+
+
+def plane_shadow(cloud, frame, origin, percentile: float = 100.0):
     """``cloud``'s shadow on a plane, as a centre and a half-span from ``origin``.
 
     ``frame``'s first two columns are the plane's right and up directions in
@@ -217,8 +240,29 @@ def plane_shadow(cloud, frame, origin):
 
     axes = np.asarray(frame, dtype=np.float64)[:, :2]
     projected = (np.asarray(cloud) - np.asarray(origin)) @ axes
-    low, high = projected.min(axis=0), projected.max(axis=0)
+    low, high = trimmed_bounds(projected, percentile)
     return (high + low) / 2.0, (high - low) / 2.0
+
+
+def plane_depth(cloud, normal, origin, percentile: float = 100.0):
+    """``cloud``'s extent along ``normal``, as a centre and a half-span from ``origin``.
+
+    The out-of-plane sibling of ``plane_shadow``: that one projects onto the two
+    in-plane axes to say how wide a cut has to be, this one projects onto the
+    third to say how far a stack of cuts has to travel to cross the whole thing.
+
+    Trimmed the same way and for the same reason. A stray voxel costs a stack
+    its whole far end -- tiles spent crossing empty space between the artifact
+    and the anatomy -- and how much it costs depends on where the normal points,
+    so an outlier that barely shows along one is the whole story along another.
+    """
+    if cloud is None or not len(cloud):
+        return None
+
+    axis = np.asarray(normal, dtype=np.float64)
+    projected = (np.asarray(cloud) - np.asarray(origin)) @ axis
+    low, high = trimmed_bounds(projected, percentile)
+    return float(high + low) / 2.0, float(high - low) / 2.0
 
 
 def principal_axes(

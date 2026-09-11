@@ -103,15 +103,56 @@ help_visible = false                      # open showing the shortcut reference
 bpm = 75            # playback speed, in beats per minute
 bpr = 3             # cardiac cycles per full rotation of the camera
 rotating = true     # rotate the camera while playing
+
+[tile]
+rows = 3            # rows in the tile grid, 1 to 6
+cols = 3            # columns in the tile grid, 1 to 6
+source = "spacing"  # traverse, spacing, or labels
+plane = "axial"     # plane the parallel sources cut in: axial, coronal, sagittal
+spacing = 10.0      # millimetres between adjacent cuts, in the spacing source
+labels = [1, 2]     # labels the grid spans end to end, in the labels source
+reverse = false     # walk the path from the far end, without turning the cut
 ```
 
 ```bash
-$ cardio --view.layout tile --playback.bpm 75
+$ cardio --view.layout tile --playback.bpm 75 --tile.rows 2
 ```
 
-Tile view draws several cuts along the traverse path at once, so it wants a
-`[snap]` block in traverse mode to have anything to show.  Reset returns the
-playback controls to whatever is written here.
+Tile view draws several cuts of one volume side by side.  Where those cuts come
+from is the `source`:
+
+* `traverse` walks the path between the two interface planes, so it wants a
+  `[snap]` block in traverse mode to have anything to show.  Its plane is the
+  interface, which is why it takes no `plane`.
+* `spacing` steps the quad view's own cut a fixed number of millimetres along
+  its normal, centred on the MPR origin.  It asks for nothing but a volume, so
+  it is what a scene with no segmentation opens on.
+* `labels` steps that same cut across a chosen set of labels instead: the first
+  and last tile sit on the labels' outermost bounds, and a bigger grid samples
+  the same span more finely rather than covering more of it.  The selection is
+  the tile panel's own, independent of the `[snap]` groups and the `[zoom]`
+  labels.
+
+`reverse` takes the same tiles in the opposite order.  It is the control to
+reach for when a stack runs base to apex and you wanted apex to base: a half
+turn would flip the normal too, but it would flip one of the in-plane axes with
+it and hand back every tile mirrored.
+
+While the grid is on screen it is what `zoom_to_labels` frames, measured in the
+plane the tiles are cut in.  Reset returns the playback controls to whatever is
+written here.
+
+Both the fit and the `labels` span are measured off the label cloud, which is
+unioned over every frame -- so a handful of mislabelled voxels in one frame sets
+the extent for all of them.  `label_percentile` is how much of that cloud a
+measurement has to cover; below 100 the outermost points are ignored:
+
+```toml
+label_percentile = 99.95   # ignore the outermost 0.025% at each end
+```
+
+How much a stray voxel costs depends on where the normal points, so one that
+barely shows in an axial fit can be most of an oblique stack.
 
 The `volume` and `tile` layouts do not draw the three MPR views, so the slices
 behind them are not resampled while either is on screen; they are brought up to

@@ -5,14 +5,11 @@ the axial, coronal and sagittal paths drifted apart. Going through this type
 means a change reaches all three views or none.
 """
 
-# System
-import math
-
 # Third Party
 import vtk
 
 # Internal
-from .camera import fit_about_origin
+from .camera import _focal_display_point, fit_about_origin, world_per_pixel
 from .reslice import VIEWS, ResliceSet
 
 
@@ -125,33 +122,5 @@ class MPRViews:
             renderer.ResetCameraClippingRange()
 
     def world_per_pixel(self, view: str) -> float:
-        """World units spanned by one display pixel at the focal plane.
-
-        The scale a pan needs to keep the image under the cursor. Measured
-        through the camera rather than from the parallel scale, so it holds for
-        a perspective camera too. Zero if the window has never been sized, when
-        every display point projects onto the same spot.
-        """
-        renderer = self.renderer(view)
-        if not all(renderer.GetSize()):
-            return 0.0
-
-        depth = _focal_display_point(renderer)[2]
-        start = _display_to_world(renderer, 0.0, 0.0, depth)
-        end = _display_to_world(renderer, 1.0, 0.0, depth)
-        return math.dist(start, end)
-
-
-def _focal_display_point(renderer) -> tuple[float, float, float]:
-    """The camera's focal point in display coordinates, with its depth."""
-    renderer.SetWorldPoint(*renderer.GetActiveCamera().GetFocalPoint(), 1.0)
-    renderer.WorldToDisplay()
-    return renderer.GetDisplayPoint()
-
-
-def _display_to_world(renderer, x: float, y: float, depth: float) -> list[float]:
-    """One display point at a fixed depth, in world units."""
-    renderer.SetDisplayPoint(x, y, depth)
-    renderer.DisplayToWorld()
-    *point, w = renderer.GetWorldPoint()
-    return [value / w for value in point] if w else point
+        """World units spanned by one display pixel in ``view``."""
+        return world_per_pixel(self.renderer(view))

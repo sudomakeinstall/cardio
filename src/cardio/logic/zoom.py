@@ -27,12 +27,17 @@ class ZoomController(Controller):
     # which is a fallback rather than a field, and the registry says so.
     SELECTION = ("zoom_labels", "zoom_plane", "zoom_fill")
 
+    # Not part of the selection: it says how much of a label cloud to believe,
+    # which is a fact about the series rather than a thing this panel picks.
+    # TileController reads it for its stack the same way.
+    MEASUREMENT = "label_percentile"
+
     # Apart from the selection for the reason snap keeps its own apart: the
     # lock acts the moment it is written, so it goes on last, once there is a
     # settled selection to act on.
     LOCK = "zoom_locked"
 
-    seeds = (*SELECTION, LOCK)
+    seeds = (*SELECTION, MEASUREMENT, LOCK)
 
     def __init__(self, app):
         super().__init__(app)
@@ -45,7 +50,7 @@ class ZoomController(Controller):
 
         state = self.server.state
         state.change("zoom_seg_label")(self._on_segmentation_changed)
-        state.change(*self.SELECTION, self.LOCK)(self.refit)
+        state.change(*self.SELECTION, self.MEASUREMENT, self.LOCK)(self.refit)
         # A fit is measured from the origin and along the rotated frame, so it
         # stops being the fit that was asked for the moment either moves. The
         # frame is not listened for: the cloud already spans every one of them,
@@ -66,7 +71,7 @@ class ZoomController(Controller):
         treats asking for one as a warning rather than an error.
         """
         self.server.state.zoom_seg_label = self.scene.zoom.segmentation_label
-        self.write_seeds(*self.SELECTION)
+        self.write_seeds(*self.SELECTION, self.MEASUREMENT)
         self._publish_pickers()
         self.write_seeds(self.LOCK)
         self.refit()
@@ -147,13 +152,48 @@ class ZoomController(Controller):
         if self._publish_available_labels(seg):
             self.server.state.zoom_labels = []
 
+    @property
+    def fit_plane(self) -> str:
+        """The plane the fit is measured in.
+
+        The tile grid cuts in a plane of its own, and while it is up that is
+        the plane being looked at -- ``zoom_plane`` names one of three
+        viewports that are not being drawn at all.
+        """
+        if self.app.tiles.active:
+            return self.app.tiles.cut_plane
+        return getattr(self.server.state, "zoom_plane", "")
+
+    def _viewport(self):
+        """The renderer the fit is sized against, and its world-per-pixel.
+
+        Whichever viewport is on screen. A fit measured against one that is
+        not being drawn frames nothing, which is what the tile grid used to
+        get: it was sized against an MPR window and applied to an MPR camera,
+        and the tiles kept whatever scale their own refit had given them.
+        """
+        tiles = self.scene.tile_views
+        if self.app.tiles.active and tiles is not None and len(tiles):
+            return tiles.renderers[0], tiles.world_per_pixel()
+
+        views = self.scene.mpr_views
+        if views is None:
+            return None
+        return views.renderer(self.fit_plane), views.world_per_pixel(self.fit_plane)
+
     def shadow(self):
-        """The chosen labels' shadow on the chosen plane, and that plane's basis.
+        """The chosen labels' shadow on the fitted plane, and that plane's basis.
 
         ``(centre, half_span, frame)``, the first two in the plane's own right
         and up axes and relative to the current origin. None whenever there is
         nothing to fit: no segmentation, no labels, or a label set the series
         never carries.
+
+        While the tile grid is up the frame is the one the parallel sources cut
+        in, which is also the traverse source's whenever its alignment is the
+        rotation the views carry. The traverse tiles each tilt a little off it,
+        which is the same reason the grid holds one shared scale rather than
+        one fit per tile.
         """
         state = self.server.state
         labels = list(getattr(state, "zoom_labels", []) or [])
@@ -161,7 +201,7 @@ class ZoomController(Controller):
         if seg is None or not labels:
             return None
 
-        plane = getattr(state, "zoom_plane", "")
+        plane = self.fit_plane
         if plane not in VIEW_TRANSFORMS:
             return None
 
@@ -170,7 +210,9 @@ class ZoomController(Controller):
         # rotation math is.
         frame = self.app.rotations.rotation_matrix() @ VIEW_TRANSFORMS[plane]
         origin = self.convention.point_to_itk(state.mpr_origin)
-        shadow = plane_shadow(seg.label_cloud(labels), frame, origin)
+        shadow = plane_shadow(
+            seg.label_cloud(labels), frame, origin, state.label_percentile
+        )
         if shadow is None:
             return None
 
@@ -178,7 +220,7 @@ class ZoomController(Controller):
         return centre, half_span, frame
 
     def zoom_factor(self, half_span) -> float | None:
-        """The factor that brings ``half_span`` inside the chosen viewport.
+        """The factor that brings ``half_span`` inside the viewport on screen.
 
         Measured about the origin, which ``zoom_to_labels`` has put on the
         shadow's centre by the time this is asked.
@@ -187,15 +229,15 @@ class ZoomController(Controller):
         sized -- which it has not been until a client has connected and laid
         the viewports out.
         """
-        views = self.scene.mpr_views
-        if views is None:
+        viewport = self._viewport()
+        if viewport is None:
             return None
 
-        plane = self.server.state.zoom_plane
+        renderer, per_pixel = viewport
         return fit_factor(
             tuple(half_span),
-            views.renderer(plane).GetSize(),
-            views.world_per_pixel(plane),
+            renderer.GetSize(),
+            per_pixel,
             self.server.state.zoom_fill / 100.0,
         )
 
@@ -233,8 +275,19 @@ class ZoomController(Controller):
             return
 
         self._recentre(centre, frame)
-        self.scene.mpr_views.zoom(factor)
+        self._zoom_views(factor)
         self.server.controller.view_update()
+
+    def _zoom_views(self, factor: float):
+        """Apply the fit to whatever it was sized against, and only that.
+
+        The two sets of cameras hold their own absolute scales, so a factor
+        measured against one viewport frames nothing in the other.
+        """
+        if self.app.tiles.active and self.scene.tile_views is not None:
+            self.scene.tile_views.zoom(factor)
+            return
+        self.scene.mpr_views.zoom(factor)
 
     def _recentre(self, centre, frame):
         """Slide the origin onto ``centre``, given in ``frame``'s first two axes.

@@ -100,6 +100,42 @@ def fit_about_origin(renderer) -> None:
     renderer.ResetCamera(-x, x, -y, y, -z, z)
 
 
+def _focal_display_point(renderer) -> tuple[float, float, float]:
+    """The camera's focal point in display coordinates, with its depth."""
+    renderer.SetWorldPoint(*renderer.GetActiveCamera().GetFocalPoint(), 1.0)
+    renderer.WorldToDisplay()
+    return renderer.GetDisplayPoint()
+
+
+def _display_to_world(renderer, x: float, y: float, depth: float) -> list[float]:
+    """One display point at a fixed depth, in world units."""
+    renderer.SetDisplayPoint(x, y, depth)
+    renderer.DisplayToWorld()
+    *point, w = renderer.GetWorldPoint()
+    return [value / w for value in point] if w else point
+
+
+def world_per_pixel(renderer) -> float:
+    """World units spanned by one display pixel at the focal plane.
+
+    The scale a pan needs to keep the image under the cursor, and the scale
+    ``fit_factor`` sizes a fit through. Measured through the camera rather than
+    from the parallel scale, so it holds for a perspective camera too. Zero if
+    the viewport has never been sized, when every display point projects onto
+    the same spot.
+
+    Here rather than on ``MPRViews`` because a tile renderer is measured the
+    same way, and one of the two viewports the fit is sized against is a tile.
+    """
+    if not all(renderer.GetSize()):
+        return 0.0
+
+    depth = _focal_display_point(renderer)[2]
+    start = _display_to_world(renderer, 0.0, 0.0, depth)
+    end = _display_to_world(renderer, 1.0, 0.0, depth)
+    return math.dist(start, end)
+
+
 def fit_factor(
     half_extent: tuple[float, float],
     size: tuple[int, int],

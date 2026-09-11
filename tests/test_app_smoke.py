@@ -25,6 +25,7 @@ from cardio.reslice import VIEW_TRANSFORMS
 from cardio.rotation import RotationMetadata
 from cardio.scene import Scene
 from cardio.state import VIEWPORTS, ObjectState
+from cardio.tile import TileSource
 from cardio.ui import UI, common
 from cardio.view import Layout, Theme
 from tests.geometry import matrix_array
@@ -597,7 +598,7 @@ def test_apply_scene_puts_the_configured_values_back(app):
         server.state.theme_mode = Theme.LIGHT.value
         server.state.bpm = scene.playback.bpm + 37
         server.state.snap_traverse = 77
-        server.state.tile_rows = scene.tile_rows + 2
+        server.state.tile_rows = scene.tile.rows + 2
         server.state.mpr_segmentation_opacity = 0.123
 
     logic.apply_scene()
@@ -605,7 +606,7 @@ def test_apply_scene_puts_the_configured_values_back(app):
     assert server.state.theme_mode == scene.view.theme.value
     assert server.state.bpm == scene.playback.bpm
     assert server.state.snap_traverse == scene.snap.traverse
-    assert server.state.tile_rows == scene.tile_rows
+    assert server.state.tile_rows == scene.tile.rows
     assert server.state.mpr_segmentation_opacity == scene.mpr_segmentation_opacity
 
 
@@ -697,7 +698,7 @@ def test_the_tile_window_is_built_with_the_layout(read_only_app):
 
     assert scene.tile_views is not None
     assert scene.tile_views.window.GetOffScreenRendering() == 1
-    assert len(scene.tile_views) == scene.tile_rows * scene.tile_cols
+    assert len(scene.tile_views) == scene.tile.rows * scene.tile.cols
 
 
 def test_entering_tile_mode_fills_the_grid(app):
@@ -735,6 +736,165 @@ def test_the_grid_stays_empty_without_a_path(app):
     assert tile_props(scene) == [0] * len(scene.tile_views)
 
 
+def test_the_spacing_source_fills_the_grid_with_no_selection(app):
+    """A parallel stack asks nothing of snap: the volume is the whole of it."""
+    server, scene, _, _ = app
+    connect(server)
+
+    with server.state:
+        server.state.maximized_view = "tile"
+        server.state.tile_source = "spacing"
+
+    assert tile_props(scene) == [1] * len(scene.tile_views)
+
+
+def test_the_spacing_source_follows_the_plane_it_is_given(app):
+    server, scene, _, _ = app
+    connect(server)
+
+    with server.state:
+        server.state.maximized_view = "tile"
+        server.state.tile_source = "spacing"
+    with server.state:
+        server.state.tile_plane = "coronal"
+
+    assert tile_props(scene) == [1] * len(scene.tile_views)
+
+
+def test_the_labels_source_fills_the_grid_from_its_own_selection(app):
+    server, scene, _, _ = app
+    connect(server)
+
+    with server.state:
+        server.state.maximized_view = "tile"
+        server.state.tile_source = "labels"
+
+    assert tile_props(scene) == [0] * len(scene.tile_views)
+
+    with server.state:
+        server.state.tile_labels = [
+            label["value"] for label in server.state.tile_available_labels
+        ]
+
+    assert tile_props(scene) == [1] * len(scene.tile_views)
+
+
+def test_a_volume_only_scene_can_still_tile(tmp_path):
+    """The spacing source asks for nothing a scene without labels cannot give."""
+    scene = build_scene(tmp_path, segmentations=[], meshes=[])
+    server, _, _, ui = build_app(scene)
+    connect(server)
+
+    assert server.state.tile_source == TileSource.SPACING
+    assert 'v-model="tile_source"' in ui.layout.html
+
+    with server.state:
+        server.state.maximized_view = "tile"
+
+    assert tile_props(scene) == [1] * len(scene.tile_views)
+
+
+def test_a_volume_only_scene_is_offered_only_the_source_it_can_use(tmp_path):
+    scene = build_scene(tmp_path, segmentations=[], meshes=[])
+    _, _, _, ui = build_app(scene)
+
+    offered = set(re.findall(r'value="(traverse|spacing|labels)"', ui.layout.html))
+    assert offered == {TileSource.SPACING.value}
+
+
+def test_a_volume_only_drawer_binds_nothing_that_was_never_written(tmp_path):
+    """A binding onto an unwritten key throws where the panel renders, not here.
+
+    The tile panel now shows in a scene with no segmentation, and the pickers
+    the labels source reads are filled only when there is one to read them off.
+    """
+    scene = build_scene(tmp_path, segmentations=[], meshes=[])
+    server, _, _, ui = build_app(scene)
+    connect(server)
+
+    written = set(dict(server.state.initial))
+    bound = set(re.findall(r'(?:v-model|:items)="([a-z_]+)"', ui.layout.html))
+    assert bound <= written, sorted(bound - written)
+
+
+def tile_scales(scene) -> list[float]:
+    return [
+        round(r.GetActiveCamera().GetParallelScale(), 6)
+        for r in scene.tile_views.renderers
+    ]
+
+
+def test_the_fit_frames_the_tiles_while_the_tiles_are_what_is_on_screen(app):
+    """The fit used to be sized against an MPR window and applied to an MPR
+    camera, so with the grid up it framed nothing anybody was looking at.
+    """
+    server, scene, _, _ = app
+    connect(server)
+
+    with server.state:
+        server.state.maximized_view = "tile"
+        server.state.tile_source = "spacing"
+    # A fit is sized against a viewport, and nothing here is a client laying
+    # one out.
+    scene.tile_views.window.SetSize(400, 300)
+    with server.state:
+        server.state.zoom_labels = [1]
+
+    before = tile_scales(scene)
+    mpr_before = scene.mpr_views.renderer("axial").GetActiveCamera().GetParallelScale()
+
+    server.controller.zoom_to_labels()
+
+    after = tile_scales(scene)
+    assert after != before, "the fit never reached the grid"
+    assert len(set(after)) == 1, "the tiles must keep their one shared scale"
+    assert scene.mpr_views.renderer("axial").GetActiveCamera().GetParallelScale() == (
+        pytest.approx(mpr_before)
+    ), "a factor sized against a tile frames nothing in an MPR window"
+
+
+def test_a_held_fit_survives_a_change_to_the_grid(app):
+    """A tile refit frames the whole cut, which is not what a held fit framed."""
+    server, scene, _, _ = app
+    connect(server)
+
+    with server.state:
+        server.state.maximized_view = "tile"
+        server.state.tile_source = "spacing"
+    scene.tile_views.window.SetSize(400, 300)
+    with server.state:
+        server.state.zoom_labels = [1]
+        server.state.zoom_locked = True
+
+    # The one shared scale, not the list: a reshaped grid has fewer of them.
+    held = set(tile_scales(scene))
+    assert len(held) == 1
+
+    for key, value in (("tile_reverse", True), ("tile_rows", 2), ("tile_spacing", 4.0)):
+        with server.state:
+            server.state[key] = value
+        assert set(tile_scales(scene)) == held, f"{key} threw the fit away"
+
+
+def test_the_fit_measures_in_the_plane_the_tiles_are_cut_in(app):
+    server, _, logic, _ = app
+    connect(server)
+
+    with server.state:
+        server.state.maximized_view = "tile"
+        server.state.tile_source = "spacing"
+    with server.state:
+        server.state.tile_plane = "coronal"
+        server.state.zoom_plane = "sagittal"
+
+    assert logic.zoom.fit_plane == "coronal"
+
+    with server.state:
+        server.state.maximized_view = ""
+
+    assert logic.zoom.fit_plane == "sagittal"
+
+
 def test_leaving_tile_mode_stops_retiling(app):
     server, scene, _, _ = app
     traverse_selection(server)
@@ -745,7 +905,7 @@ def test_leaving_tile_mode_stops_retiling(app):
         server.state.maximized_view = ""
         server.state.tile_rows = 6
 
-    assert len(scene.tile_views) == scene.tile_rows * scene.tile_cols
+    assert len(scene.tile_views) == scene.tile.rows * scene.tile.cols
 
 
 # --- Reset returns the snap panel to its defaults -----------------------------

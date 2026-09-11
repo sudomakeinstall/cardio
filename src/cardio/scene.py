@@ -14,6 +14,7 @@ from .playback import Playback
 from .rotation import RotationSequence
 from .segmentation import Segmentation
 from .snap import Snap
+from .tile import Tile
 from .tile_views import TileViews
 from .types import RGBColor
 from .view import View
@@ -190,11 +191,16 @@ class Scene(ps.BaseSettings):
         le=1.0,
         description="Opacity of the segmentation overlays on the MPR and tile views",
     )
-    tile_rows: int = pc.Field(
-        default=3, ge=1, le=6, description="Rows in the tile view grid"
-    )
-    tile_cols: int = pc.Field(
-        default=3, ge=1, le=6, description="Columns in the tile view grid"
+    label_percentile: float = pc.Field(
+        default=100.0,
+        ge=50.0,
+        le=100.0,
+        description=(
+            "How much of a label cloud a measurement taken off it has to cover, "
+            "as a percentage. Below 100 the outermost points are ignored, so a "
+            "few mislabelled voxels cannot set the whole extent of a zoom fit or "
+            "a tile stack. CLI usage: --label-percentile 99.95"
+        ),
     )
     screenshot_viewports: list[str] = pc.Field(
         default=["vr", "axial", "coronal", "sagittal", "tile"],
@@ -231,6 +237,10 @@ class Scene(ps.BaseSettings):
     zoom: Zoom = pc.Field(
         default_factory=Zoom,
         description='Labels the views are fitted to. CLI usage: --zoom.labels "[1]" --zoom.plane coronal',
+    )
+    tile: Tile = pc.Field(
+        default_factory=Tile,
+        description="Tile grid settings. CLI usage: --tile.rows 2 --tile.cols 4",
     )
 
     # Field validators for JSON string inputs
@@ -494,7 +504,7 @@ class Scene(ps.BaseSettings):
         """Initialize the tile grid's render window on first use."""
         if self._tile_views is None:
             self._tile_views = TileViews()
-            self._tile_views.set_grid(self.tile_rows, self.tile_cols)
+            self._tile_views.set_grid(self.tile.rows, self.tile.cols)
 
     def hide_all_frames(self):
         for a in self.renderer.GetActors():

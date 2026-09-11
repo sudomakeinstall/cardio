@@ -158,11 +158,15 @@ class ResliceSet:
 
 
 class TileSet:
-    """One frame's axial reslice pipelines, one per tile of the grid.
+    """One frame's reslice pipelines, one per tile of the grid.
 
-    The same pipeline as an MPR view, repeated: every tile is the axial cut of
+    The same pipeline as an MPR view, repeated: every tile is one named cut of
     whatever pose it is given, so a tile is a true cross-section of the path
     rather than a slice of a fixed frame.
+
+    The plane is a ``set_poses`` argument rather than a field because nothing
+    the pipeline is built from depends on it -- only the reslice matrix does --
+    so a grid that changes plane keeps the pipelines it already has.
     """
 
     def __init__(
@@ -188,17 +192,20 @@ class TileSet:
     def values(self):
         return iter(self.tiles)
 
-    def set_poses(self, poses: list[tuple[list[float], np.ndarray]]):
+    def set_poses(
+        self, poses: list[tuple[list[float], np.ndarray]], view: str = "axial"
+    ):
         """Aim each tile at its own origin and rotation, both in LPS (ITK).
+
+        ``view`` is the plane each pose is cut in, composed onto the rotation
+        the way an MPR view composes it.
 
         Extra poses are ignored and missing ones leave their tile where it was,
         so a grid that has just changed shape is never posed half from the old
         list.
         """
         for parts, (origin, rotation) in zip(self.tiles, poses):
-            matrix = create_vtk_reslice_matrix(
-                rotation @ VIEW_TRANSFORMS["axial"], origin
-            )
+            matrix = create_vtk_reslice_matrix(rotation @ VIEW_TRANSFORMS[view], origin)
             parts["reslice"].SetResliceAxes(matrix)
             parts["reslice"].Update()
 

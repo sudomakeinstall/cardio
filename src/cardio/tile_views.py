@@ -10,7 +10,7 @@ window means the shape is ours to change -- add renderers, recompute rectangles
 import vtk
 
 # Internal
-from .camera import fit_about_origin
+from .camera import fit_about_origin, world_per_pixel
 from .reslice import TileSet
 
 # Six each way is already 36 reslices per frame per object; past that the tiles
@@ -119,6 +119,17 @@ class TileViews:
         for renderer in self._renderers:
             camera = renderer.GetActiveCamera()
             camera.SetParallelScale(camera.GetParallelScale() / factor)
+
+    def world_per_pixel(self) -> float:
+        """World units spanned by one display pixel of a tile.
+
+        One answer for the whole grid: the tiles hold a single parallel scale
+        and share the window evenly, so every tile measures the same. Zero
+        before the window has been sized, as the MPR views' does.
+        """
+        if not self._renderers:
+            return 0.0
+        return world_per_pixel(self._renderers[0])
 
     def reset_cameras(self):
         """Refit the tiles, then put them all on one scale.

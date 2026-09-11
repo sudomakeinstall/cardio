@@ -21,6 +21,7 @@ from cardio.orientation import (
 )
 from cardio.rotation import RotationMetadata, RotationSequence
 from cardio.snap import Snap
+from cardio.tile import Tile
 from cardio.tile_views import TileViews
 
 
@@ -72,8 +73,7 @@ class FakeScene:
         index_order=IndexOrder.ITK,
         angle_units=AngleUnits.DEGREES,
         volumes=None,
-        tile_rows=3,
-        tile_cols=3,
+        tile=None,
         mpr_views=None,
         snap=None,
         current_frame=0,
@@ -82,8 +82,7 @@ class FakeScene:
         self.snap = snap or Snap()
         self.current_frame = current_frame
         self.volumes = list(volumes or [])
-        self.tile_rows = tile_rows
-        self.tile_cols = tile_cols
+        self.tile = tile or Tile()
         self.tile_views = None
         self.mpr_views = mpr_views
         self.mpr_rotation_sequence = RotationSequence(
@@ -93,7 +92,7 @@ class FakeScene:
     def setup_tile_render_window(self):
         if self.tile_views is None:
             self.tile_views = TileViews()
-            self.tile_views.set_grid(self.tile_rows, self.tile_cols)
+            self.tile_views.set_grid(self.tile.rows, self.tile.cols)
 
 
 class FakeApp:
@@ -137,6 +136,7 @@ def snap_state(**overrides) -> dict:
         "frame": 0,
         "mpr_origin": [0.0, 0.0, 0.0],
         "mpr_rotation_data": {"angles_list": []},
+        "label_percentile": 100.0,
     }
     state.update(overrides)
     return state

@@ -9,7 +9,7 @@ from cardio.orientation import (
     create_vtk_reslice_matrix,
     euler_angle_to_rotation_matrix,
 )
-from cardio.reslice import VIEW_TRANSFORMS, TileSet
+from cardio.reslice import VIEW_TRANSFORMS, VIEWS, TileSet
 from cardio.tile_views import MAX_COLS, MAX_ROWS, TileViews, tile_viewport
 from tests.phantoms import make_image
 
@@ -214,6 +214,22 @@ def test_set_poses_writes_the_axial_matrix_each_tile_asks_for():
         expected = create_vtk_reslice_matrix(
             rotation @ VIEW_TRANSFORMS["axial"], origin
         )
+        actual = grid[tile]["reslice"].GetResliceAxes()
+        for row in range(4):
+            for column in range(4):
+                assert actual.GetElement(row, column) == pytest.approx(
+                    expected.GetElement(row, column)
+                )
+
+
+@pytest.mark.parametrize("view", VIEWS)
+def test_set_poses_cuts_in_whichever_plane_it_is_handed(view):
+    grid = tiles(2)
+    poses = [([0.0, 1.0, 2.0], np.eye(3)), ([3.0, 4.0, 5.0], np.eye(3))]
+    grid.set_poses(poses, view)
+
+    for tile, (origin, rotation) in enumerate(poses):
+        expected = create_vtk_reslice_matrix(rotation @ VIEW_TRANSFORMS[view], origin)
         actual = grid[tile]["reslice"].GetResliceAxes()
         for row in range(4):
             for column in range(4):

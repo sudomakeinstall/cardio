@@ -4,7 +4,7 @@
 from trame.widgets import vuetify3 as vuetify
 
 # Internal
-from ..common import NOT_TILE_ACTIVE, SLIDER_CLASS, VOLUME_ACTIVE
+from ..common import SLIDER_CLASS, VOLUME_ACTIVE
 from .snap import ACTION_CLASS
 
 # There is nothing to fit until at least one label is chosen.
@@ -52,10 +52,8 @@ def zoom_panel(server, scene):
         density="compact",
         classes="mb-2",
     )
-    # The fit is sized against a viewport, and the tile grid is not one of the
-    # three it sizes against.
     vuetify.VSlider(
-        v_if=f"{VOLUME_ACTIVE} && {NOT_TILE_ACTIVE}",
+        v_if=VOLUME_ACTIVE,
         v_model=("zoom_fill",),
         label="Fill",
         title="How much of the viewport the labels should take up",
@@ -66,6 +64,24 @@ def zoom_panel(server, scene):
         hide_details=True,
         thumb_label=True,
         disabled=(f"!({LABELS_CHOSEN})",),
+    )
+    # Stepped fine enough to reach the values that matter: a few mislabelled
+    # voxels are a thousandth of a cloud, so the trim that clears them is small.
+    vuetify.VSlider(
+        v_if=VOLUME_ACTIVE,
+        v_model=("label_percentile",),
+        label="Cover",
+        title=(
+            "How much of the labels a measurement has to cover -- this fit, and"
+            " the tile stack. Below 100 the outermost voxels are ignored, so a"
+            " stray one cannot set the extent"
+        ),
+        classes=f"{SLIDER_CLASS} mb-2",
+        min=99,
+        max=100,
+        step=0.01,
+        hide_details=True,
+        thumb_label=True,
     )
     with vuetify.VRow(
         v_if=VOLUME_ACTIVE,
