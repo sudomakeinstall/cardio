@@ -24,14 +24,14 @@ import pydantic as pc
 # Internal
 from .. import keypath, scripting
 from ..action import action
-from ..console import TIME_FORMAT, Log, parse_call
+from ..console import TIME_FORMAT, History, Log, parse_call
 from .base import Controller
 
 # The actions that are about the console rather than about the app. A typed
 # command logs the action it asked for, exactly as the button that does the
 # same thing would; logging the wrapper as well would say everything twice.
 # Saving the log is not a thing anybody means to replay either.
-SILENT = frozenset({"run_command", "clear_console", "save_script"})
+SILENT = frozenset({"run_command", "recall_command", "clear_console", "save_script"})
 
 # How often a coalescing drag republishes. A new line goes out at once; a line
 # whose count is merely climbing can wait, and waiting is what keeps a gesture
@@ -79,6 +79,7 @@ class ConsoleController(Controller):
     def __init__(self, app):
         super().__init__(app)
         self.log = Log()
+        self.history = History()
         self._published = 0.0
         self._applying = 0
         self._armed = False
@@ -266,6 +267,25 @@ class ConsoleController(Controller):
             value = keypath.write(self.server.state[name], segments, value, name)
         self.server.state[name] = value
 
+    @action("recall_command")
+    def recall_command(self, step: int):
+        """Put the line one step back through the log into the prompt.
+
+        ``step`` is -1 for a step back and 1 for a step toward the present.
+        What is already typed is the start of what is wanted, so a walk from a
+        half-written call steps through the calls that begin that way -- which
+        is the whole of what makes a history of five hundred lines worth
+        walking.
+
+        The prompt's own text is read off state rather than handed in: what a
+        walk does next depends on whether the box still holds what the last
+        step put there, and the field is the one that knows.
+        """
+        state = self.server.state
+        state.console_input = self.history.walk(
+            self.log.recallable, state.console_input, step
+        )
+
     @action("clear_console")
     def clear_console(self):
         """Throw away the log so far."""
@@ -305,11 +325,13 @@ class ConsoleController(Controller):
         behind is the refusal, which the registry and the argument model
         already word better than this could.
         """
+        self.history.forget()
+
         try:
             name, positional, keyword = parse_call(text)
             self.app.dispatch(name, *positional, **keyword)
         except (ValueError, TypeError, KeyError, pc.ValidationError) as exc:
-            self.log.error(_message(exc))
+            self.log.error(_message(exc), asked=text)
             self.publish()
         else:
             self.server.state.console_input = ""

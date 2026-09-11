@@ -1,4 +1,4 @@
-"""The action console: what the app was asked to do, most recent first."""
+"""The action console: what the app was asked to do, in the order it was asked."""
 
 # Third Party
 from trame.widgets import html
@@ -126,6 +126,12 @@ def _prompt(server):
     ``stopImmediatePropagation``, is a question about which of them runs first
     that there is no reason to be asking. ``keydown`` is what the interactor
     reads anyway.
+
+    The arrows walk back through the log, as they walk a shell's history. They
+    are on ``keydown`` with the guard rather than on ``keyup`` with the submit,
+    for the one thing keyup cannot do: an arrow throws the caret to one end of
+    the line, and only the event the caret follows can prevent it. They are
+    written above the guard so that, of the two, they are the first to run.
     """
     with vuetify.VRow(no_gutters=True, classes="align-center px-4 py-2"):
         vuetify.VTextField(
@@ -137,10 +143,18 @@ def _prompt(server):
             hide_details=True,
             autofocus=True,
             classes=PROMPT_CLASS,
-            __events=[("keyup_enter", "keyup.enter"), "keydown", "keypress"],
+            __events=[
+                ("keyup_enter", "keyup.enter"),
+                ("keydown_up", "keydown.up.prevent"),
+                ("keydown_down", "keydown.down.prevent"),
+                "keydown",
+                "keypress",
+            ],
             keydown="$event.stopPropagation(); $event.stopImmediatePropagation();",
             keypress="$event.stopPropagation(); $event.stopImmediatePropagation();",
             keyup_enter=(server.controller.run_command, "[console_input]"),
+            keydown_up=(server.controller.recall_command, "[-1]"),
+            keydown_down=(server.controller.recall_command, "[1]"),
         )
         vuetify.VBtn(
             icon="mdi-play",

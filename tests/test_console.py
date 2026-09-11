@@ -256,6 +256,201 @@ def test_clearing_leaves_nothing_behind():
     assert log.script == []
 
 
+# --------------------------------------------------------- the walk back ----
+#
+# The prompt's history: the whole log, narrowed to what is already typed, the
+# way a terminal narrows it.
+
+WALKED = [
+    "do.add_rotation(axis='Z')",
+    "do.toggle_console()",
+    "do.set_state(key='tile_cols', value=4)",
+    "do.toggle_maximized(view='axial')",
+]
+
+
+def test_a_walk_with_nothing_typed_is_every_line():
+    assert console.matching(WALKED, "") == WALKED
+
+
+def test_a_walk_is_narrowed_by_what_is_typed():
+    """The whole feature: what is typed is the start of what is wanted."""
+    assert console.matching(WALKED, "do.t") == [
+        "do.toggle_console()",
+        "do.toggle_maximized(view='axial')",
+    ]
+
+
+def test_a_bare_name_finds_the_lines_the_console_printed():
+    """The prompt takes a name without the prefix, so a walk has to as well."""
+    assert console.matching(WALKED, "t") == console.matching(WALKED, "do.t")
+
+
+def test_a_walk_that_matches_nothing_is_empty():
+    assert console.matching(WALKED, "do.nonsense") == []
+
+
+def test_a_repeated_line_is_walked_once():
+    """A log is mostly repetition, and stopping eleven times at one text is not
+    a walk anybody finishes.
+    """
+    lines = ["do.place_camera()", "do.add_rotation(axis='Z')", "do.place_camera()"]
+
+    assert console.matching(lines, "") == [
+        "do.add_rotation(axis='Z')",
+        "do.place_camera()",
+    ], "the most recent of them, in its own place"
+
+
+def walked(steps, lines=None, typed=""):
+    """Where the prompt lands after each of ``steps``, starting from ``typed``.
+
+    Each step is handed what the last one put in the box, which is what the
+    field hands back when the arrow is pressed again.
+    """
+    history = console.History()
+    lines = WALKED if lines is None else lines
+
+    landed = []
+    for step in steps:
+        typed = history.walk(lines, typed, step)
+        landed.append(typed)
+    return landed
+
+
+def test_a_step_back_takes_the_newest_line():
+    assert walked([-1]) == ["do.toggle_maximized(view='axial')"]
+
+
+def test_stepping_back_walks_the_log_backwards():
+    assert walked([-1, -1, -1]) == [
+        "do.toggle_maximized(view='axial')",
+        "do.set_state(key='tile_cols', value=4)",
+        "do.toggle_console()",
+    ]
+
+
+def test_the_far_end_of_the_log_is_where_a_walk_stops():
+    """Rather than wrapping around to the newest, which loses the place."""
+    assert walked([-1] * 6)[-2:] == ["do.add_rotation(axis='Z')"] * 2
+
+
+def test_stepping_forward_comes_back():
+    assert walked([-1, -1, 1]) == [
+        "do.toggle_maximized(view='axial')",
+        "do.set_state(key='tile_cols', value=4)",
+        "do.toggle_maximized(view='axial')",
+    ]
+
+
+def test_stepping_past_the_newest_gives_back_what_was_being_typed():
+    """The box is not left holding the last recall, which is not what was meant."""
+    history = console.History()
+    recalled = history.walk(WALKED, "do.t", -1)
+
+    assert history.walk(WALKED, recalled, 1) == "do.t"
+
+
+def test_a_walk_with_nothing_to_show_leaves_the_prompt_alone():
+    assert walked([-1], typed="do.nonsense") == ["do.nonsense"]
+
+
+def test_editing_a_recalled_line_searches_for_the_edit():
+    """What says something was typed is that the box no longer holds what the
+    walk put there -- which needs no listening to keystrokes.
+    """
+    history = console.History()
+    history.walk(WALKED, "", -1)
+
+    assert history.walk(WALKED, "do.t", -1) == "do.toggle_maximized(view='axial')"
+    assert history.walk(WALKED, "do.toggle_maximized(view='axial')", -1) == (
+        "do.toggle_console()"
+    ), "and goes on walking what it found"
+
+
+def test_the_log_moving_on_ends_the_walk():
+    """The log grows while the prompt sits there, which a shell's history does
+    not: everything the drawer does is a line.
+
+    A walk that kept the matches it started with would go on walking a log the
+    app has moved on from, and an arrow would never reach what was just done.
+    """
+    history = console.History()
+    recalled = history.walk(WALKED[:2], "", -1)
+
+    assert history.walk(WALKED, recalled, -1) == WALKED[-1], "the newest of them"
+
+
+def test_a_recall_left_in_the_box_is_not_searched_for():
+    """It is the walk's own text rather than anybody's, so the next walk is not
+    a search for lines beginning with it.
+    """
+    history = console.History()
+    recalled = history.walk(["do.toggle_console()"], "", -1)
+
+    grown = ["do.toggle_console()", "do.set_state(key='frame', value=1)"]
+
+    assert history.walk(grown, recalled, -1) == "do.set_state(key='frame', value=1)"
+
+
+def test_what_was_typed_survives_the_log_moving_on():
+    """What the walk left is not anybody's; what was typed over it is."""
+    history = console.History()
+    history.walk(WALKED[:2], "", -1)
+
+    assert history.walk(WALKED, "do.t", -1) == "do.toggle_maximized(view='axial')"
+
+
+def test_forgetting_a_walk_starts_the_next_one_over():
+    """A command that was run ends the walk, even when it left its text behind.
+
+    The next arrow searches for what is in the box rather than going on with
+    the walk the run interrupted.
+    """
+    kept, forgotten = console.History(), console.History()
+    for history in (kept, forgotten):
+        recalled = history.walk(WALKED, "", -1)
+    forgotten.forget()
+
+    assert kept.walk(WALKED, recalled, -1) == "do.set_state(key='tile_cols', value=4)"
+    assert forgotten.walk(WALKED, recalled, -1) == recalled, "the newest match again"
+
+
+def test_the_whole_log_is_what_is_walked():
+    """Not the typed part of it: a drawer control is a line like any other."""
+    log = console.Log(now=clock())
+    log.record("set_state", {"key": "tile_cols", "value": 4})
+    log.record("add_rotation", {"axis": "Z"})
+
+    assert log.recallable == [
+        "do.set_state(key='tile_cols', value=4)",
+        "do.add_rotation(axis='Z')",
+    ]
+
+
+def test_a_refusal_is_walked_as_what_was_asked():
+    """A typo is the thing a history is most used for, and the message is not it."""
+    log = console.Log(now=clock())
+    log.error("No such action: 'nonsens'", asked="nonsens()")
+
+    assert log.recallable == ["nonsens()"]
+
+
+def test_a_refusal_nobody_typed_is_not_walked():
+    log = console.Log(now=clock())
+    log.error("something went wrong")
+
+    assert log.recallable == []
+
+
+def test_a_call_that_raised_is_walked_as_it_was_printed():
+    """What it did not do is a reason to run it again, not a reason not to."""
+    log = console.Log(now=clock())
+    log.record("add_rotation", {"axis": "W"}, ok=False)
+
+    assert log.recallable == ["do.add_rotation(axis='W')"]
+
+
 # ------------------------------------------------------------- the script ----
 
 
@@ -365,6 +560,84 @@ def test_a_refused_command_stays_in_the_box_to_be_corrected(session):
     session.do("run_command", text="add_rotation(ax='Z')")
 
     assert session.server.state.console_input == "add_rotation(ax='Z')"
+
+
+def recall(session, step=-1):
+    """Press an arrow, and say what the prompt is left holding."""
+    session.do("recall_command", step=step)
+    return session.server.state.console_input
+
+
+def test_an_arrow_puts_the_newest_line_in_the_prompt(session):
+    session.do("add_rotation", axis="Z")
+
+    assert recall(session) == "do.add_rotation(axis='Z')"
+
+
+def test_a_walk_steps_through_what_nobody_typed(session):
+    """The whole log: a drawer control is as good a thing to arrow back to."""
+    session.ready()
+    moved(session, tile_cols=4)
+    session.do("add_rotation", axis="Z")
+
+    assert recall(session) == "do.add_rotation(axis='Z')"
+    assert recall(session) == "do.set_state(key='tile_cols', value=4)"
+
+
+def test_a_walk_is_narrowed_by_what_is_already_typed(session):
+    session.do("add_rotation", axis="Z")
+    session.do("toggle_crosshairs")
+    session.server.state.console_input = "do.a"
+
+    assert recall(session) == "do.add_rotation(axis='Z')"
+
+
+def test_a_command_that_was_refused_is_walked_back_to(session):
+    """What the message says is not what there is anything to fix in."""
+    session.do("run_command", text="nonsens()")
+
+    assert recall(session) == "nonsens()"
+
+
+def test_running_a_command_starts_the_next_walk_over(session):
+    """A run ends the walk, wherever it had got to, as a shell's does."""
+    session.do("add_rotation", axis="Z")
+    session.do("toggle_crosshairs")
+    recall(session)
+
+    session.do("run_command", text="add_rotation(axis='X')")
+
+    assert recall(session) == "do.add_rotation(axis='X')", (
+        "the newest, not where it was"
+    )
+
+
+def test_an_arrow_after_doing_something_reaches_what_was_just_done(session):
+    """The log grows while the prompt sits there, holding an earlier recall.
+
+    That text is the walk's own and not anybody's, so the arrow is asking for
+    the whole log again rather than for lines that begin with what it is left
+    holding.
+    """
+    session.ready()
+    session.do("toggle_console")
+    assert recall(session) == "do.toggle_console()"
+
+    moved(session, frame=1)
+    moved(session, tile_cols=4)
+
+    assert recall(session) == "do.set_state(key='tile_cols', value=4)"
+    assert recall(session) == "do.set_state(key='frame', value=1)"
+    assert recall(session) == "do.toggle_console()"
+
+
+def test_walking_the_log_is_not_itself_a_line_of_it(session):
+    """It is about the console rather than about the app, as the prompt is."""
+    session.do("add_rotation", axis="Z")
+
+    recall(session)
+
+    assert texts(session) == ["do.add_rotation(axis='Z')"]
 
 
 def test_clearing_the_console_leaves_no_trace_of_itself(session):
@@ -848,6 +1121,15 @@ def test_the_prompt_hands_what_was_typed_to_the_action(page):
 
     assert "@keyup.enter" in html
     assert "[console_input]" in html
+
+
+def test_the_arrows_walk_the_log_from_the_prompt(page):
+    """On keydown, which is the event that can stop the caret jumping with them."""
+    _, _, html = page
+    field = html[html.find("cardio-console-prompt") :].split("/>")[0]
+
+    assert "@keydown.up.prevent=" in field
+    assert "@keydown.down.prevent=" in field
 
 
 def test_the_prompt_does_not_let_a_keystroke_reach_the_interactor(page):

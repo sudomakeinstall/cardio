@@ -259,6 +259,12 @@ The path is dotted, and a number in it indexes a list.  A value that is not a
 structure is still written whole, so a range slider stays one line holding its
 pair rather than two lines saying which end moved.
 
+At the prompt, the up and down arrows walk back through the log and forward
+again, narrowed to whatever is already typed: `do.t` and the up arrow steps
+through the `do.toggle_` lines alone.  Everything the log holds is walked,
+including the drawer controls nobody typed, and a command that was refused --
+which is the one most likely to have something in it to fix.
+
 The `.toml` written beside it is the scene as the app *opened*, not as it ended
 up, so running the script does the session again rather than doing it twice.
 The two are meant to travel together; the script finds the config beside
