@@ -55,8 +55,12 @@
     border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 
-/* Reversed, and fed the newest line first, so the browser pins the scroll to
-   the newest without anything having to scroll it there. */
+/* Reversed, which flips where the box starts, so the browser pins the scroll
+   to the newest line without anything having to scroll it there.
+
+   The lines are one child of it rather than its children, so that the
+   reversal reaches the box alone. A selection follows the document, and lines
+   laid out backwards are lines that have to be dragged across backwards. */
 
 .cardio-console-body {
     display: flex;
@@ -66,6 +70,16 @@
     font-family: monospace;
     font-size: 0.8125rem;
     line-height: 1.5;
+}
+
+/* The time a line was written and the count of what it stands for are notes
+   about the line rather than part of it. A selection skips what cannot be
+   selected, so dragging across the log copies the calls alone -- which is what
+   makes the copy a script rather than something to clean up into one. */
+
+.cardio-console-aside {
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 /* The prompt is written in the same syntax the log is printed in, so it is

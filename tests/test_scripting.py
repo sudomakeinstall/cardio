@@ -47,22 +47,18 @@ def log_of(session):
 
 
 @pytest.mark.parametrize("name,arguments", CALLS, ids=[name for name, _ in CALLS])
-def test_a_script_line_is_the_console_line_with_a_prefix(name, arguments):
+def test_a_script_line_is_the_console_line(name, arguments):
     """The whole feature in one line: the log and the script are one language."""
-    assert console.format_call(name, arguments, prefix="do.") == "do." + (
-        console.format_call(name, arguments)
-    )
+    printed = console.format_call(name, arguments, prefix=console.PREFIX)
+
+    assert console.format_call(name, arguments, prefix="do.") == printed
 
 
 def test_a_script_line_is_a_call_the_prompt_would_take_back():
-    """Strip the prefix and it is the console's line again, parse and all."""
+    """Verbatim: a line of a script is a line of the log is a line to type."""
     line = console.format_call("add_rotation", {"axis": "Z"}, prefix="do.")
 
-    assert console.parse_call(line.removeprefix("do.")) == (
-        "add_rotation",
-        [],
-        {"axis": "Z"},
-    )
+    assert console.parse_call(line) == ("add_rotation", [], {"axis": "Z"})
 
 
 # ------------------------------------------------------------ the rendering ----

@@ -5,7 +5,8 @@ what ``Session.run`` takes. That pair is the whole of what a console line means,
 and rendering it back as the call that asks for it is what makes the log
 something to copy rather than only something to read: ``format_call`` and
 ``parse_call`` are inverses, so a line the console printed is a line the prompt
-accepts and a line a script may contain.
+accepts and a line a script may contain -- the same characters in all three,
+``do.`` included.
 
 Nothing here knows about trame. ``Log`` is the contents of the console; whose
 state variable it lands in is the controller's business.
@@ -34,6 +35,12 @@ COALESCE_WITHIN = dt.timedelta(seconds=0.5)
 
 TIME_FORMAT = "%H:%M:%S"
 
+# What a call is asked of, in the console and in a generated script alike. The
+# console prints it because a line is there to be copied, and a line that has
+# to be edited before it will run is one the copying did not finish.
+PROXY = "do"
+PREFIX = f"{PROXY}."
+
 
 def _now() -> dt.datetime:
     """Local wall-clock time, as the capture timestamps use."""
@@ -52,10 +59,10 @@ def literal(value):
 def format_call(name: str, arguments: dict, prefix: str = "") -> str:
     """One action as the call that asks for it.
 
-    ``prefix`` is what the call is asked of, which a script needs and the panel
-    does not. It is the whole of the difference between the line the console
-    printed and the line the exported script holds -- which is what lets a log
-    be copied into a script rather than translated into one.
+    ``prefix`` is what the call is asked of. The console and a script both
+    write ``PREFIX``, so a line of one is a line of the other and a log is
+    copied into a script rather than translated into one. It defaults to
+    nothing for the sake of what only needs to read the call itself.
     """
     spelled = ", ".join(f"{key}={literal(value)!r}" for key, value in arguments.items())
     return f"{prefix}{name}({spelled})"
@@ -69,6 +76,22 @@ def _value(node, where: str):
         raise ValueError(
             f"{where} is {ast.unparse(node)!r}, which is not a plain value"
         ) from None
+
+
+def _named(node) -> str | None:
+    """The action ``node`` names, whether or not it is asked of the proxy.
+
+    ``do.place_camera`` and ``place_camera`` name the same action. The first is
+    what the console prints and what a script holds; the second is what is
+    quicker to type. Taking both is what lets a printed line be pasted back
+    without being edited first.
+    """
+    if isinstance(node, ast.Name):
+        return node.id
+    proxied = isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+    if proxied and node.value.id == PROXY:
+        return node.attr
+    return None
 
 
 def parse_call(text: str) -> tuple[str, list, dict]:
@@ -90,19 +113,20 @@ def parse_call(text: str) -> tuple[str, list, dict]:
 
     node = tree.body
 
-    if isinstance(node, ast.Name):
-        return node.id, [], {}
+    bare = _named(node)
+    if bare is not None:
+        return bare, [], {}
 
     if not isinstance(node, ast.Call):
         raise ValueError(f"{text!r} is not a call")
 
-    if not isinstance(node.func, ast.Name):
+    name = _named(node.func)
+    if name is None:
         raise ValueError(
             f"{ast.unparse(node.func)!r} is not an action name; "
             "a call is a bare name applied to literal arguments"
         )
 
-    name = node.func.id
     positional = [_value(arg, f"argument {i + 1}") for i, arg in enumerate(node.args)]
 
     keyword = {}
@@ -145,10 +169,15 @@ class Entry:
 
     @property
     def text(self) -> str:
-        """The line as it reads: the latest call, or the refusal."""
+        """The line as it reads: the latest call, or the refusal.
+
+        A refusal is not asked of anything, so it carries no prefix: it is what
+        the app said back, rather than a line there would be any sense in
+        running.
+        """
         if self.kind == ERROR:
             return self.message
-        return format_call(self.name, self.calls[-1])
+        return format_call(self.name, self.calls[-1], prefix=PREFIX)
 
     def joins(self, group: str, at: dt.datetime) -> bool:
         """Whether a call now is part of this line rather than the next one.
@@ -178,8 +207,9 @@ class Entry:
 class Log:
     """The console's contents.
 
-    Bounded, so a long session does not grow without end, and newest-first on
-    the way out, which is the order the panel stacks them in.
+    Bounded, so a long session does not grow without end, and in the order
+    things happened on the way out -- which is the order the panel reads in,
+    the order a script runs in, and the order a selection follows.
     """
 
     def __init__(self, limit: int = LIMIT, now: ty.Callable[[], dt.datetime] = _now):
@@ -242,8 +272,14 @@ class Log:
 
     @property
     def entries(self) -> list[dict]:
-        """Every line, newest first, as the console renders them."""
-        return [entry.shown() for entry in reversed(self._entries)]
+        """Every line, oldest first, as the console renders them.
+
+        The order they happened in, which is the order they are read in. The
+        panel puts the newest at the bottom without reversing this: what is
+        reversed there is the box, so that a selection dragged down the log
+        still runs the way the lines do.
+        """
+        return [entry.shown() for entry in self._entries]
 
     @property
     def script(self) -> list[tuple[str, dict]]:

@@ -16,7 +16,7 @@ import pytest
 
 # Internal
 import cardio.console as console
-from cardio.ui.common import DRAWER_WIDTH, drawer_styles
+from cardio.ui.common import DRAWER_WIDTH, STATIC, STYLESHEET, drawer_styles
 from tests.test_app_smoke import build_app, build_scene, connect
 from tests.test_session import session_on
 
@@ -39,7 +39,19 @@ CALLS = [
 
 @pytest.mark.parametrize("name,arguments", CALLS, ids=[name for name, _ in CALLS])
 def test_a_printed_call_is_a_call_that_can_be_typed(name, arguments):
-    """The whole feature in one line: the log and the prompt are one language."""
+    """The whole feature in one line: the log and the prompt are one language.
+
+    Printed as the console prints it, prefix and all, so that a line lifted off
+    the panel runs as it was copied rather than after being edited.
+    """
+    printed = console.format_call(name, arguments, prefix=console.PREFIX)
+
+    assert console.parse_call(printed) == (name, [], arguments)
+
+
+@pytest.mark.parametrize("name,arguments", CALLS, ids=[name for name, _ in CALLS])
+def test_the_prefix_is_optional_at_the_prompt(name, arguments):
+    """Typing is not copying: what the prompt asks of is not in doubt."""
     assert console.parse_call(console.format_call(name, arguments)) == (
         name,
         [],
@@ -59,6 +71,7 @@ def test_an_enum_argument_is_spelled_as_its_value():
 
 def test_a_bare_name_is_a_call_with_no_arguments():
     assert console.parse_call("place_camera") == ("place_camera", [], {})
+    assert console.parse_call("do.place_camera") == ("place_camera", [], {})
 
 
 def test_positional_arguments_are_allowed():
@@ -127,7 +140,7 @@ def test_an_action_becomes_one_line():
     assert log.record("add_rotation", {"axis": "Z"}) is True
 
     (entry,) = log.entries
-    assert entry["text"] == "add_rotation(axis='Z')"
+    assert entry["text"] == "do.add_rotation(axis='Z')"
     assert entry["at"] == "12:00:00"
     assert entry["kind"] == "action"
     assert entry["count"] == 1
@@ -143,7 +156,7 @@ def test_a_gesture_counts_rather_than_repeats():
 
     (entry,) = log.entries
     assert entry["count"] == 3
-    assert entry["text"] == "adjust_window_level(window_delta=3.0)", "the latest"
+    assert entry["text"] == "do.adjust_window_level(window_delta=3.0)", "the latest"
 
 
 def test_the_same_action_asked_for_again_later_is_a_new_line():
@@ -154,8 +167,8 @@ def test_the_same_action_asked_for_again_later_is_a_new_line():
     log.record("add_rotation", {"axis": "X"})
 
     assert [entry["text"] for entry in log.entries] == [
-        "add_rotation(axis='X')",
-        "add_rotation(axis='Z')",
+        "do.add_rotation(axis='Z')",
+        "do.add_rotation(axis='X')",
     ]
 
 
@@ -169,16 +182,21 @@ def test_a_different_action_starts_a_new_line():
     assert [entry["count"] for entry in log.entries] == [1, 1, 1]
 
 
-def test_the_newest_line_comes_first():
-    """Which is the order the panel stacks them in."""
+def test_the_newest_line_comes_last():
+    """The order things happened in, which is the order they are read in.
+
+    The panel puts the newest at the bottom by reversing its own box rather
+    than the lines, so that a selection dragged down the log runs the way the
+    lines do.
+    """
     log = console.Log(now=clock())
 
     log.record("add_rotation", {"axis": "Z"})
     log.record("place_camera", {})
 
     assert [entry["text"] for entry in log.entries] == [
-        "place_camera()",
-        "add_rotation(axis='Z')",
+        "do.add_rotation(axis='Z')",
+        "do.place_camera()",
     ]
 
 
@@ -202,9 +220,9 @@ def test_the_log_is_bounded():
 
     assert len(log) == 3
     assert [entry["text"] for entry in log.entries] == [
-        "action_9()",
-        "action_8()",
-        "action_7()",
+        "do.action_7()",
+        "do.action_8()",
+        "do.action_9()",
     ]
 
 
@@ -214,7 +232,7 @@ def test_an_error_is_a_line_that_did_nothing():
     log.record("add_rotation", {"axis": "Z"})
     log.error("No such action: 'nonsense'")
 
-    assert [entry["kind"] for entry in log.entries] == ["error", "action"]
+    assert [entry["kind"] for entry in log.entries] == ["action", "error"]
     assert log.script == [("add_rotation", {"axis": "Z"})]
 
 
@@ -306,7 +324,7 @@ def test_a_typed_call_logs_what_a_button_would_have(session):
     session.do("run_command", text="add_rotation(axis='Z')")
 
     (entry,) = log_of(session).entries
-    assert entry["text"] == "add_rotation(axis='Z')"
+    assert entry["text"] == "do.add_rotation(axis='Z')"
 
 
 def test_a_typed_call_does_what_dispatching_it_would(tmp_path_factory):
@@ -365,8 +383,8 @@ def test_the_log_is_published_only_while_the_console_is_showing(session):
 
     published = session.server.state.console_entries
     assert [entry["text"] for entry in published] == [
-        "toggle_console()",
-        "add_rotation(axis='Z')",
+        "do.add_rotation(axis='Z')",
+        "do.toggle_console()",
     ], "opening it shows what it missed"
 
 
@@ -436,7 +454,7 @@ def test_a_key_bound_straight_to_a_widget_still_reaches_the_log(session):
 
     moved(session, tile_cols=4)
 
-    assert texts(session) == ["set_state(key='tile_cols', value=4)"]
+    assert texts(session) == ["do.set_state(key='tile_cols', value=4)"]
 
 
 def test_dragging_the_depth_range_is_written_down(session):
@@ -447,7 +465,7 @@ def test_dragging_the_depth_range_is_written_down(session):
 
     moved(session, clip_depth=[12.0, 345.0])
 
-    assert texts(session) == ["set_state(key='clip_depth', value=[12.0, 345.0])"]
+    assert texts(session) == ["do.set_state(key='clip_depth', value=[12.0, 345.0])"]
 
 
 def test_what_the_log_says_is_what_would_do_it_again(session):
@@ -470,8 +488,8 @@ def test_several_keys_moving_at_once_are_several_lines(session):
     moved(session, tile_rows=2, tile_cols=4)
 
     assert sorted(texts(session)) == [
-        "set_state(key='tile_cols', value=4)",
-        "set_state(key='tile_rows', value=2)",
+        "do.set_state(key='tile_cols', value=4)",
+        "do.set_state(key='tile_rows', value=2)",
     ]
 
 
@@ -481,7 +499,7 @@ def test_an_action_is_not_written_down_twice(session):
 
     session.do("toggle_crosshairs")
 
-    assert texts(session) == ["toggle_crosshairs()"], (
+    assert texts(session) == ["do.toggle_crosshairs()"], (
         "the keys it moved must not come back as set_state as well"
     )
 
@@ -511,7 +529,7 @@ def test_the_same_key_dragged_is_one_line(session):
 
     (entry,) = log_of(session).entries
     assert entry["count"] == 3
-    assert entry["text"] == "set_state(key='tile_cols', value=4)"
+    assert entry["text"] == "do.set_state(key='tile_cols', value=4)"
 
 
 # ------------------------------------------- a place inside a document key ----
@@ -555,7 +573,7 @@ def test_a_step_within_the_sequence_is_named_rather_than_repeated(session):
     edited(session, 1, visible=False)
 
     assert texts(session) == [
-        "set_state(key='mpr_rotation_data.angles_list.1.visible', value=False)"
+        "do.set_state(key='mpr_rotation_data.angles_list.1.visible', value=False)"
     ]
 
 
@@ -607,8 +625,8 @@ def test_two_fields_of_one_step_are_two_lines(session):
     edited(session, 0, angle=45.0, visible=False)
 
     assert sorted(texts(session)) == [
-        "set_state(key='mpr_rotation_data.angles_list.0.angle', value=45.0)",
-        "set_state(key='mpr_rotation_data.angles_list.0.visible', value=False)",
+        "do.set_state(key='mpr_rotation_data.angles_list.0.angle', value=45.0)",
+        "do.set_state(key='mpr_rotation_data.angles_list.0.visible', value=False)",
     ]
 
 
@@ -623,7 +641,7 @@ def test_dragging_one_step_is_one_line(session):
     assert entry["count"] == 3
     assert (
         entry["text"]
-        == "set_state(key='mpr_rotation_data.angles_list.0.angle', value=30.0)"
+        == "do.set_state(key='mpr_rotation_data.angles_list.0.angle', value=30.0)"
     )
 
 
@@ -650,7 +668,7 @@ def test_a_step_added_by_an_action_rebases_what_the_next_edit_compares_with(sess
     edited(session, 2, visible=False)
 
     assert texts(session) == [
-        "set_state(key='mpr_rotation_data.angles_list.2.visible', value=False)"
+        "do.set_state(key='mpr_rotation_data.angles_list.2.visible', value=False)"
     ]
 
 
@@ -663,7 +681,7 @@ def test_a_sequence_that_changed_length_is_reported_whole(session):
     moved(session, mpr_rotation_data=data)
 
     (line,) = texts(session)
-    assert line.startswith("set_state(key='mpr_rotation_data.angles_list', value=[")
+    assert line.startswith("do.set_state(key='mpr_rotation_data.angles_list', value=[")
 
 
 def test_switching_units_is_the_switch_and_not_what_it_re_expresses(session):
@@ -676,7 +694,7 @@ def test_switching_units_is_the_switch_and_not_what_it_re_expresses(session):
 
     moved(session, angle_units="degrees")
 
-    assert texts(session) == ["set_state(key='angle_units', value='degrees')"]
+    assert texts(session) == ["do.set_state(key='angle_units', value='degrees')"]
 
 
 def test_switching_the_index_order_is_the_switch_alone(session):
@@ -684,7 +702,7 @@ def test_switching_the_index_order_is_the_switch_alone(session):
 
     moved(session, index_order="roma")
 
-    assert texts(session) == ["set_state(key='index_order', value='roma')"]
+    assert texts(session) == ["do.set_state(key='index_order', value='roma')"]
 
 
 def test_a_step_edited_after_a_switch_is_still_written_down(session):
@@ -696,7 +714,7 @@ def test_a_step_edited_after_a_switch_is_still_written_down(session):
     edited(session, 1, visible=False)
 
     assert texts(session) == [
-        "set_state(key='mpr_rotation_data.angles_list.1.visible', value=False)"
+        "do.set_state(key='mpr_rotation_data.angles_list.1.visible', value=False)"
     ]
 
 
@@ -727,7 +745,7 @@ def test_the_cameras_moving_is_not_something_anybody_asked_for(session):
 
     moved(session, maximized_view="tile")
 
-    assert texts(session) == ["set_state(key='maximized_view', value='tile')"]
+    assert texts(session) == ["do.set_state(key='maximized_view', value='tile')"]
 
 
 def test_the_frame_is_not_logged_while_a_loop_is_stepping_it(session):
@@ -746,7 +764,7 @@ def test_the_frame_is_logged_when_a_person_scrubs_it(session):
 
     moved(session, frame=1)
 
-    assert texts(session) == ["set_state(key='frame', value=1)"]
+    assert texts(session) == ["do.set_state(key='frame', value=1)"]
 
 
 def test_set_state_refuses_a_key_that_is_not_the_document(session):
@@ -755,9 +773,9 @@ def test_set_state_refuses_a_key_that_is_not_the_document(session):
 
     session.do("run_command", text="set_state(key='capture_running', value=True)")
 
-    said, tried = log_of(session).entries
+    tried, said = log_of(session).entries
     assert "not a document key" in said["text"]
-    assert tried["text"] == "set_state(key='capture_running', value=True)"
+    assert tried["text"] == "do.set_state(key='capture_running', value=True)"
     assert tried["kind"] == "error", "the call is shown as one that did not happen"
     assert log_of(session).script == [], "and is not in the script"
 
@@ -802,6 +820,28 @@ def test_the_dock_reads_the_log_out_of_state(page):
     assert ':key="entry.n"' in html
 
 
+def test_the_lines_sit_in_one_child_of_the_reversed_box(page):
+    """So the reversal pins the scroll without reversing the lines themselves.
+
+    A selection follows the document, and lines laid out backwards are lines
+    that have to be dragged across backwards.
+    """
+    _, _, html = page
+    body = html[html.find("cardio-console-body") :]
+    wrapper, rows = body.find("cardio-console-lines"), body.find('v-for="entry in')
+
+    assert wrapper != -1 and rows != -1
+    assert wrapper < rows
+
+
+def test_what_is_written_beside_a_line_is_not_part_of_it(page):
+    """The time and the count are notes about the line, and would not paste."""
+    _, _, html = page
+
+    assert "cardio-console-aside" in html
+    assert "user-select: none" in (STATIC / STYLESHEET).read_text()
+
+
 def test_the_prompt_hands_what_was_typed_to_the_action(page):
     """Rather than the action reading it off state, so a replay carries it."""
     _, _, html = page
@@ -831,14 +871,14 @@ def test_a_button_press_and_a_typed_call_write_the_same_line(page):
 
     with server.state:
         logic.dispatch("add_rotation", axis="Z")
-    clicked = logic.console.log.entries[0]["text"]
+    clicked = logic.console.log.entries[-1]["text"]
 
     with server.state:
         logic.dispatch("clear_console")
         logic.dispatch("run_command", text="add_rotation(axis='Z')")
-    typed = logic.console.log.entries[0]["text"]
+    typed = logic.console.log.entries[-1]["text"]
 
-    assert typed == clicked == "add_rotation(axis='Z')"
+    assert typed == clicked == "do.add_rotation(axis='Z')"
 
 
 def test_the_dock_starts_where_the_drawer_stops(page):

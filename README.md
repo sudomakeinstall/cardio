@@ -240,9 +240,11 @@ do.set_state(key='tile_cols', value=4)
 do.screenshot()
 ```
 
-Every line below `do` is the line the console printed, under a prefix, so a
-script is the log copied rather than rewritten -- and a line you type at the
-prompt is a line you can paste into one.
+Every line below `do` is the line the console printed, character for
+character, so a script is the log copied rather than rewritten -- and a line of
+either is a line you can type at the prompt.  The prompt takes the `do.` off
+your hands if you would rather not type it: `add_rotation(axis='Z')` asks for
+the same thing.
 
 A `set_state` key may name a place *inside* a document key rather than the
 whole of it, which is how one rotation in a stack of them is a line short

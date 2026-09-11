@@ -21,6 +21,17 @@ INSET = (
 
 CONSOLE_BODY_CLASS = "cardio-console-body"
 
+# The lines, in one element of their own. The body is reversed so that the
+# newest line sits at the bottom with nothing having to scroll it there, and a
+# reversal reaches only its own children -- so holding the lines in one child
+# is what keeps that trick out of the order a selection follows.
+CONSOLE_LINES_CLASS = "cardio-console-lines"
+
+# What is written beside a line rather than in it: the time, and how many calls
+# the line stands for. Held out of a selection, so that dragging across the log
+# copies the lines alone.
+ASIDE_CLASS = "cardio-console-aside text-disabled flex-shrink-0"
+
 # A refusal is a line like any other, in the colour that says it did nothing.
 ENTRY_CLASS = "'text-pre-wrap ' + (entry.kind === 'error' ? 'text-error' : '')"
 
@@ -80,24 +91,25 @@ def console_panel(server, scene):
                 v_if="!console_entries.length",
                 classes="text-caption text-disabled px-4 py-2",
             )
-            with html.Div(
-                v_for="entry in console_entries",
-                key="entry.n",
-                classes="px-4 py-1 d-flex align-start",
-            ):
-                html.Span(
-                    "{{ entry.at }}",
-                    classes="text-disabled mr-3 flex-shrink-0",
-                )
-                html.Span(
-                    "{{ entry.text }}",
-                    classes=(ENTRY_CLASS,),
-                )
-                html.Span(
-                    "×{{ entry.count }}",
-                    v_if="entry.count > 1",
-                    classes="text-disabled ml-3 flex-shrink-0",
-                )
+            with html.Div(classes=CONSOLE_LINES_CLASS):
+                with html.Div(
+                    v_for="entry in console_entries",
+                    key="entry.n",
+                    classes="px-4 py-1 d-flex align-start",
+                ):
+                    html.Span(
+                        "{{ entry.at }}",
+                        classes=f"{ASIDE_CLASS} mr-3",
+                    )
+                    html.Span(
+                        "{{ entry.text }}",
+                        classes=(ENTRY_CLASS,),
+                    )
+                    html.Span(
+                        "×{{ entry.count }}",
+                        v_if="entry.count > 1",
+                        classes=f"{ASIDE_CLASS} ml-3",
+                    )
 
         _prompt(server)
 
@@ -118,7 +130,7 @@ def _prompt(server):
     with vuetify.VRow(no_gutters=True, classes="align-center px-4 py-2"):
         vuetify.VTextField(
             v_model=("console_input",),
-            placeholder="add_rotation(axis='Z')",
+            placeholder="do.add_rotation(axis='Z')",
             prefix=">",
             density="compact",
             variant="plain",

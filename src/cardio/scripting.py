@@ -1,12 +1,13 @@
 """The action log as a file that asks for it all again.
 
-A script is the console's own lines under a prefix. ``format_call`` writes
-both, so the two cannot drift into different languages: what the panel showed
-is what the file holds, and ``do.`` is the whole of the difference.
+A script is the console's own lines. ``format_call`` writes both, so the two
+cannot drift into different languages: what the panel showed is what the file
+holds, character for character, and all the file adds is the ``do`` those lines
+were already written against.
 
 The proxy is what makes that true. ``do.add_rotation(axis='Z')`` is not a
-translation of ``add_rotation(axis='Z')`` into some scripting API -- it is that
-line, asked of a ``Session`` rather than of a browser.
+translation of the console's line into some scripting API -- it is that line,
+asked of a ``Session`` rather than of a browser.
 """
 
 # System
@@ -16,11 +17,7 @@ import pathlib as pl
 
 # Internal
 from . import toml
-from .console import format_call
-
-# What the generated file binds its session to, and so what every line in it
-# is written against.
-PROXY = "do"
+from .console import PREFIX, PROXY, format_call
 
 # The one action a script has no use for. Every other line puts the app
 # somewhere; this one takes the app away, and a script ends by ending.
@@ -106,7 +103,7 @@ def render(
         ]
 
     lines += [
-        format_call(name, arguments, prefix=f"{PROXY}.")
+        format_call(name, arguments, prefix=PREFIX)
         for name, arguments in actions
         if name not in UNSCRIPTED
     ]
