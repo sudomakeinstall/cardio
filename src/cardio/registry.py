@@ -28,6 +28,7 @@ from .state import (
     screenshot_viewport,
 )
 from .view import Layout
+from .volumetry import structure_rows, structure_state, usable_groups
 
 
 class Scope(enum.StrEnum):
@@ -195,6 +196,7 @@ DOCUMENT = _declare(
         ),
     ),
     tile_spacing="tile.spacing",
+    volumetry_groups="volumetry.groups",
     volumetry_indexed="volumetry.indexed",
     volumetry_seg_label=(
         "volumetry.segmentation_label",
@@ -256,6 +258,12 @@ ITEMS = _declare(
     tile_sizes="the grid sizes offered, fixed at build time",
     volume_items="one entry per volume in the scene",
     volume_preset_items="the transfer function presets, spelled for the picker",
+    volumetry_available_labels=(
+        "the labels present in the segmentation the curves are measured off"
+    ),
+    volumetry_indexable=(
+        "whether a body surface area can be had, from the images or the config"
+    ),
     volumetry_rows="the shown page's metrics, one row each, as the drawer lists them",
     volumetry_structures="one entry per structure the config asks to be measured",
     zoom_available_labels="the labels present in the segmentation the fit is aimed at",
@@ -273,9 +281,16 @@ def keys_in_scope(scope: Scope) -> list[str]:
 
 
 # The keys a config and the running state spell differently, and the way back.
-# ``maximized_view`` is the only one: it carries an empty string for the quad
-# view, which a config calls by its name like any other layout.
-TO_CONFIG = {"maximized_view": lambda value: Layout.from_state(value).value}
+# ``maximized_view`` carries an empty string for the quad view, which a config
+# calls by its name like any other layout; ``volumetry_groups`` may hold a row
+# that is still being filled in, which a config has no way to spell -- the
+# models refuse a structure with no labels or no name of its own.
+TO_CONFIG = {
+    "maximized_view": lambda value: Layout.from_state(value).value,
+    "volumetry_groups": lambda held: [
+        group.model_dump(mode="json") for group in usable_groups(structure_rows(held))
+    ],
+}
 
 
 def to_config(key: str, value):
@@ -284,10 +299,14 @@ def to_config(key: str, value):
     return convert(value) if convert else value
 
 
-# The way back in. Only the one key needs saying: everything else state holds
-# is what ``mode="json"`` makes of the field, which is not a choice this app
-# gets to make and so is not worth a table of its own.
-TO_STATE = {"maximized_view": lambda layout: layout.state_value}
+# The way back in. Everything not named here is what ``mode="json"`` makes of
+# the field, which is not a choice this app gets to make; these two are, and
+# both are the same choice read backwards -- a layout by its name, and the
+# structures in the shape the widget editing them can hold.
+TO_STATE = {
+    "maximized_view": lambda layout: layout.state_value,
+    "volumetry_groups": structure_state,
+}
 
 
 def to_state(key: str, value):

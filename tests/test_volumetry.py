@@ -16,6 +16,8 @@ import pytest
 # Internal
 from cardio.utils import label_color
 from cardio.volumetry import (
+    OPTIONAL_FIELDS,
+    STRUCTURES,
     BSAFormula,
     StructureGroup,
     Volumetry,
@@ -25,6 +27,10 @@ from cardio.volumetry import (
     group_amount,
     measure,
     metrics,
+    page_table,
+    structure_rows,
+    structure_state,
+    usable_groups,
     voxel_volume_ml,
 )
 from tests.phantoms import write_segmentation
@@ -135,13 +141,13 @@ def test_the_ejection_fraction_is_the_stroke_volume_over_the_largest():
     assert result.ejection == pytest.approx(60.0)
 
 
-def test_a_structure_outside_the_cardiac_cycle_reports_no_stroke_or_ejection():
+def test_a_structure_that_does_not_pump_reports_no_stroke_or_ejection():
     """Myocardium changes shape rather than filling and emptying.
 
     The difference between its extremes is not a stroke volume, and quoting
     one invites a reader to treat it as flow.
     """
-    result = metrics(np.array([140.0, 150.0]), cycle=False)
+    result = metrics(np.array([140.0, 150.0]), chamber=False)
     assert result.stroke is None
     assert result.ejection is None
 
@@ -288,6 +294,155 @@ def test_a_group_must_name_at_least_one_label():
         StructureGroup(name="LV", labels=[])
 
 
+@pytest.mark.parametrize("density", [0, -1])
+def test_a_config_that_names_an_unusable_density_still_refuses_to_open(density):
+    """Only the form seam is lenient.  A hand-written config saying density=0
+    is a file to correct, and correcting it is easier than wondering why the
+    myocardium came out in millilitres."""
+    with pytest.raises(pc.ValidationError):
+        StructureGroup(name="Myo", labels=[1], density=density)
+
+
 def test_a_misspelled_volumetry_key_says_so():
     with pytest.raises(pc.ValidationError):
         Volumetry(colums=2)
+
+
+# --- what a page calls the extremes -------------------------------------------
+#
+# The cardiac vocabulary is a reader's claim, not the measurement's: nothing
+# here knows what phase anything was acquired at, or that the series covered a
+# cycle at all. Declaring a structure a pumping chamber is what licenses it.
+
+
+def paged(chamber: bool):
+    """One structure's page rows, off a curve that rises and falls."""
+    group = StructureGroup(name="X", labels=[1], chamber=chamber)
+    result = measure([{1: 100}, {1: 60}], 1.0, [group])
+    return [row[0] for row in page_table(result.measurements[0])[1]]
+
+
+def test_a_declared_chamber_is_read_in_the_cardiac_vocabulary():
+    assert paged(chamber=True) == ["EDV", "ESV", "SV", "EF"]
+
+
+def test_anything_else_is_read_as_a_maximum_and_a_minimum():
+    """An aorta pulses and a lung moves; neither has an end-diastolic volume,
+    and the great vessel is the case that shows why the flag is not "cardiac"
+    -- the aorta is cardiac anatomy and still has no ejection fraction."""
+    assert paged(chamber=False) == ["Maximum", "Minimum"]
+
+
+# --- the rows a form leaves behind --------------------------------------------
+#
+# The drawer holds a structure while it is being filled in, which the models
+# refuse and are right to: a config naming no labels is a config to correct.
+# What stands between the two is usable_groups, and every rule it applies is a
+# rule the drawer would otherwise break -- or, worse, a Save Session that
+# raises on the way out.
+
+
+def test_a_structure_with_no_labels_yet_is_not_one():
+    assert usable_groups([{"name": "LV", "labels": []}]) == []
+
+
+def test_a_structure_with_no_name_yet_is_not_one():
+    assert usable_groups([{"name": "  ", "labels": [1]}]) == []
+
+
+def test_the_second_structure_by_one_name_is_dropped_rather_than_refused():
+    """The models raise on a duplicate, which a half-typed name would trip."""
+    rows = [
+        {"name": "LV", "labels": [1]},
+        {"name": "LV", "labels": [2]},
+        {"name": "RV", "labels": [3]},
+    ]
+
+    assert [group.name for group in usable_groups(rows)] == ["LV", "RV"]
+
+
+def test_a_name_is_taken_without_the_space_around_it():
+    """It is drawn as a chart title and matched against the page picker."""
+    assert usable_groups([{"name": " LV ", "labels": [1]}])[0].name == "LV"
+
+
+def test_the_structures_keep_the_order_they_were_given_in():
+    rows = [{"name": name, "labels": [1]} for name in ("Myo", "LV", "RV")]
+
+    assert [group.name for group in usable_groups(rows)] == ["Myo", "LV", "RV"]
+
+
+@pytest.mark.parametrize("density", ["0", 0, "-1", "abc", "1.0.0"])
+def test_a_density_that_cannot_be_used_is_ignored_rather_than_fatal(density):
+    """It used to delete the structure, and typing 1.05 passes through 1 and
+    0 on the way -- so a curve vanished and came back between keystrokes with
+    nothing said about why.  A row with a name and labels is a structure
+    whatever else has been typed into it."""
+    group = usable_groups([{"name": "LV", "labels": [1], "density": density}])[0]
+
+    assert group.name == "LV"
+    assert group.density is None
+    assert group.unit == "mL"
+
+
+def test_a_colour_that_cannot_be_used_falls_back_to_the_labels_own():
+    """The other optional field, and the same rule -- so the derivation of
+    which fields these are is doing the work rather than a list of one."""
+    group = usable_groups([{"name": "LV", "labels": [1], "color": "not a colour"}])[0]
+
+    assert group.color is None
+    assert group.rgb == label_color(1)
+
+
+def test_the_optional_fields_are_the_ones_a_form_may_leave_unset():
+    assert OPTIONAL_FIELDS == {"color", "density"}
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        {"name": "LV", "labels": [], "density": "0"},
+        {"name": "", "labels": [1], "density": "0"},
+        "not a row at all",
+    ],
+)
+def test_a_row_that_is_not_a_structure_is_still_dropped(row):
+    """The leniency is about the optional fields only: a row with no labels is
+    not a structure with a bad field, it is not a structure."""
+    assert usable_groups([row]) == []
+
+
+@pytest.mark.parametrize("blank", ["", " ", "\t"])
+def test_a_cleared_density_field_reads_as_no_density(blank):
+    """An emptied number field hands back "", not nothing at all -- and what
+    is left behind after a clear may be a space rather than an empty string."""
+    group = usable_groups([{"name": "LV", "labels": [1], "density": blank}])[0]
+
+    assert group.density is None
+    assert group.unit == "mL"
+
+
+def test_structures_already_built_are_taken_as_they_are():
+    """The config's own list goes through the same door as the drawer's."""
+    groups = [StructureGroup(name="LV", labels=[1])]
+
+    assert usable_groups(groups) == groups
+
+
+def test_the_structures_are_held_as_an_object_and_not_as_a_bare_list():
+    """trame's deep-reactive widget mirrors a state variable into a plain
+    ``reactive({})`` and assigns over it, so a bare list arrives as
+    ``{"0": ..., "1": ...}``: no length to test, so nothing renders, and that
+    shape pushed back as the new value.  The rotation sequence is an object
+    with its list inside it and works; this is the same wrapper, for the same
+    reason, and a bug that shows up as a button doing nothing at all."""
+    held = structure_state([StructureGroup(name="LV", labels=[1])])
+
+    assert isinstance(held, dict)
+    assert isinstance(held[STRUCTURES], list)
+    assert structure_rows(held)[0]["name"] == "LV"
+
+
+@pytest.mark.parametrize("held", [None, {}, {STRUCTURES: None}, {STRUCTURES: []}])
+def test_a_drawer_holding_nothing_yet_reads_as_no_structures(held):
+    assert structure_rows(held) == []

@@ -20,12 +20,13 @@ import itertools as it
 import pytest
 
 # Internal
-from cardio.volumetry import StructureGroup, Volumetry
+from cardio.document import scene_from_state
+from cardio.volumetry import STRUCTURES, StructureGroup, Volumetry, structure_rows
 from tests.test_app_smoke import build_app, build_scene, connect
 
 GROUPS = [
     StructureGroup(name="One", labels=[1]),
-    StructureGroup(name="Two", labels=[2, 3], density=1.05, cycle=False),
+    StructureGroup(name="Two", labels=[2, 3], density=1.05, chamber=False),
 ]
 
 _counter = it.count()
@@ -97,13 +98,14 @@ def test_the_pages_are_drawn_when_the_layout_comes_round_to_them(tmp_path):
 
 
 def test_a_scene_that_configures_no_structures_measures_nothing(tmp_path):
+    """An empty measurement rather than none: a blank page is still a page."""
     directory = tmp_path / "bare"
     directory.mkdir()
     scene = build_scene(directory, view={"layout": "volumetry"})
     server, _, logic, _ = build_app(scene)
     connect(server)
 
-    assert logic.volumetry.result() is None
+    assert logic.volumetry.result().measurements == []
     assert logic.volumetry.views.chart is None
 
 
@@ -223,6 +225,48 @@ def test_a_scene_that_knows_no_body_size_indexes_nothing(app):
     assert logic.volumetry.result().bsa is None
 
 
+def test_the_tick_is_not_offered_where_there_is_nothing_to_index_by(app):
+    """Hidden would teach nobody that indexing exists; the drawer disables it
+    and says why underneath."""
+    server, _, _ = app
+
+    assert server.state.volumetry_indexable is False
+
+
+def test_the_tick_is_offered_once_a_body_size_is_known(tmp_path):
+    server, _, _ = built(tmp_path, patient_height_m=1.78, patient_weight_kg=74.0)
+
+    assert server.state.volumetry_indexable is True
+
+
+def test_whether_there_is_a_body_to_index_by_is_worked_out_again_on_a_new_pick(
+    tmp_path,
+):
+    """The height and weight are read off the chosen segmentation's own
+    header, so the answer is a fact about the pick and not about the scene --
+    and has to be taken again whenever the pick changes."""
+    server, _, _ = built(tmp_path, patient_height_m=1.78, patient_weight_kg=74.0)
+    with server.state:
+        server.state.volumetry_indexable = False
+
+    with server.state:
+        server.state.volumetry_seg_label = "other"
+
+    assert server.state.volumetry_indexable is True
+
+
+def test_the_tick_being_on_with_nothing_to_index_by_indexes_nothing(app):
+    """The preference is kept rather than cleared: choosing a segmentation
+    that does carry a body size should take effect without re-ticking."""
+    server, _, logic = app
+
+    with server.state:
+        server.state.volumetry_indexed = True
+
+    assert server.state.volumetry_indexed is True
+    assert logic.volumetry.body_surface_area() is None
+
+
 def test_a_configured_height_and_weight_index_the_volumes(tmp_path):
     _, _, logic = built(tmp_path, patient_height_m=1.78, patient_weight_kg=74.0)
 
@@ -269,6 +313,152 @@ def test_the_rows_gain_their_indexed_column_with_a_body_surface_area(tmp_path):
     server, _, _ = built(tmp_path, patient_height_m=1.78, patient_weight_kg=74.0)
 
     assert "Indexed" in server.state.volumetry_rows[0]
+
+
+# --- what the drawer edits ----------------------------------------------------
+#
+# The structures used to be the config's alone. Now they are state the drawer
+# writes, which means a structure exists for a moment with no name and no
+# labels -- and that moment must not empty the chart, turn the page, or reach a
+# saved config, where the models would refuse it on the way out.
+
+
+def test_the_structures_reach_the_drawer_in_the_shape_its_widget_can_hold(app):
+    """A bare list renders as nothing at all -- see the wrapper's own test."""
+    server, _, _ = app
+
+    assert isinstance(server.state.volumetry_groups, dict)
+    assert [row["name"] for row in structure_rows(server.state.volumetry_groups)] == [
+        "One",
+        "Two",
+    ]
+
+
+def test_a_structure_being_added_measures_nothing_until_it_says_what_it_is(app):
+    server, _, logic = app
+
+    with server.state:
+        logic.dispatch("add_structure")
+
+    assert len(structure_rows(server.state.volumetry_groups)) == 3
+    assert server.state.volumetry_structures == ["One", "Two"]
+    assert logic.volumetry.views.pages == 2
+
+
+def test_a_structure_becomes_a_page_once_it_is_named_and_given_a_label(app):
+    server, _, logic = app
+
+    with server.state:
+        server.state.volumetry_groups = {
+            STRUCTURES: [
+                *structure_rows(server.state.volumetry_groups),
+                {
+                    "name": "Three",
+                    "labels": [3],
+                    "color": None,
+                    "density": None,
+                    "chamber": True,
+                },
+            ]
+        }
+
+    assert server.state.volumetry_structures == ["One", "Two", "Three"]
+    assert logic.volumetry.views.pages == 3
+    assert logic.volumetry.result().of("Three") is not None
+
+
+def test_removing_the_structure_being_read_turns_to_one_that_still_exists(app):
+    server, _, logic = app
+    with server.state:
+        server.state.volumetry_structure = "Two"
+
+    with server.state:
+        logic.dispatch("remove_structure", index=1)
+
+    assert server.state.volumetry_structure == "One"
+    assert logic.volumetry.views.chart.GetTitle() == "One"
+
+
+def test_removing_another_structure_leaves_the_page_where_it_was(app):
+    """Editing the structure below the one being read is not a reason to
+    turn the page out from under the reader."""
+    server, _, logic = app
+    with server.state:
+        server.state.volumetry_structure = "Two"
+
+    with server.state:
+        logic.dispatch("remove_structure", index=0)
+
+    assert server.state.volumetry_structure == "Two"
+    assert logic.volumetry.views.chart.GetTitle() == "Two"
+
+
+def test_no_more_structures_are_offered_than_the_drawer_has_cards_for(tmp_path):
+    """The cards are unrolled at build time, so a structure past the last one
+    would be measured and drawn with nothing to edit it by."""
+    server, scene, logic = built(tmp_path)
+
+    with server.state:
+        for _ in range(scene.max_volumetry_groups + 5):
+            logic.dispatch("add_structure")
+
+    assert (
+        len(structure_rows(server.state.volumetry_groups)) == scene.max_volumetry_groups
+    )
+
+
+def test_the_label_picker_offers_what_the_segmentation_carries(app):
+    server, scene, _ = app
+    present = scene.segmentations[0].get_labels(0)
+
+    assert [item["value"] for item in server.state.volumetry_available_labels] == list(
+        present
+    )
+
+
+def test_the_label_picker_empties_with_a_segmentation_that_is_not_there(app):
+    """The labels index into the segmentation being left, so they cannot
+    survive a change of segmentation."""
+    server, _, _ = app
+
+    with server.state:
+        server.state.volumetry_seg_label = "other"
+
+    assert server.state.volumetry_available_labels == []
+
+
+def test_a_structure_still_being_filled_in_is_not_saved_into_a_config(app):
+    """Save Session ends in Scene(**data), which refuses a structure with no
+    labels -- so a blank row half-added would take the save down with it."""
+    server, scene, logic = app
+
+    with server.state:
+        logic.dispatch("add_structure")
+    saved = scene_from_state(server.state, scene)
+
+    assert [group.name for group in saved.volumetry.groups] == ["One", "Two"]
+
+
+def test_a_structure_added_in_the_drawer_is_saved_into_a_config(app):
+    server, scene, _ = app
+
+    with server.state:
+        server.state.volumetry_groups = {
+            STRUCTURES: [
+                *structure_rows(server.state.volumetry_groups),
+                {
+                    "name": "Three",
+                    "labels": [3],
+                    "color": None,
+                    "density": 1.05,
+                    "chamber": False,
+                },
+            ]
+        }
+    saved = scene_from_state(server.state, scene)
+
+    assert [group.name for group in saved.volumetry.groups] == ["One", "Two", "Three"]
+    assert saved.volumetry.groups[-1].density == 1.05
 
 
 # --- what an export writes ----------------------------------------------------
@@ -343,7 +533,7 @@ def test_a_number_that_would_mean_nothing_is_left_empty_rather_than_dashed(app):
     header, rows = read(exported(logic, scene) / "metrics.csv")
 
     outside = next(row for row in rows if row[0] == "Two")
-    assert outside[header.index("SV")] == ""
+    assert outside[header.index("stroke")] == ""
 
 
 def test_the_indexed_columns_are_written_only_once_there_is_a_body_to_index_by(
@@ -352,7 +542,7 @@ def test_the_indexed_columns_are_written_only_once_there_is_a_body_to_index_by(
     _, scene, logic = built(tmp_path, patient_height_m=1.78, patient_weight_kg=74.0)
     header, _ = read(exported(logic, scene) / "metrics.csv")
 
-    assert "EDVi" in header and "BSA_m2" in header
+    assert "maximum_i" in header and "BSA_m2" in header
 
 
 def test_an_export_says_what_it_wrote_and_when(app):

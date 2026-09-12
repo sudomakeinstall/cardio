@@ -81,14 +81,27 @@ class StructureGroup(pc.BaseModel):
             "CLI usage: 1.05"
         ),
     )
-    cycle: bool = pc.Field(
+    chamber: bool = pc.Field(
         default=True,
         description=(
-            "Whether this structure fills and empties, and so has a stroke "
-            "volume and an ejection fraction. False for the ones that only "
-            "change shape, whose difference between extremes means nothing."
+            "Whether this structure is a pumping chamber, whose extremes are "
+            "an end-diastolic and an end-systolic volume and whose difference "
+            "between them is a stroke volume. False for everything else -- "
+            "myocardium, a great vessel, anything outside the heart -- whose "
+            "extremes are reported as a maximum and a minimum and nothing more."
         ),
     )
+
+    @pc.field_validator("density", mode="before")
+    @classmethod
+    def blank_density_is_unset(cls, value):
+        """An emptied number field leaves a blank string, which means unset.
+
+        The drawer's density field starts empty and can be cleared again, and
+        what a cleared one hands back is "" -- or a space, if that is what was
+        left behind -- rather than nothing at all.
+        """
+        return None if isinstance(value, str) and not value.strip() else value
 
     @property
     def unit(self) -> str:
@@ -174,6 +187,86 @@ class Volumetry(pc.BaseModel):
         return self
 
 
+# The drawer edits the structures through trame's deep-reactive wrapper, which
+# mirrors a state variable into a plain object -- ``reactive({})``, assigned
+# over.  Handed a bare list it mirrors ``{"0": ..., "1": ...}``, which has no
+# length to test and renders as nothing at all, and pushes that shape back as
+# the new value.  So what it is handed is an object with the list inside it,
+# which is why the rotation sequence works and why this is spelled the same way.
+STRUCTURES = "structures"
+
+
+def structure_state(groups: list[StructureGroup]) -> dict:
+    """The structures as the drawer holds them."""
+    return {STRUCTURES: [group.model_dump(mode="json") for group in groups]}
+
+
+def structure_rows(held) -> list:
+    """The rows inside what the drawer holds, however little of it there is."""
+    return (held or {}).get(STRUCTURES) or []
+
+
+# The fields a form may leave in a state the model refuses without the row
+# ceasing to be a structure.  Derived rather than listed, so that an optional
+# field added later is covered without anyone having to remember this.
+OPTIONAL_FIELDS = frozenset(
+    name for name, field in StructureGroup.model_fields.items() if field.default is None
+)
+
+
+def as_structure(row) -> StructureGroup | None:
+    """``row`` as a structure, ignoring the optional fields it got wrong.
+
+    A row with a name and labels is a structure whatever else has been typed
+    into it, so a density of ``0`` unsets the density rather than deleting the
+    curve.  Deleting it is what this used to do, and typing ``0.95`` passes
+    through ``0`` on the way -- so a structure disappeared and came back
+    mid-keystroke, with nothing said anywhere about why.  What says why is the
+    rule under the field; nothing is logged here, because this runs on every
+    keystroke and a log of half-typed numbers is not a log.
+    """
+    try:
+        return StructureGroup.model_validate(row)
+    except pc.ValidationError as refused:
+        wrong = {
+            error["loc"][0] if error["loc"] else None for error in refused.errors()
+        }
+        if not wrong <= OPTIONAL_FIELDS:
+            return None
+
+    try:
+        return StructureGroup.model_validate({**row, **dict.fromkeys(wrong)})
+    except pc.ValidationError:
+        return None
+
+
+def usable_groups(rows) -> list[StructureGroup]:
+    """The structures among ``rows`` that are ready to be measured.
+
+    A row being edited is not yet a structure: it has no labels picked, no name
+    typed, or the name of one above it.  The models refuse all three, which is
+    right for a config file and wrong for a half-filled form -- so this is the
+    seam between the two, and the drawer can hold a blank row without the app
+    having to pretend it means something.
+    """
+    usable: list[StructureGroup] = []
+    taken: set[str] = set()
+
+    for row in rows:
+        group = as_structure(row)
+        if group is None:
+            continue
+
+        name = group.name.strip()
+        if not name or name in taken:
+            continue
+
+        taken.add(name)
+        usable.append(group.model_copy(update={"name": name}))
+
+    return usable
+
+
 def bsa_mosteller(height_m: float, weight_kg: float) -> float:
     """Mosteller's body surface area, in square metres.
 
@@ -254,10 +347,13 @@ def group_amount(
 class Metrics:
     """What a curve comes to: its extremes, and the difference between them.
 
-    Named for the curve rather than for the heart -- ``maximum`` is what a
-    reader calls end-diastolic only once they know the structure fills and
-    empties.  ``stroke`` and ``ejection`` are None for a structure that does
-    not, where the difference between extremes is shape rather than flow.
+    Named for the curve rather than for the heart, because that is all the
+    measurement knows: nothing here was told what phase anything was acquired
+    at.  ``maximum`` becomes an end-diastolic volume only where a reader has
+    declared the structure a pumping chamber, which is what ``page_table``
+    does and this does not.  ``stroke`` and ``ejection`` are None otherwise,
+    where the difference between extremes is shape or pulsation rather than
+    ejection.
     """
 
     maximum: float
@@ -268,12 +364,12 @@ class Metrics:
     ejection: float | None
 
 
-def metrics(values: np.ndarray, cycle: bool = True) -> Metrics:
+def metrics(values: np.ndarray, chamber: bool = True) -> Metrics:
     """The extremes of a curve, and the stroke and ejection they imply."""
     values = np.asarray(values, dtype=np.float64)
     maximum, minimum = float(values.max()), float(values.min())
 
-    stroke = maximum - minimum if cycle else None
+    stroke = maximum - minimum if chamber else None
     ejection = stroke / maximum * 100.0 if stroke is not None and maximum else None
 
     return Metrics(
@@ -342,7 +438,7 @@ def measure(
         )
         measurements.append(
             Measurement(
-                group=group, values=values, metrics=metrics(values, group.cycle)
+                group=group, values=values, metrics=metrics(values, group.chamber)
             )
         )
 
@@ -362,6 +458,14 @@ ABSENT = "--"
 
 # Indexed quantities are per square metre of body surface.
 PER_BSA = "/m\u00b2"
+
+# What the extremes of a curve are called, by whether the structure has been
+# declared a pumping chamber. A maximum is only an end-diastolic volume to a
+# reader who has said the structure fills and empties over a cardiac cycle;
+# for a great vessel or a lung it is a maximum, and there is no stroke volume
+# or ejection fraction under it.
+CHAMBER_ROWS = ("EDV", "ESV")
+EXTREME_ROWS = ("Maximum", "Minimum")
 
 
 def number(value: float | None, digits: int = 1) -> str:
@@ -383,22 +487,32 @@ def page_table(
     painted beside the chart and the one listed in the drawer cannot come to
     disagree about a rounding or a unit.
 
-    The rows are named for the heart -- EDV, ESV -- where the measurement
-    itself is named for the curve. This is where that translation belongs: a
-    maximum is only an end-diastolic volume to a reader who knows the structure
-    fills and empties.
+    This is the one place the cardiac vocabulary is used, and it is used only
+    where a reader has declared the structure a pumping chamber.  Nothing in
+    the measurement knows what phase anything was acquired at, or that the
+    series covered a cycle at all: a maximum is an end-diastolic volume by
+    somebody's say-so, and for an aorta or a lung it is a maximum and nothing
+    else.
     """
     group, found = measurement.group, measurement.metrics
     indexed_unit = group.unit + PER_BSA
+    largest, smallest = CHAMBER_ROWS if group.chamber else EXTREME_ROWS
 
     # Each row: what it is called, what it reads, and the quantity an indexed
     # column would divide -- None where indexing it would say nothing.
     entries = [
-        ("EDV", quantity(found.maximum, group.unit), found.maximum),
-        ("ESV", quantity(found.minimum, group.unit), found.minimum),
-        ("SV", quantity(found.stroke, group.unit), found.stroke),
-        ("EF", quantity(found.ejection, "%"), None),
+        (largest, quantity(found.maximum, group.unit), found.maximum),
+        (smallest, quantity(found.minimum, group.unit), found.minimum),
     ]
+
+    # No rows at all rather than two rows of dashes: a stroke volume is what a
+    # chamber has, and printing the absence of one under an aorta invites the
+    # reader to wonder which of the two it is.
+    if group.chamber:
+        entries += [
+            ("SV", quantity(found.stroke, group.unit), found.stroke),
+            ("EF", quantity(found.ejection, "%"), None),
+        ]
 
     if not bsa:
         return PAGE_COLUMNS, [(name, value) for name, value, _ in entries]
@@ -427,13 +541,17 @@ def timeseries(result: Result) -> tuple[list[str], list[list]]:
 def metrics_table(result: Result) -> tuple[list[str], list[list]]:
     """What each structure came to, as numbers rather than as formatted text.
 
-    Unlike ``table``, which is for reading: an empty cell here rather than a
-    dash, so that whatever opens the file sees a missing value and not a string
-    in a column of numbers.
+    Unlike ``page_table``, which is for reading: an empty cell here rather than
+    a dash, so that whatever opens the file sees a missing value and not a
+    string in a column of numbers -- and the columns are named for the curve
+    rather than for the heart, because one table holds every structure.
     """
-    header = ["structure", "unit", "EDV", "ESV", "SV", "EF_pct"]
+    # Neutral names, unlike the page's: one table holds every structure, so a
+    # column called EDV would carry a ventricle's end-diastolic volume and an
+    # aorta's maximum in the same place.
+    header = ["structure", "unit", "maximum", "minimum", "stroke", "ejection_pct"]
     if result.bsa:
-        header.extend(["BSA_m2", "EDVi", "ESVi", "SVi"])
+        header.extend(["BSA_m2", "maximum_i", "minimum_i", "stroke_i"])
 
     rows = []
     for measurement in result.measurements:

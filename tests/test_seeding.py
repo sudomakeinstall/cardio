@@ -77,6 +77,9 @@ MOVED = {
     "tile.segmentation_label": "shell",
     "tile.source": "spacing",
     "tile.spacing": 7.5,
+    "volumetry.groups": [
+        {"name": "cavity", "labels": [5], "density": 1.05, "chamber": False}
+    ],
     "volumetry.segmentation_label": "curves",
     "view.camera_lock": "LL",
     "view.clip_depth": [12.0, 345.0],

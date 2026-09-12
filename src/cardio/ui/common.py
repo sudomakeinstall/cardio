@@ -113,6 +113,17 @@ def target_group(title: str, icon: str, subtitle: str, **kwargs):
         yield
 
 
+# A text field swallows its own key events, or they reach the render view's
+# interactor and typing `a` maximizes the axial view. Here rather than beside
+# one panel because several want it; the console prompt and the rotation names
+# guard `keyup` as well, for reasons of their own that are written down there.
+SWALLOW_KEYS = {
+    "__events": ["keydown", "keypress"],
+    "keydown": "$event.stopPropagation(); $event.stopImmediatePropagation();",
+    "keypress": "$event.stopPropagation(); $event.stopImmediatePropagation();",
+}
+
+
 SLIDER_CLASS = "cardio-slider"
 
 SUBPANEL_CLASS = "cardio-subpanel"

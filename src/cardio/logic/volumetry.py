@@ -22,12 +22,16 @@ import logging
 from ..action import action
 from ..capture import Context, WindowFrames, wants_alpha, writer_for
 from ..volumetry import (
+    STRUCTURES,
+    Result,
     body_size,
     body_surface_area,
     measure,
     metrics_table,
     page_table,
+    structure_rows,
     timeseries,
+    usable_groups,
     voxel_volume_ml,
 )
 from .base import Controller
@@ -46,12 +50,22 @@ PAGES = "pages"
 REPORT = "Cardiac Volumetry"
 
 
+def blank_structure() -> dict:
+    """A structure with nothing decided yet, as state spells one.
+
+    Every field the model has, so that the drawer binds against the same shape
+    whether the row came from a config or from the Add button -- a key that
+    only appears once it is typed into is a key the widget cannot bind.
+    """
+    return {"name": "", "labels": [], "color": None, "density": None, "chamber": True}
+
+
 class VolumetryController(Controller):
     """Chamber volumes over the cycle, and the chart they are drawn in."""
 
     # volumetry_seg_label is absent: an empty one means the first segmentation,
     # and a scene may have none, so it is written by hand below.
-    seeds = ("volumetry_indexed",)
+    seeds = ("volumetry_indexed", "volumetry_groups")
 
     def __init__(self, app):
         super().__init__(app)
@@ -62,7 +76,9 @@ class VolumetryController(Controller):
         state = self.server.state
         state.change("maximized_view")(self.refresh)
         state.change("volumetry_structure")(self.turn_page)
-        state.change("volumetry_seg_label", "volumetry_indexed")(self.remeasure)
+        state.change("volumetry_groups")(self.restructure)
+        state.change("volumetry_seg_label")(self.resegment)
+        state.change("volumetry_indexed")(self.remeasure)
         state.change("frame")(self.mark_frame)
 
     def seed(self):
@@ -78,8 +94,9 @@ class VolumetryController(Controller):
 
         state = self.server.state
         state.volumetry_rows = []
-        state.volumetry_structures = self.names
-        state.volumetry_structure = self.names[0] if self.names else ""
+        state.volumetry_available_labels = self.available_labels()
+        state.volumetry_indexable = self.available_area() is not None
+        self.publish_structures()
         state.volumetry_saved_at = None
         state.volumetry_summary = ""
         state.volumetry_ok = True
@@ -100,10 +117,46 @@ class VolumetryController(Controller):
         labels = [seg.label for seg in self.scene.segmentations]
         return labels[0] if labels else ""
 
+    def groups(self):
+        """The structures state currently describes, as models.
+
+        State is what the drawer edits, so it is what this reads -- the scene's
+        own list is the seed and nothing more.  A row still being filled in is
+        dropped rather than refused, which is the whole of ``usable_groups``.
+        """
+        return usable_groups(self.rows())
+
+    def rows(self) -> list:
+        """What the drawer currently holds, finished structures or not."""
+        return structure_rows(getattr(self.server.state, "volumetry_groups", None))
+
     @property
     def names(self) -> list[str]:
         """The structures there are pages for, in the order they are drawn."""
-        return [group.name for group in self.scene.volumetry.groups]
+        return [group.name for group in self.groups()]
+
+    def available_labels(self) -> list[dict]:
+        """The label picker's options, off the segmentation being measured."""
+        segmentation = self.segmentation()
+        if segmentation is None:
+            return []
+        return [
+            {"title": str(value), "value": value}
+            for value in segmentation.get_labels(self._frame)
+        ]
+
+    def publish_structures(self):
+        """Fill the structure picker, keeping the page showing where it can.
+
+        A structure can be renamed or deleted out from under the picker, so the
+        selection is only moved when the one it names has stopped existing --
+        editing the structure below the one being read should not turn the page.
+        """
+        names = self.names
+        state = self.server.state
+        state.volumetry_structures = names
+        if getattr(state, "volumetry_structure", "") not in names:
+            state.volumetry_structure = names[0] if names else ""
 
     @property
     def page(self) -> int:
@@ -137,16 +190,26 @@ class VolumetryController(Controller):
         self._drawn = None
 
     def body_surface_area(self) -> float | None:
-        """The area to index by, from the config or from the images' header.
+        """The area the measurement is indexed by, or None if it is not to be.
+
+        Split from ``available_area`` because the tick and the tags answer
+        different questions: one is whether to index, the other whether there
+        is anything to index by.  The drawer needs the second on its own, to
+        say why the tick is not offered.
+        """
+        config = self.scene.volumetry
+        if not getattr(self.server.state, "volumetry_indexed", config.indexed):
+            return None
+        return self.available_area()
+
+    def available_area(self) -> float | None:
+        """The area there is to index by, from the config or the images.
 
         The configured height and weight win over the tags, one at a time: a
         study that recorded only a weight should still be indexable by adding
         the height, rather than having to restate both.
         """
         config = self.scene.volumetry
-        if not getattr(self.server.state, "volumetry_indexed", config.indexed):
-            return None
-
         height, weight = config.patient_height_m, config.patient_weight_kg
         if height is None or weight is None:
             segmentation = self.segmentation()
@@ -164,17 +227,28 @@ class VolumetryController(Controller):
         holding is only of the arithmetic over it -- which is cheap, and is
         held anyway because the charts are rebuilt from the same object.
         """
-        if self._result is None:
-            segmentation = self.segmentation()
-            if segmentation is None or not self.scene.volumetry.groups:
-                return None
+        if self._result is not None:
+            return self._result
 
-            frames = len(segmentation.actors) or 1
+        segmentation = self.segmentation()
+        if segmentation is None:
+            return None
+
+        groups = self.groups()
+        frames = len(segmentation.actors) or 1
+        bsa = self.body_surface_area()
+
+        # Nothing to measure is not nothing to draw: an empty measurement is
+        # what a blank page is made of, and counting voxels for no structure
+        # would be work done to arrive at the same place.
+        if not groups:
+            self._result = Result(measurements=[], bsa=bsa, frames=frames)
+        else:
             self._result = measure(
                 [segmentation.label_counts(frame) for frame in range(frames)],
                 voxel_volume_ml(segmentation.mpr_image_data(0)),
-                self.scene.volumetry.groups,
-                bsa=self.body_surface_area(),
+                groups,
+                bsa=bsa,
             )
         return self._result
 
@@ -183,7 +257,11 @@ class VolumetryController(Controller):
         if not self.active or self.views is None:
             return
 
-        signature = (self.server.state.volumetry_seg_label, self.page)
+        signature = (
+            self.server.state.volumetry_seg_label,
+            tuple(self.groups()),
+            self.page,
+        )
         if signature == self._drawn:
             return
 
@@ -205,6 +283,29 @@ class VolumetryController(Controller):
     def remeasure(self, **kwargs):
         """Take the measurement again, because what it was taken off changed."""
         self.forget()
+        self.refresh()
+
+    def resegment(self, **kwargs):
+        """Measure off another segmentation, and offer its labels instead.
+
+        The labels index into the segmentation being left, so the picker
+        cannot survive the change -- the same reason the tile grid rebuilds
+        its own.  What the structures name is left alone: a chamber keeps its
+        label numbers across two segmentations of the same study, and a
+        structure naming one the new segmentation lacks measures zero and says
+        so rather than quietly emptying itself.
+        """
+        state = self.server.state
+        state.volumetry_available_labels = self.available_labels()
+        # The body size is read off the segmentation's own header, so which
+        # segmentation is chosen decides whether there is one at all.
+        state.volumetry_indexable = self.available_area() is not None
+        self.remeasure()
+
+    def restructure(self, **kwargs):
+        """The structures changed, so the pages and the picker follow."""
+        self.forget()
+        self.publish_structures()
         self.refresh()
 
     def publish(self):
@@ -235,6 +336,35 @@ class VolumetryController(Controller):
         self.views.set_frame(frame)
         self.server.controller.volumetry_update()
 
+    @action("add_structure")
+    def add_structure(self):
+        """Put a blank structure at the end of the list, to be filled in.
+
+        Blank rather than named: a placeholder would have to be cleared before
+        a real name could be typed, and an unnamed row already says what it is
+        by having nothing in it.
+        """
+        rows = self.rows()
+        if len(rows) >= self.scene.max_volumetry_groups:
+            logger.warning(
+                f"At most {self.scene.max_volumetry_groups} structures can be "
+                "measured; raise max_volumetry_groups to add another."
+            )
+            return
+
+        self.write_rows([*rows, blank_structure()])
+
+    @action("remove_structure")
+    def remove_structure(self, index: int):
+        """Drop the structure at ``index``, finished or not.
+
+        A new list rather than a pop: trame notices a variable being assigned,
+        not a list being mutated under one.
+        """
+        rows = self.rows()
+        if 0 <= index < len(rows):
+            self.write_rows([*rows[:index], *rows[index + 1 :]])
+
     @action("save_volumetry")
     def save_volumetry(self):
         """Write the curves and the metrics out as two CSV files.
@@ -248,8 +378,8 @@ class VolumetryController(Controller):
         looking at them.
         """
         result = self.result()
-        if result is None:
-            self.report("Nothing to export: no structures are configured", False)
+        if result is None or not result.measurements:
+            self.report("Nothing to export: no structures are named yet", False)
             return
 
         stamp = dt.datetime.now().astimezone()
@@ -330,6 +460,14 @@ class VolumetryController(Controller):
             self.server.controller.volumetry_update()
 
         return views.pages
+
+    def write_rows(self, rows: list):
+        """Put the structures back, in the shape the drawer's widget holds.
+
+        A new object rather than a list appended to: trame notices a variable
+        being assigned, and the widget mirroring it holds an object.
+        """
+        self.server.state.volumetry_groups = {STRUCTURES: rows}
 
     def report(self, summary: str, ok: bool):
         """Say what an export did, in the shape the capture save reports."""

@@ -262,6 +262,10 @@ class Scene(ps.BaseSettings):
             'CLI usage: --volumetry.groups \'[{"name":"LV","labels":[6,3,8]}]\''
         ),
     )
+    max_volumetry_groups: int = pc.Field(
+        default=12,
+        description="Maximum number of volumetry structures the drawer can edit",
+    )
 
     # Field validators for JSON string inputs
     @pc.field_validator("meshes", mode="before")

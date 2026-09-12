@@ -82,13 +82,19 @@ orientation_locked = true
 # What the volumetry charts measure.  A structure is a group of labels rather
 # than a single one, because a chamber segmented as a bloodpool, an outflow
 # tract and a trabecular mesh is one chamber; `density` reports a structure as
-# a mass instead of a volume, and `cycle = false` says the difference between
-# its extremes is shape rather than flow, so no stroke volume or ejection
-# fraction is quoted for it.
+# a mass instead of a volume, and `chamber = false` says the structure does not
+# pump, so its extremes are reported as a maximum and a minimum rather than as
+# end-diastolic and end-systolic volumes, with no stroke volume or ejection
+# fraction under them.  Leave it off for myocardium, for a great vessel, and
+# for anything outside the heart.
 #
 # Volumes are also indexed by body surface area when one can be had.  The
 # height and weight come from the images' PatientSize and PatientWeight tags
 # unless given here, in metres and kilograms.
+#
+# The structures can also be added, renamed and relabelled in the drawer, so
+# this section is where a set you already trust is started from rather than the
+# only place one can be written.
 [volumetry]
 segmentation_label = "BL_Labels"
 indexed = true
@@ -116,4 +122,4 @@ labels = [4]
 name = "Myo"
 labels = [1]
 density = 1.05               # g/mL, so the myocardium is reported in grams
-cycle = false
+chamber = false              # a mass that changes shape, not a volume that pumps

@@ -202,6 +202,7 @@ def test_volume_and_segmentation_specific_keys_are_registered(read_only_app):
 # name changing is a decision rather than a diff nobody sees.
 ACTIONS = {
     "add_rotation",
+    "add_structure",
     "adjust_window_level",
     "align_to_interface",
     "clear_console",
@@ -213,6 +214,7 @@ ACTIONS = {
     "place_camera",
     "recall_command",
     "remove_rotation",
+    "remove_structure",
     "reset_all",
     "reset_mpr_origin",
     "reset_rotation_angle",
@@ -428,6 +430,15 @@ def test_the_chart_viewport_is_built_and_bound_to_an_update_of_its_own(
 
     assert scene.volumetry_views is not None
     assert callable(server.controller.volumetry_update)
+
+
+def test_the_structures_can_be_named_on_a_scene_that_configures_none(read_only_app):
+    """The drawer is where a structure is named now, so neither the panel nor
+    the seeding pass can wait for a config to have named one first."""
+    server, _, _, _ = read_only_app
+
+    assert server.state.volumetry_groups == {"structures": []}
+    assert callable(server.controller.add_structure)
 
 
 def test_renderables_covers_every_type(scene):

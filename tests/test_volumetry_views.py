@@ -291,12 +291,13 @@ def test_a_value_carries_the_unit_its_metric_is_in(views):
     assert values["EF"].endswith(" %")
 
 
-def test_a_structure_outside_the_cycle_shows_no_stroke_volume(views):
-    views.show(measured(names=("Myo",), cycle=False))
-    values = dict(row[:2] for row in views._table.rows)
+def test_a_structure_that_does_not_pump_is_read_as_extremes_and_nothing_more(views):
+    """Nothing here knows what phase anything was acquired at, so the cardiac
+    vocabulary is a reader's claim and not the measurement's: an aorta or a
+    lung has a maximum, and no stroke volume underneath it to wonder about."""
+    views.show(measured(names=("Ao",), chamber=False))
 
-    assert values["SV"] == ABSENT
-    assert values["EF"] == ABSENT
+    assert [row[0] for row in views._table.rows] == ["Maximum", "Minimum"]
 
 
 def test_the_indexed_column_appears_only_once_a_body_surface_area_is_known(views):

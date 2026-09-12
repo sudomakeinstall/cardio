@@ -12,6 +12,7 @@ from ...state import (
     capture_series_number,
     screenshot_viewport,
 )
+from ..common import SWALLOW_KEYS
 
 VIEWPORT_LABELS = {
     "vr": "3D",
@@ -43,15 +44,6 @@ NAMES_SERIES = " || ".join(
 UNNAMED = "Left empty, the series is named after the viewport and what it holds"
 
 UNBANNERED = "Left empty, nothing is added to the margin"
-
-# A text field swallows its own key events, or they reach the render view's
-# interactor and typing `a` maximizes the axial view. The same guard the console
-# prompt and the rotation name field carry, for the same reason.
-SWALLOW_KEYS = {
-    "__events": ["keydown", "keypress"],
-    "keydown": "$event.stopPropagation(); $event.stopImmediatePropagation();",
-    "keypress": "$event.stopPropagation(); $event.stopImmediatePropagation();",
-}
 
 
 def capture_panel(server, scene):
