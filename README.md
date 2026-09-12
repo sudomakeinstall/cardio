@@ -232,11 +232,11 @@ import pathlib as pl
 # Third Party
 import cardio
 
-do = cardio.script(pl.Path(__file__).parent / '2026-09-06-22-10-40.toml')
+do = cardio.script(pl.Path(__file__).parent / "2026-09-06-22-10-40.toml")
 
-do.add_rotation(axis='Z')
+do.add_rotation(axis="Z")
 do.set_window_level_preset(preset=3)
-do.set_state(key='tile_cols', value=4)
+do.set_state(key="tile_cols", value=4)
 do.screenshot()
 ```
 
@@ -251,8 +251,8 @@ whole of it, which is how one rotation in a stack of them is a line short
 enough to read and to type:
 
 ```python
-do.set_state(key='mpr_rotation_data.angles_list.1.visible', value=False)
-do.set_state(key='mpr_rotation_data.angles_list.0.angle', value=45.0)
+do.set_state(key="mpr_rotation_data.angles_list.1.visible", value=False)
+do.set_state(key="mpr_rotation_data.angles_list.0.angle", value=45.0)
 ```
 
 The path is dotted, and a number in it indexes a list.  A value that is not a
