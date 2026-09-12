@@ -409,6 +409,7 @@ class Segmentation(Object):
     _label_clouds: dict[tuple[int, ...], np.ndarray | None] = pc.PrivateAttr(
         default_factory=dict
     )
+    _label_counts: dict[int, dict[int, int]] = pc.PrivateAttr(default_factory=dict)
     properties: vtkPropertyConfig = pc.Field(
         default_factory=vtkPropertyConfig, description="Property configuration"
     )
@@ -604,21 +605,44 @@ class Segmentation(Object):
             return self.create_mpr_actors(frame)
         return self._mpr_actors[frame]
 
-    def get_labels(self, frame: int = 0) -> list[int]:
+    def label_counts(self, frame: int = 0) -> dict[int, int]:
+        """How many voxels of ``frame`` carry each label, background aside.
+
+        One histogram pass in C++ rather than a mask per label in numpy, which
+        is what makes measuring a whole 4D series cheap enough to do on the way
+        into a view.
+
+        Memoised, because the counts of a frame do not change: a volume curve
+        is read again whenever the structures are reconfigured, and reading a
+        4D label series is not something to do again at that rate.
+        """
         if frame >= len(self._label_images):
             frame = 0
-        image_data = self._label_images[frame]
-        max_label = int(image_data.GetPointData().GetScalars().GetRange()[1])
-        if max_label < 1:
-            return []
-        acc = vtk.vtkImageAccumulate()
-        acc.SetInputData(image_data)
-        acc.SetComponentExtent(0, max_label, 0, 0, 0, 0)
-        acc.SetComponentOrigin(0, 0, 0)
-        acc.SetComponentSpacing(1, 0, 0)
-        acc.Update()
-        hist = acc.GetOutput().GetPointData().GetScalars()
-        return [i for i in range(1, max_label + 1) if hist.GetTuple1(i) > 0]
+
+        if frame not in self._label_counts:
+            image_data = self._label_images[frame]
+            max_label = int(image_data.GetPointData().GetScalars().GetRange()[1])
+            if max_label < 1:
+                self._label_counts[frame] = {}
+            else:
+                acc = vtk.vtkImageAccumulate()
+                acc.SetInputData(image_data)
+                acc.SetComponentExtent(0, max_label, 0, 0, 0, 0)
+                acc.SetComponentOrigin(0, 0, 0)
+                acc.SetComponentSpacing(1, 0, 0)
+                acc.Update()
+                hist = acc.GetOutput().GetPointData().GetScalars()
+                self._label_counts[frame] = {
+                    i: int(hist.GetTuple1(i))
+                    for i in range(1, max_label + 1)
+                    if hist.GetTuple1(i) > 0
+                }
+
+        return self._label_counts[frame]
+
+    def get_labels(self, frame: int = 0) -> list[int]:
+        """The labels ``frame`` actually carries, in increasing order."""
+        return sorted(self.label_counts(frame))
 
     def _frame_mesh(self, frame: int) -> vtk.vtkPolyData | None:
         """Mesh shown at ``frame``, wrapping as the renderer does for short series."""

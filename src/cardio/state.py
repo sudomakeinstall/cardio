@@ -76,7 +76,7 @@ class ObjectState:
 # Everywhere a capture can be taken from. Named here rather than beside the
 # capture logic because these are what the ticks below are keyed by, and the
 # registry has to be able to enumerate them without importing a controller.
-VIEWPORTS = ("vr", "axial", "coronal", "sagittal", "tile")
+VIEWPORTS = ("vr", "axial", "coronal", "sagittal", "tile", "volumetry")
 
 
 def screenshot_viewport(viewport: str) -> str:

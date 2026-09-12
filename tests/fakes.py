@@ -23,6 +23,7 @@ from cardio.rotation import RotationMetadata, RotationSequence
 from cardio.snap import Snap
 from cardio.tile import Tile
 from cardio.tile_views import TileViews
+from cardio.volumetry_views import VolumetryViews
 
 
 class FakeState(dict):
@@ -84,6 +85,7 @@ class FakeScene:
         self.volumes = list(volumes or [])
         self.tile = tile or Tile()
         self.tile_views = None
+        self.volumetry_views = None
         self.mpr_views = mpr_views
         self.mpr_rotation_sequence = RotationSequence(
             metadata=RotationMetadata(index_order=index_order, angle_units=angle_units)
@@ -93,6 +95,10 @@ class FakeScene:
         if self.tile_views is None:
             self.tile_views = TileViews()
             self.tile_views.set_grid(self.tile.rows, self.tile.cols)
+
+    def setup_volumetry_render_window(self):
+        if self.volumetry_views is None:
+            self.volumetry_views = VolumetryViews()
 
 
 class FakeApp:

@@ -8,12 +8,15 @@ dispatches it.
 
 # System
 import math
+import pathlib as pl
+import re
 
 # Third Party
 import pytest
 
 # Internal
-from cardio.ui.interaction import HANDLED_EVENTS, Interaction
+import cardio.ui.interaction as interaction_module
+from cardio.ui.interaction import HANDLED_EVENTS, MAXIMIZE_KEYS, Interaction
 
 
 class RecordingMPR:
@@ -123,12 +126,26 @@ def test_listeners_cover_every_handled_event(interaction):
         ("c", "coronal"),
         ("s", "sagittal"),
         ("t", "tile"),
+        ("y", "volumetry"),
     ],
 )
 def test_maximize_keys_name_the_view_they_maximize(interaction, key, view):
     """Whether a second press maximizes or restores is the action's business."""
     press(interaction, key)
     assert interaction.logic.arguments("toggle_maximized") == [{"view": view}]
+
+
+def test_the_help_sheet_lists_every_key_that_maximizes_a_view():
+    """The shortcut table is written out by hand, one row at a time.
+
+    So a key added to ``MAXIMIZE_KEYS`` reaches the app and never reaches the
+    sheet that is the only place it is written down -- which is not something
+    anybody notices, because the key works.
+    """
+    source = (pl.Path(interaction_module.__file__).parent / "help.py").read_text()
+    listed = set(re.findall(r'html\.Td\("(\w)"\)', source))
+
+    assert set(MAXIMIZE_KEYS) <= listed
 
 
 def test_l_toggles_crosshairs_and_h_toggles_help(interaction):

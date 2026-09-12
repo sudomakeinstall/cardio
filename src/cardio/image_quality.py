@@ -38,6 +38,8 @@ def render_windows(scene) -> list:
         windows.extend(scene.mpr_views.windows.values())
     if scene.tile_views is not None:
         windows.append(scene.tile_views.window)
+    if scene.volumetry_views is not None:
+        windows.append(scene.volumetry_views.window)
     return windows
 
 

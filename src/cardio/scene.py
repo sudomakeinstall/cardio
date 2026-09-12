@@ -19,6 +19,8 @@ from .tile_views import TileViews
 from .types import RGBColor
 from .view import View
 from .volume import Volume
+from .volumetry import Volumetry
+from .volumetry_views import VolumetryViews
 from .window_level import presets
 from .zoom import Zoom
 
@@ -203,8 +205,11 @@ class Scene(ps.BaseSettings):
         ),
     )
     screenshot_viewports: list[str] = pc.Field(
-        default=["vr", "axial", "coronal", "sagittal", "tile"],
-        description="Viewports to capture in screenshots. Options: vr, axial, coronal, sagittal, tile",
+        default=["vr", "axial", "coronal", "sagittal", "tile", "volumetry"],
+        description=(
+            "Viewports to capture in screenshots. Options: vr, axial, coronal, "
+            "sagittal, tile, volumetry"
+        ),
     )
     capture_format: CaptureFormat = pc.Field(
         default=CaptureFormat.PNG,
@@ -249,6 +254,13 @@ class Scene(ps.BaseSettings):
     tile: Tile = pc.Field(
         default_factory=Tile,
         description="Tile grid settings. CLI usage: --tile.rows 2 --tile.cols 4",
+    )
+    volumetry: Volumetry = pc.Field(
+        default_factory=Volumetry,
+        description=(
+            "What the volumetry chart measures, one entry per curve. "
+            'CLI usage: --volumetry.groups \'[{"name":"LV","labels":[6,3,8]}]\''
+        ),
     )
 
     # Field validators for JSON string inputs
@@ -352,6 +364,7 @@ class Scene(ps.BaseSettings):
     # Built lazily: these windows only exist once their layout branch is built
     _mpr_views: MPRViews = pc.PrivateAttr(default=None)
     _tile_views: TileViews = pc.PrivateAttr(default=None)
+    _volumetry_views: VolumetryViews = pc.PrivateAttr(default=None)
 
     @property
     def renderer(self) -> vtk.vtkRenderer:
@@ -374,6 +387,11 @@ class Scene(ps.BaseSettings):
     def tile_views(self) -> TileViews | None:
         """The tile grid's render window, or None before tile mode is built."""
         return self._tile_views
+
+    @property
+    def volumetry_views(self) -> VolumetryViews | None:
+        """The chart's render window, or None before the charts are built."""
+        return self._volumetry_views
 
     @pc.model_validator(mode="after")
     def setup_scene(self):
@@ -479,6 +497,11 @@ class Scene(ps.BaseSettings):
         return self.serialization_directory / "scripts"
 
     @property
+    def volumetry_directory(self) -> pl.Path:
+        """Computed property that returns the volumetry subdirectory."""
+        return self.serialization_directory / "volumetry"
+
+    @property
     def nframes(self) -> int:
         ns = [len(obj.actors) for obj in self.renderables]
         if not len(ns) > 0:
@@ -513,6 +536,11 @@ class Scene(ps.BaseSettings):
         if self._tile_views is None:
             self._tile_views = TileViews()
             self._tile_views.set_grid(self.tile.rows, self.tile.cols)
+
+    def setup_volumetry_render_window(self):
+        """Initialize the volumetry chart's render window on first use."""
+        if self._volumetry_views is None:
+            self._volumetry_views = VolumetryViews()
 
     def hide_all_frames(self):
         for a in self.renderer.GetActors():

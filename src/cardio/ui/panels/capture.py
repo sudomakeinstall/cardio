@@ -19,6 +19,7 @@ VIEWPORT_LABELS = {
     "coronal": "Coronal",
     "sagittal": "Sagittal",
     "tile": "Tiles",
+    "volumetry": "Volumetry",
 }
 
 # A viewport can only be captured while the layout is drawing it, so a capture

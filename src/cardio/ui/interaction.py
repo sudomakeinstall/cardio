@@ -46,6 +46,7 @@ MAXIMIZE_KEYS = {
     "c": "coronal",
     "s": "sagittal",
     "t": "tile",
+    "y": "volumetry",
 }
 
 

@@ -29,10 +29,11 @@ class FakeTileViews:
 
 
 class FakeScene:
-    def __init__(self, mpr_views=None, tile_views=None):
+    def __init__(self, mpr_views=None, tile_views=None, volumetry_views=None):
         self.renderWindow = "vr-window"
         self.mpr_views = mpr_views
         self.tile_views = tile_views
+        self.volumetry_views = volumetry_views
 
 
 class FakeServer:
@@ -71,6 +72,17 @@ def test_every_mpr_window_is_included():
     assert windows[0] == "vr-window"
     assert len(windows) == 1 + len(VIEWS)
     assert set(windows[1:]) == set(scene.mpr_views.windows.values())
+
+
+def test_the_chart_window_is_included_once_it_exists():
+    """A cine of the volumetry charts is encoded like any other viewport.
+
+    Left out, the quality and resolution the playback panel sets would reach
+    every window but this one, and nothing would say why its capture looked
+    different.
+    """
+    scene = FakeScene(volumetry_views=FakeTileViews("chart-window"))
+    assert "chart-window" in render_windows(scene)
 
 
 def test_the_tile_window_is_included_once_it_exists():

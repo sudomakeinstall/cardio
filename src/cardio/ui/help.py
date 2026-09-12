@@ -44,6 +44,9 @@ def help_dialog():
                     html.Td("t")
                     html.Td("Toggle tile view")
                 with html.Tr():
+                    html.Td("y")
+                    html.Td("Toggle volumetry charts")
+                with html.Tr():
                     html.Td("l")
                     html.Td("Toggle crosshairs")
 

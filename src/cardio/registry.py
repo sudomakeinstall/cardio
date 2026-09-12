@@ -195,6 +195,11 @@ DOCUMENT = _declare(
         ),
     ),
     tile_spacing="tile.spacing",
+    volumetry_indexed="volumetry.indexed",
+    volumetry_seg_label=(
+        "volumetry.segmentation_label",
+        "an empty one means the first segmentation, and a scene may have none",
+    ),
     zoom_fill="zoom.fill",
     zoom_labels="zoom.labels",
     zoom_locked="zoom.locked",
@@ -225,6 +230,10 @@ SESSION = _declare(
     script_summary="the one line the console shows about the last export",
     snap_no_interface="derived from whether the selection has an interface",
     trame__busy="trame's own, raised while a round trip is in flight",
+    volumetry_ok="whether the last export wrote anything",
+    volumetry_structure="which structure's page is showing is browsing state",
+    volumetry_saved_at="written when the measurements are exported",
+    volumetry_summary="the one line the drawer shows about the last export",
     trame__title="trame's own, set from the version",
 )
 
@@ -247,6 +256,8 @@ ITEMS = _declare(
     tile_sizes="the grid sizes offered, fixed at build time",
     volume_items="one entry per volume in the scene",
     volume_preset_items="the transfer function presets, spelled for the picker",
+    volumetry_rows="the shown page's metrics, one row each, as the drawer lists them",
+    volumetry_structures="one entry per structure the config asks to be measured",
     zoom_available_labels="the labels present in the segmentation the fit is aimed at",
     zoom_plane_items="the three MPR planes, spelled for the picker",
 )

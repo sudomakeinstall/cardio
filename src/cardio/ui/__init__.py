@@ -23,6 +23,7 @@ from .panels import (
     tiles_panel,
     volume_panel,
     volume_rendering_panel,
+    volumetry_panel,
     zoom_panel,
 )
 
@@ -107,6 +108,12 @@ class UI:
                 # the volume's own cut along its normal, and want nothing else.
                 with section("tiles", "Tile View", "mdi-view-grid-outline"):
                     tiles_panel(self.server, self.scene)
+
+            if self.scene.segmentations:
+                # Not under the volumes: what it measures is the labels
+                # themselves, which no volume and no pose comes into.
+                with section("volumetry", "Volumetry", "mdi-chart-line"):
+                    volumetry_panel(self.server, self.scene)
 
             with section("export", "Export", "mdi-video-outline"):
                 capture_panel(self.server, self.scene)

@@ -24,6 +24,7 @@ RENDER_VIEWS = (
     "sagittal_update",
     "volume_update",
     "tile_update",
+    "volumetry_update",
 )
 
 VIEW_FUNCTIONS = (*RENDER_VIEWS, "view_reset_camera", "view_update")
@@ -42,6 +43,7 @@ class Layout(str, enum.Enum):
     CORONAL = "coronal"
     SAGITTAL = "sagittal"
     TILE = "tile"
+    VOLUMETRY = "volumetry"
 
     @property
     def state_value(self) -> str:
@@ -60,22 +62,26 @@ class Layout(str, enum.Enum):
     def shows_slices(self) -> bool:
         """Whether this layout draws the three MPR views.
 
-        The volume rendering and the tile grid do not, so the reslicing behind
-        those views is wasted work while either is on screen.
+        The volume rendering, the tile grid and the volumetry charts do not, so
+        the reslicing behind those views is wasted work while any of them is on
+        screen -- and a cine pays that cost once a frame.
         """
-        return self not in (Layout.VOLUME, Layout.TILE)
+        return self not in (Layout.VOLUME, Layout.TILE, Layout.VOLUMETRY)
 
     @property
     def shows_reslice(self) -> bool:
         """Whether this layout draws a resampled cut of the volume at all.
 
-        Wider than ``shows_slices`` at both ends. A maximized axial view draws
+        Wider than ``shows_slices`` at one end. A maximized axial view draws
         the same cut the quad view does, and the tile grid draws its own along
-        the traverse path -- so everything but the volume rendering has a cut
-        on screen, and everything but the volume rendering wants the controls
-        over one.
+        the traverse path -- so those want the controls over a cut even though
+        they are not the three MPR views.
+
+        The volume rendering has a camera rather than a cut, and the volumetry
+        charts have neither: what they draw is a measurement of the labels, and
+        no window or level applies to it.
         """
-        return self is not Layout.VOLUME
+        return self not in (Layout.VOLUME, Layout.VOLUMETRY)
 
     @property
     def on_screen(self) -> frozenset["Layout"]:
@@ -108,9 +114,9 @@ class CameraLock(str, enum.Enum):
 class DrawerSection(str, enum.Enum):
     """The collapsible sections of the drawer, by the key the accordion tracks.
 
-    ``ORIENTATION``, ``TILES`` and ``ZOOM`` are only built when the scene has
-    the objects they control, so naming one of those in a scene without them
-    opens nothing.
+    ``ORIENTATION``, ``TILES``, ``ZOOM`` and ``VOLUMETRY`` are only built when
+    the scene has the objects they control, so naming one of those in a scene
+    without them opens nothing.
     """
 
     PLAYBACK = "playback"
@@ -118,6 +124,7 @@ class DrawerSection(str, enum.Enum):
     ORIENTATION = "orientation"
     ZOOM = "zoom"
     TILES = "tiles"
+    VOLUMETRY = "volumetry"
     EXPORT = "export"
 
 

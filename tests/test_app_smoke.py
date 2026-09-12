@@ -222,6 +222,7 @@ ACTIONS = {
     "rotate_view",
     "run_command",
     "save_rotation_angles",
+    "save_volumetry",
     "save_script",
     "screenshot",
     "scroll_slice",
@@ -412,6 +413,21 @@ def test_mpr_views_are_built_and_shared_with_the_scene(read_only_app):
     assert scene.mpr_views is not None
     for view in ("axial", "coronal", "sagittal"):
         assert scene.mpr_views[view] is not None
+
+
+def test_the_chart_viewport_is_built_and_bound_to_an_update_of_its_own(
+    read_only_app,
+):
+    """``UI`` calls every name in ``RENDER_VIEWS`` on trame's controller.
+
+    A render view added to that tuple without a container assigning its update
+    leaves a controller function nothing implements, which trame raises on
+    rather than passing over -- so the two have to arrive together.
+    """
+    server, scene, _, _ = read_only_app
+
+    assert scene.volumetry_views is not None
+    assert callable(server.controller.volumetry_update)
 
 
 def test_renderables_covers_every_type(scene):

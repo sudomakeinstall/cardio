@@ -56,6 +56,8 @@ DISPLAY_TAGS = [
     "PatientID",
     "PatientBirthDate",
     "PatientSex",
+    "PatientSize",
+    "PatientWeight",
     "StudyDate",
     "StudyTime",
     "StudyDescription",

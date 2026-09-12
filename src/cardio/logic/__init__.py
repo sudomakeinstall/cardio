@@ -23,6 +23,7 @@ from .snap import ALIGN_STEP_NAME, SnapController
 from .tiles import TileController
 from .view import ViewController
 from .visibility import VisibilityController
+from .volumetry import VolumetryController
 from .zoom import ZoomController
 
 __all__ = [
@@ -40,6 +41,7 @@ __all__ = [
     "TileController",
     "ViewController",
     "VisibilityController",
+    "VolumetryController",
     "ZoomController",
 ]
 
@@ -76,6 +78,7 @@ class Logic:
         self.visibility = VisibilityController(self)
         self.clipping = ClippingController(self)
         self.tiles = TileController(self)
+        self.volumetry = VolumetryController(self)
         self.capture = CaptureController(self)
         self.zoom = ZoomController(self)
         self.camera = CameraController(self)
@@ -129,6 +132,10 @@ class Logic:
         follows it, fitting the views against the origin and the rotation that
         lock has just settled; ``camera`` is last because it reads where every
         camera ended up once all of that has happened.
+
+        ``volumetry`` is below ``playback``, whose frame it marks, and above
+        ``snap`` and ``zoom``, since it neither moves the origin nor reads a
+        fit -- it measures the labels themselves, which no pose changes.
         """
         return [
             self.console,
@@ -139,6 +146,7 @@ class Logic:
             self.visibility,
             self.clipping,
             self.tiles,
+            self.volumetry,
             self.capture,
             self.snap,
             self.zoom,

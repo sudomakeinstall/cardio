@@ -207,6 +207,20 @@ def viewports(server, scene, listeners, handled_events, update_all_views):
         )
         server.controller.tile_update = tile_view.update
 
+    # Volumetry charts: a 2D context scene rather than a rendered scene, which
+    # is why nothing here is given the interactor events the other views take.
+    with vuetify.VContainer(
+        v_if="maximized_view === 'volumetry'",
+        fluid=True,
+        classes="pa-0 fill-height",
+    ):
+        scene.setup_volumetry_render_window()
+        volumetry_view = vtk_widgets.VtkRemoteView(
+            scene.volumetry_views.window,
+            interactive_ratio=1,
+        )
+        server.controller.volumetry_update = volumetry_view.update
+
     # Maximized sagittal view
     with vuetify.VContainer(
         v_if="maximized_view === 'sagittal'",

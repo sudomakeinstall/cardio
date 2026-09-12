@@ -176,6 +176,11 @@ class CaptureController(Controller):
                 if self.scene.tile_views is not None
                 else None
             ),
+            "volumetry": (
+                self.scene.volumetry_views.window
+                if self.scene.volumetry_views is not None
+                else None
+            ),
         }
         if self.scene.mpr_views is not None:
             for name in MPR_VIEWPORTS:

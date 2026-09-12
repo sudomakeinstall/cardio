@@ -149,6 +149,7 @@ def test_the_state_value_reads_back_as_its_layout(value, expected):
         (Layout.SAGITTAL, True),
         (Layout.VOLUME, False),
         (Layout.TILE, False),
+        (Layout.VOLUMETRY, False),
     ],
 )
 def test_only_the_layouts_with_slices_in_them_want_the_reslice(layout, shows):
@@ -164,10 +165,23 @@ def test_only_the_layouts_with_slices_in_them_want_the_reslice(layout, shows):
         (Layout.CORONAL, {Layout.CORONAL}),
         (Layout.SAGITTAL, {Layout.SAGITTAL}),
         (Layout.TILE, {Layout.TILE}),
+        (Layout.VOLUMETRY, {Layout.VOLUMETRY}),
     ],
 )
 def test_a_layout_draws_only_what_it_shows(layout, drawn):
     assert layout.on_screen == drawn
+
+
+def test_the_charts_resample_no_cut_and_so_draw_none():
+    """What the volumetry layout shows is a measurement, not an image.
+
+    Both halves matter and fail differently. Left in ``shows_slices``, every
+    frame of a cine resamples three oblique planes nobody can see; left in
+    ``shows_reslice``, the drawer offers the window, level and overlay controls
+    over a chart none of them acts on.
+    """
+    assert not Layout.VOLUMETRY.shows_slices
+    assert not Layout.VOLUMETRY.shows_reslice
 
 
 def test_a_maximized_cut_is_alone_on_screen_though_all_three_are_resliced():

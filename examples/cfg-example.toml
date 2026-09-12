@@ -46,13 +46,13 @@ directory = "./data/seg-bl"
 visible = true
 
 # What the app opens on.  `layout` is the quad MPR view unless a viewport is
-# named: volume, axial, coronal, sagittal, or tile.  `theme` selects between the
+# named: volume, axial, coronal, sagittal, tile, or volumetry.  `theme` selects between the
 # two backgrounds above.
 [view]
 layout = "tile"
 theme = "dark"
 camera_lock = "free"                     # free, UL, LL, or LR
-drawer_sections = ["playback", "tiles"]  # playback, appearance, orientation, tiles, export
+drawer_sections = ["playback", "tiles"]  # playback, appearance, orientation, zoom, tiles, volumetry, export
 help_visible = false
 metadata_visible = false
 
@@ -77,3 +77,43 @@ labels_c = [3]
 traverse = 50
 locked = true
 orientation_locked = true
+
+
+# What the volumetry charts measure.  A structure is a group of labels rather
+# than a single one, because a chamber segmented as a bloodpool, an outflow
+# tract and a trabecular mesh is one chamber; `density` reports a structure as
+# a mass instead of a volume, and `cycle = false` says the difference between
+# its extremes is shape rather than flow, so no stroke volume or ejection
+# fraction is quoted for it.
+#
+# Volumes are also indexed by body surface area when one can be had.  The
+# height and weight come from the images' PatientSize and PatientWeight tags
+# unless given here, in metres and kilograms.
+[volumetry]
+segmentation_label = "BL_Labels"
+indexed = true
+bsa_formula = "mosteller"    # none, mosteller, dubois, or haycock
+# patient_height_m = 1.78
+# patient_weight_kg = 74
+
+[[volumetry.groups]]
+name = "LV"
+labels = [6, 3, 8]           # bloodpool + outflow tract + trabeculations
+
+[[volumetry.groups]]
+name = "RV"
+labels = [5]
+
+[[volumetry.groups]]
+name = "LA"
+labels = [2]
+
+[[volumetry.groups]]
+name = "RA"
+labels = [4]
+
+[[volumetry.groups]]
+name = "Myo"
+labels = [1]
+density = 1.05               # g/mL, so the myocardium is reported in grams
+cycle = false

@@ -90,6 +90,10 @@ class SeriesTags(pc.BaseModel):
         default_factory=lambda: _numbered("tile"),
         description="The tile grid's series.",
     )
+    volumetry: Series = pc.Field(
+        default_factory=lambda: _numbered("volumetry"),
+        description="The volumetry chart's series.",
+    )
 
     def of(self, viewport: str) -> Series:
         """How ``viewport``'s series is named."""

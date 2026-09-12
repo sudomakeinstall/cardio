@@ -96,6 +96,12 @@ class Session:
             return self.scene.renderWindow
         if view == "tile":
             return self.scene.tile_views.window if self.scene.tile_views else None
+        if view == "volumetry":
+            return (
+                self.scene.volumetry_views.window
+                if self.scene.volumetry_views
+                else None
+            )
         return self.scene.mpr_views[view] if self.scene.mpr_views else None
 
     @classmethod
@@ -125,6 +131,7 @@ class Session:
 
         self.scene.setup_mpr_render_windows()
         self.scene.setup_tile_render_window()
+        self.scene.setup_volumetry_render_window()
         self.size_windows()
         self.server.state.ready()
         self.server.controller.finalize_mpr_initialization()

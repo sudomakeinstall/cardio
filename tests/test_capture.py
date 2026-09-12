@@ -576,6 +576,20 @@ def test_a_data_capture_of_a_cut_records_the_values(tmp_path):
     assert isinstance(writer, SliceWriter)
 
 
+def test_the_charts_have_no_cut_behind_them_to_capture(tmp_path):
+    """Volumetry draws a measurement of the labels, not a resampling of them.
+
+    So a data capture of it has to fall back to recording what it looked like,
+    which it does by not being named among the viewports a plane can be had
+    from.  Writing one would mean inventing a pixel spacing and a position for
+    an axis and a curve.
+    """
+    _, _, logic = built(tmp_path, "volumetry")
+
+    assert "volumetry" not in logic.capture.plane_sources
+    assert logic.capture.plane_for("volumetry", 0) is None
+
+
 # --- which viewports a capture may write --------------------------------------
 
 
@@ -620,6 +634,7 @@ def tick(server, *names):
         ("volume", {"vr"}),
         ("axial", {"axial"}),
         ("tile", {"tile"}),
+        ("volumetry", {"volumetry"}),
     ],
 )
 def test_only_the_viewports_on_screen_are_offered(tmp_path, layout, available):
@@ -649,6 +664,8 @@ def test_the_offer_follows_the_layout(tmp_path):
         ("axial", ["vr", "coronal"], set()),
         ("", ["tile"], set()),
         ("", ["axial", "vr"], {"axial", "vr"}),
+        ("volumetry", ["volumetry"], {"volumetry"}),
+        ("volumetry", ["axial", "vr"], set()),
     ],
 )
 def test_an_off_screen_viewport_is_never_captured(tmp_path, layout, ticked, expected):

@@ -140,6 +140,7 @@ def test_the_ticked_viewports_are_what_is_saved(tmp_path):
     with session.server.state:
         session.server.state.screenshot_viewport_tile = False
         session.server.state.screenshot_viewport_vr = False
+        session.server.state.screenshot_viewport_volumetry = False
 
     scene = scene_from_state(session.server.state, session.scene)
 
