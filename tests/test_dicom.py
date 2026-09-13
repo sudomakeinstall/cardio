@@ -363,3 +363,70 @@ def test_a_left_handed_series_is_corrected(tmp_path):
         [[matrix.GetElement(i, j) for j in range(3)] for i in range(3)]
     )
     assert np.linalg.det(direction) > 0
+
+
+# --- what a derived object is given to cite -----------------------------------
+
+
+def test_an_instance_carries_the_sop_uids_a_reference_needs(tmp_path):
+    write_cine_series(tmp_path, slices=2, phases=2)
+
+    instances = dicom.select_instances(tmp_path)
+
+    assert all(instance.sop_instance_uid for instance in instances)
+    assert {instance.sop_class_uid for instance in instances} == {pd.uid.MRImageStorage}
+    assert len({instance.sop_instance_uid for instance in instances}) == len(instances)
+
+
+def test_a_file_without_a_sop_instance_uid_is_not_read(tmp_path):
+    """A derived series cites its source by UID; a file with none cannot be cited."""
+    write_cine_series(tmp_path, slices=2, phases=2)
+    path = min(tmp_path.glob("*.dcm"))
+    dataset = pd.dcmread(path)
+    del dataset.SOPInstanceUID
+    dataset.save_as(path, enforce_file_format=False)
+
+    assert len(dicom.scan(tmp_path)) == 3
+
+
+def test_the_source_keeps_the_instances_behind_its_frames(tmp_path):
+    write_cine_series(tmp_path, slices=3, phases=2)
+    volume = Volume(label="cine", directory=tmp_path)
+
+    written = {str(pd.dcmread(path).SOPInstanceUID) for path in tmp_path.glob("*.dcm")}
+
+    assert {i.sop_instance_uid for i in volume.source.instances} == written
+
+
+def test_the_source_datasets_carry_the_modules_a_writer_copies(tmp_path):
+    """``header`` is stringified for a table; a writer needs the header itself."""
+    write_cine_series(tmp_path, slices=2, phases=2)
+    volume = Volume(label="cine", directory=tmp_path)
+
+    datasets = volume.source.datasets
+
+    assert len(datasets) == 4
+    assert all(isinstance(dataset, pd.dataset.Dataset) for dataset in datasets)
+    assert len({str(dataset.FrameOfReferenceUID) for dataset in datasets}) == 1
+    assert datasets[0].PatientName == "Phantom^Cine"
+    # Not in DISPLAY_TAGS, and so absent from ``header`` -- which is the point.
+    assert "PixelData" not in datasets[0]
+
+
+def test_an_image_file_has_no_instances_to_cite(tmp_path):
+    itk.imwrite(
+        itk.image_from_array(np.zeros((4, 5, 6), np.int16)), tmp_path / "0.nii.gz"
+    )
+    volume = Volume(label="vol", directory=tmp_path)
+
+    assert volume.source.instances == ()
+    assert volume.source.datasets == []
+
+
+def test_the_header_carries_the_frame_of_reference_and_the_study_fields(tmp_path):
+    write_cine_series(tmp_path, slices=2, phases=2)
+
+    fields = dicom.header(dicom.select_instances(tmp_path)[0])
+
+    assert fields["FrameOfReferenceUID"]
+    assert fields["StudyInstanceUID"]

@@ -260,6 +260,7 @@ def write_cine_series(
 
     uid = series_uid or pd.uid.generate_uid()
     study_uid = pd.uid.generate_uid()
+    frame_of_reference_uid = pd.uid.generate_uid()
     normal = direction[:, 2]
 
     cells = [(s, p) for s in range(slices) for p in range(phases)]
@@ -287,6 +288,7 @@ def write_cine_series(
         dataset.StudyDate = "20260101"
         dataset.StudyInstanceUID = study_uid
         dataset.SeriesInstanceUID = uid
+        dataset.FrameOfReferenceUID = frame_of_reference_uid
         dataset.SeriesDescription = series_description
         dataset.SeriesNumber = 1
         dataset.InstanceNumber = number

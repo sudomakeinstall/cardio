@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 POSITION_TOLERANCE = 1e-3
 
 HEADER_TAGS = [
+    "SOPInstanceUID",
+    "SOPClassUID",
     "SeriesInstanceUID",
     "SeriesDescription",
     "SeriesNumber",
@@ -56,19 +58,24 @@ DISPLAY_TAGS = [
     "PatientID",
     "PatientBirthDate",
     "PatientSex",
+    "PatientAge",
     "PatientSize",
     "PatientWeight",
     "StudyDate",
     "StudyTime",
     "StudyDescription",
     "AccessionNumber",
+    "StudyID",
+    "ReferringPhysicianName",
     "StudyInstanceUID",
     "Modality",
     "SeriesNumber",
     "SeriesDescription",
     "SeriesInstanceUID",
+    "FrameOfReferenceUID",
     "ProtocolName",
     "BodyPartExamined",
+    "InstitutionName",
     "Manufacturer",
     "ManufacturerModelName",
     "MagneticFieldStrength",
@@ -86,6 +93,7 @@ DISPLAY_TAGS = [
     "BitsAllocated",
     "RescaleSlope",
     "RescaleIntercept",
+    "SpecificCharacterSet",
 ]
 
 
@@ -94,6 +102,8 @@ class Instance:
     """The header fields of one DICOM file needed to place it in the series."""
 
     path: pl.Path
+    sop_instance_uid: str
+    sop_class_uid: str
     series_uid: str
     series_description: str
     position: tuple[float, float, float]
@@ -113,11 +123,22 @@ def _read_header(path: pl.Path) -> Instance | None:
     except (pd.errors.InvalidDicomError, OSError):
         return None
 
+    sop_instance_uid = getattr(dataset, "SOPInstanceUID", None)
+    sop_class_uid = getattr(dataset, "SOPClassUID", None)
     series_uid = getattr(dataset, "SeriesInstanceUID", None)
     position = getattr(dataset, "ImagePositionPatient", None)
     orientation = getattr(dataset, "ImageOrientationPatient", None)
 
-    if series_uid is None or position is None or orientation is None:
+    # The two SOP UIDs are Type 1 in every image instance, and a derived series
+    # cites them to say what it came from.  A file without them cannot be
+    # referenced, so it is not a usable image here either.
+    if (
+        sop_instance_uid is None
+        or sop_class_uid is None
+        or series_uid is None
+        or position is None
+        or orientation is None
+    ):
         return None
 
     number_of_frames = getattr(dataset, "NumberOfFrames", 1) or 1
@@ -133,6 +154,8 @@ def _read_header(path: pl.Path) -> Instance | None:
 
     return Instance(
         path=path,
+        sop_instance_uid=str(sop_instance_uid),
+        sop_class_uid=str(sop_class_uid),
         series_uid=str(series_uid),
         series_description=str(getattr(dataset, "SeriesDescription", "") or ""),
         position=tuple(float(v) for v in position),
@@ -316,6 +339,20 @@ def header(instance: Instance) -> dict[str, str]:
         fields["TransferSyntaxUID"] = str(transfer_syntax.name or transfer_syntax)
 
     return fields
+
+
+def read_dataset(instance: Instance) -> pd.dataset.Dataset:
+    """One instance's whole header, for an export to derive from.
+
+    Not narrowed to ``DISPLAY_TAGS`` the way ``header`` is: what a derived
+    object needs is the patient, study and frame-of-reference modules as they
+    were written, not the handful of fields the metadata sheet happens to show.
+
+    Read again rather than held.  Keeping a dataset per file for the life of a
+    session would cost more than a series of headers is worth, and the one
+    moment they are wanted is the moment something is written.
+    """
+    return pd.dcmread(instance.path, stop_before_pixels=True)
 
 
 def select_instances(

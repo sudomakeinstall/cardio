@@ -437,6 +437,12 @@ class Source:
     exists rather than recovered later.  The frames themselves are not kept:
     the caller converts them to VTK straight away, and holding both would
     double the memory a series costs.
+
+    ``instances`` names the DICOM files behind the frames, empty for an image
+    read from a file.  It is what lets a derived object -- a capture, a
+    segmentation -- say which instances it came from, which the stringified
+    ``header`` cannot: the modules a writer copies are wanted as they were
+    written, not as a table of strings.
     """
 
     format: str
@@ -444,6 +450,12 @@ class Source:
     right_handed_correction: bool
     frame_count: int
     geometry: Geometry
+    instances: tuple[dicom.Instance, ...] = ()
+
+    @property
+    def datasets(self) -> list:
+        """The source instances' headers, read back as pydicom datasets."""
+        return [dicom.read_dataset(instance) for instance in self.instances]
 
 
 def read_source(path, series_uid: str | None = None) -> tuple[list, Source]:
@@ -452,6 +464,7 @@ def read_source(path, series_uid: str | None = None) -> tuple[list, Source]:
     A 4D file is split along time, so a directory of DICOM, a file per frame
     and a single 4D file all reach the caller as a list of 3D frames.
     """
+    instances: list[dicom.Instance] = []
     if path.is_dir():
         instances = dicom.select_instances(path, series_uid)
         frames = dicom.read_instances(instances)
@@ -472,6 +485,7 @@ def read_source(path, series_uid: str | None = None) -> tuple[list, Source]:
         right_handed_correction=corrected,
         frame_count=len(frames),
         geometry=geometry_of(frames[0]),
+        instances=tuple(instances),
     )
     return frames, source
 
