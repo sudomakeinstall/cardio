@@ -15,6 +15,7 @@ from ..action import action, background
 from ..capture import (
     CaptureFormat,
     Context,
+    Identity,
     WindowFrames,
     repeated_numbers,
     wants_alpha,
@@ -22,7 +23,6 @@ from ..capture import (
     writer_for,
     writes_series,
 )
-from ..capture.dicom import IDENTITY_TAGS
 from ..capture.geometry import plane_from_reslice
 from ..capture.mosaic import compose
 from ..reslice import VIEW_TRANSFORMS
@@ -199,24 +199,30 @@ class CaptureController(Controller):
         """Seconds one frame is shown for, at the configured heart rate."""
         return 1 / self.server.state.bpm * 60 / self.scene.nframes
 
-    def identity(self) -> dict[str, str]:
-        """The patient and study a capture belongs to.
+    def identity(self) -> Identity:
+        """The patient and study a capture belongs to, and what it came from.
 
-        Taken from the active volume's own header when it was read from DICOM,
-        so a derived series lands in the study it was derived from.  A volume
-        read from a file carries none of this, so the capture stands alone
-        under a study of its own.
+        Taken from the active volume's own instances when it was read from
+        DICOM, so a derived series lands in the study it was derived from and
+        can say which images it was derived from.  A volume read from a file
+        carries none of this, so the capture stands alone under a study of its
+        own.
+
+        All of it or none of it: a capture naming a real study under a stand-in
+        patient is one an archive either refuses or files against the wrong
+        person, so the source is taken whole or left alone.
         """
         volume = self._active_volume()
-        header = {}
-        if volume is not None and volume.source is not None:
-            header = volume.source.header
+        source = volume.source if volume is not None else None
 
-        fields = {tag: header[tag] for tag in IDENTITY_TAGS if header.get(tag)}
-        fields.setdefault("PatientName", "Anonymous")
-        fields.setdefault("PatientID", "CARDIO")
-        fields.setdefault("StudyInstanceUID", pd.uid.generate_uid())
-        return fields
+        if source is None or not source.instances:
+            return Identity(study_instance_uid=pd.uid.generate_uid())
+
+        return Identity(
+            source_images=tuple(source.datasets),
+            frame_of_reference=source.header.get("FrameOfReferenceUID", ""),
+            modality=source.header.get("Modality", "OT"),
+        )
 
     def _mpr_plane(self, viewport: str, volume, frame: int):
         """One MPR view's cut, as the view itself is posed for that frame."""
@@ -296,7 +302,7 @@ class CaptureController(Controller):
                 f"{number}; a viewer will not tell them apart."
             )
 
-    def _context(self, directory, viewport: str, identity, reference):
+    def _context(self, directory, viewport: str, identity):
         state = self.server.state
         number, description = self.series_for(viewport)
         return Context(
@@ -306,9 +312,9 @@ class CaptureController(Controller):
             window=getattr(state, "mpr_window", self.scene.mpr_window),
             level=getattr(state, "mpr_level", self.scene.mpr_level),
             identity=identity,
+            equipment=self.scene.capture_equipment,
             series_number=number,
             series_description=description,
-            frame_of_reference=reference,
             has_plane=viewport in self.plane_sources,
             banner=self.banner,
         )
@@ -337,7 +343,6 @@ class CaptureController(Controller):
             return
 
         identity = self.identity()
-        reference = pd.uid.generate_uid()
         banner = self.banner
         sources = {
             name: WindowFrames(window, alpha=wants_alpha(fmt), banner=banner)
@@ -347,7 +352,7 @@ class CaptureController(Controller):
             self.report_series(windows)
 
         writers = {
-            name: writer_for(fmt, self._context(directory, name, identity, reference))
+            name: writer_for(fmt, self._context(directory, name, identity))
             for name in windows
         }
         planes = wants_plane(fmt)

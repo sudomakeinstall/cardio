@@ -6,6 +6,7 @@ expectation about where a cut landed can be computed rather than recorded.
 
 # System
 import pathlib as pl
+from importlib.metadata import version
 
 # Third Party
 import itk
@@ -14,11 +15,20 @@ import pydantic as pc
 import pydicom as pd
 import pytest
 import vtk
+from pydicom.pixels import apply_modality_lut
 from vtk.util import numpy_support as vtknp
 
 # Internal
 from cardio import Scene, dicom
-from cardio.capture import CaptureFormat, Context, Frame, Plane, image_to_array
+from cardio.capture import (
+    CaptureFormat,
+    Context,
+    Equipment,
+    Frame,
+    Identity,
+    Plane,
+    image_to_array,
+)
 from cardio.capture.banner import (
     band_height,
     coverage,
@@ -42,6 +52,7 @@ from cardio.logic.capture import VIEWPORTS, summary_of, written_files
 from cardio.orientation import create_vtk_reslice_matrix
 from cardio.reslice import VIEW_TRANSFORMS
 from cardio.session import until_settled
+from tests.phantoms import write_cine_series
 from tests.test_app_smoke import build_app, build_scene, connect
 
 VOLUME_SIZE = (20, 24, 16)
@@ -98,6 +109,37 @@ def posed_reslice(image_data, rotation=None, origin=None) -> vtk.vtkImageReslice
     return reslice
 
 
+REFERENCE_FRAME_UID = "1.2.826.0.1.3680043.8.498.99999999999999999999999999999999"
+
+
+def reference_dataset(modality: str = "MR") -> pd.dataset.Dataset:
+    """One source instance's header, as the reader hands one over.
+
+    The writers copy the patient and the study off this whole, so a test that
+    wants to say what a capture inherited says it here.
+    """
+    dataset = pd.dataset.Dataset()
+    dataset.SOPClassUID = pd.uid.MRImageStorage
+    dataset.SOPInstanceUID = pd.uid.generate_uid()
+    dataset.StudyInstanceUID = pd.uid.generate_uid()
+    dataset.SeriesInstanceUID = pd.uid.generate_uid()
+    dataset.FrameOfReferenceUID = REFERENCE_FRAME_UID
+    dataset.PatientName = "Phantom^Capture"
+    dataset.PatientID = "PHANTOM-1"
+    dataset.StudyDate = "20260101"
+    dataset.Modality = modality
+    return dataset
+
+
+def identity(modality: str = "MR") -> Identity:
+    dataset = reference_dataset(modality)
+    return Identity(
+        source_images=(dataset,),
+        frame_of_reference=REFERENCE_FRAME_UID,
+        modality=modality,
+    )
+
+
 def context(tmp_path, viewport="axial", **kwargs) -> Context:
     fields = {
         "directory": pl.Path(tmp_path),
@@ -105,7 +147,7 @@ def context(tmp_path, viewport="axial", **kwargs) -> Context:
         "frame_duration": 0.05,
         "window": 800.0,
         "level": 200.0,
-        "identity": {"PatientName": "Phantom^Capture", "PatientID": "PHANTOM-1"},
+        "identity": identity(),
     }
     fields.update(kwargs)
     return Context(**fields)
@@ -196,14 +238,26 @@ def test_an_axis_aligned_cut_keeps_the_volume_spacing():
 # --- what the values do on the way out ----------------------------------------
 
 
-def test_integers_that_fit_are_written_through_untouched():
+def test_unsigned_integers_that_fit_are_written_through_untouched():
+    scalars = np.array([[0, 40, 3000]], dtype=np.uint16)
+
+    stored, slope, intercept = encode(scalars)
+
+    assert stored.dtype == np.uint16
+    assert (slope, intercept) == (1.0, 0.0)
+    assert np.array_equal(stored, scalars)
+
+
+def test_signed_integers_keep_their_values_under_an_intercept():
+    """Secondary Capture carries no signed pixels, so the sign becomes an offset."""
     scalars = np.array([[-1000, 0, 3000]], dtype=np.int16)
 
     stored, slope, intercept = encode(scalars)
 
-    assert stored.dtype == np.int16
-    assert (slope, intercept) == (1.0, 0.0)
-    assert np.array_equal(stored, scalars)
+    assert stored.dtype == np.uint16
+    assert slope == 1.0
+    assert intercept == -1000.0
+    assert np.array_equal(stored + intercept, scalars)
 
 
 def test_floats_are_mapped_so_the_rescale_inverts_them():
@@ -266,8 +320,11 @@ def test_the_window_is_a_tag_rather_than_applied(tmp_path):
 
     assert float(dataset.WindowWidth) == 800.0
     assert float(dataset.WindowCenter) == 200.0
-    # Applying it would have clipped the values to the window.
-    assert dataset.pixel_array.min() < 200.0 - 800.0 / 2
+    # The window is in the values' own units, which is what the stored pixels
+    # mean once the modality LUT is applied.  Applying the window instead would
+    # have clipped them to it.
+    values = apply_modality_lut(dataset.pixel_array, dataset)
+    assert values.min() < 200.0 - 800.0 / 2
 
 
 def test_a_slice_says_where_it_is(tmp_path):
@@ -1022,3 +1079,281 @@ def test_a_cine_reads_only_cuts_that_have_been_posed(tmp_path, monkeypatch):
 
     assert posed
     assert all(posed)
+
+
+# --- what a receiver is entitled to expect -------------------------------------
+
+
+def elements(dataset):
+    """Every element of a dataset, sequences included."""
+    for element in dataset:
+        yield element
+        if element.VR == "SQ":
+            for item in element.value:
+                yield from elements(item)
+
+
+def decimal_strings(dataset):
+    """Every Decimal String value in a dataset, sequences included."""
+    for element in elements(dataset):
+        if element.VR != "DS":
+            continue
+        values = element.value
+        if not isinstance(values, pd.multival.MultiValue):
+            values = [values]
+        for value in values:
+            yield element.keyword, str(value)
+
+
+def test_no_decimal_string_overruns_the_sixteen_characters_it_has(tmp_path):
+    """An oblique cut is where a float printed in full overruns the VR."""
+    dataset = write_slices(tmp_path, frames=1)[0]
+
+    written_out = list(decimal_strings(dataset))
+
+    assert written_out
+    assert [pair for pair in written_out if len(pair[1]) > 16] == []
+
+
+def encoded_length(element) -> int:
+    """How many bytes one element takes up, written as the file writes it."""
+    buffer = pd.filebase.DicomBytesIO()
+    buffer.is_little_endian = True
+    buffer.is_implicit_VR = False
+    pd.filewriter.write_data_element(buffer, element)
+    return len(buffer.getvalue())
+
+
+def test_every_element_is_written_at_an_even_length(tmp_path):
+    """An odd-length element is malformed however leniently it is read back."""
+    datasets = write_slices(tmp_path, frames=1) + [
+        # Sized so that rows * columns * 3 is odd, which is where an unpadded
+        # colour capture goes wrong.
+        _rendered_instance(tmp_path / "rendered", rows=7, columns=9)
+    ]
+
+    odd = [
+        element.keyword
+        for dataset in datasets
+        for element in elements(dataset)
+        if element.VR != "SQ" and encoded_length(element) % 2
+    ]
+
+    assert odd == []
+
+
+def _rendered_instance(directory, rows=7, columns=9) -> pd.dataset.Dataset:
+    """One instance off the writer that records what a viewport looked like."""
+    writer = SecondaryCaptureWriter(context(directory, "vr"))
+    writer.add(0, rgb_frame(rows=rows, columns=columns))
+    writer.close()
+    return written(pl.Path(directory) / "vr")[0]
+
+
+# The elements a Secondary Capture instance must carry, empty or not.
+REQUIRED = (
+    "SpecificCharacterSet",
+    "SOPClassUID",
+    "SOPInstanceUID",
+    "StudyInstanceUID",
+    "SeriesInstanceUID",
+    "StudyID",
+    "StudyDate",
+    "StudyTime",
+    "ReferringPhysicianName",
+    "AccessionNumber",
+    "PatientName",
+    "PatientID",
+    "PatientBirthDate",
+    "PatientSex",
+    "Modality",
+    "SeriesNumber",
+    "InstanceNumber",
+    "Manufacturer",
+    "ConversionType",
+    "ContentDate",
+    "ContentTime",
+    "PatientOrientation",
+    "ImageType",
+)
+
+
+@pytest.mark.parametrize("viewport", ["axial", "vr"])
+def test_every_required_element_is_present_even_where_it_is_empty(tmp_path, viewport):
+    """Type 2 means present and possibly empty; absent is a different thing."""
+    if viewport == "axial":
+        dataset = write_slices(tmp_path, frames=1)[0]
+    else:
+        dataset = _rendered_instance(tmp_path / "rendered")
+
+    assert [name for name in REQUIRED if name not in dataset] == []
+
+
+def test_a_reformat_keeps_the_frame_of_reference_it_was_cut_from(tmp_path):
+    """A new one would say the cut and its source cannot be compared."""
+    dataset = write_slices(tmp_path, frames=1)[0]
+
+    assert dataset.FrameOfReferenceUID == REFERENCE_FRAME_UID
+    assert "PositionReferenceIndicator" in dataset
+
+
+def slice_plane():
+    """The cut ``write_slices`` writes, for a test that needs its own writer."""
+    return plane_from_reslice(posed_reslice(phantom()))
+
+
+def test_a_reformat_cites_the_images_it_was_made_from(tmp_path):
+    source = reference_dataset()
+    writer = SliceWriter(
+        context(
+            tmp_path,
+            identity=Identity(
+                source_images=(source,),
+                frame_of_reference=REFERENCE_FRAME_UID,
+                modality="MR",
+            ),
+        )
+    )
+    writer.add(0, Frame(image=rgb_frame().image, plane=slice_plane()))
+    writer.close()
+
+    dataset = written(pl.Path(tmp_path) / "axial")[0]
+
+    assert [item.ReferencedSOPInstanceUID for item in dataset.SourceImageSequence] == [
+        source.SOPInstanceUID
+    ]
+    assert dataset.DerivationCodeSequence[0].CodeValue == "113072"
+    assert dataset.ImageType[0] == "DERIVED"
+
+
+def test_a_cut_says_which_way_its_rows_and_columns_run(tmp_path):
+    dataset = write_slices(tmp_path, frames=1)[0]
+
+    assert len(dataset.PatientOrientation) == 2
+    assert all(letter in "LRAPHF" for letter in dataset.PatientOrientation)
+
+
+def test_a_render_says_nothing_about_which_way_its_rows_run(tmp_path):
+    """A volume render has a camera rather than a row and a column."""
+    dataset = _rendered_instance(tmp_path / "rendered")
+
+    assert "PatientOrientation" in dataset
+    assert dataset.PatientOrientation in ([], "")
+
+
+def test_a_capture_without_a_dicom_source_stands_alone_whole(tmp_path):
+    """Either the identity comes from a source or none of it does."""
+    writer = SliceWriter(
+        context(tmp_path, identity=Identity(study_instance_uid="1.2.3"))
+    )
+    writer.add(0, Frame(image=rgb_frame().image, plane=slice_plane()))
+    writer.close()
+
+    dataset = written(pl.Path(tmp_path) / "axial")[0]
+
+    assert dataset.StudyInstanceUID == "1.2.3"
+    assert str(dataset.PatientName) == "Anonymous^"
+    assert dataset.PatientID == "CARDIO"
+    assert "SourceImageSequence" not in dataset
+
+
+# --- the study a capture off a real series lands in ----------------------------
+
+
+def dicom_cine_app(tmp_path, **overrides):
+    """An app whose volume was read from DICOM, so a capture has a study to join."""
+    source = tmp_path / "source"
+    write_cine_series(source, slices=3, phases=2)
+
+    scene = Scene(
+        volumes=[{"label": "vol", "directory": source}],
+        serialization_directory=tmp_path / "out",
+        active_volume_label="vol",
+        capture_format="dicom-data",
+        **overrides,
+    )
+    return running(scene, "axial")
+
+
+def captured(logic) -> list[pd.dataset.Dataset]:
+    """Every instance one capture left on disk, whichever viewport wrote it."""
+    root = logic.scene.screenshot_directory
+    return [pd.dcmread(path) for path in sorted(root.glob("*/*/*.dcm"))]
+
+
+def test_a_capture_joins_the_study_its_volume_was_read_from(tmp_path):
+    _server, _scene, logic = dicom_cine_app(tmp_path)
+    source = pd.dcmread(next((tmp_path / "source").glob("*.dcm")))
+
+    capture(logic)
+
+    datasets = captured(logic)
+    assert datasets
+    for dataset in datasets:
+        assert dataset.StudyInstanceUID == source.StudyInstanceUID
+        assert str(dataset.PatientName) == "Phantom^Cine"
+        assert dataset.PatientID == "PHANTOM-1"
+        assert dataset.FrameOfReferenceUID == source.FrameOfReferenceUID
+        # Its own series, not the one it was cut from.
+        assert dataset.SeriesInstanceUID != source.SeriesInstanceUID
+
+
+def test_a_capture_off_a_real_series_cites_every_instance_of_it(tmp_path):
+    _server, _scene, logic = dicom_cine_app(tmp_path)
+    written_uids = {
+        str(pd.dcmread(path).SOPInstanceUID)
+        for path in (tmp_path / "source").glob("*.dcm")
+    }
+
+    capture(logic)
+
+    dataset = captured(logic)[0]
+
+    assert {
+        str(item.ReferencedSOPInstanceUID) for item in dataset.SourceImageSequence
+    } == written_uids
+
+
+def test_a_capture_off_a_real_series_reports_its_modality(tmp_path):
+    """A reformat of an MR study arriving as OT is a reformat a PACS cannot route."""
+    _server, _scene, logic = dicom_cine_app(tmp_path)
+
+    capture(logic)
+
+    assert captured(logic)[0].Modality == "MR"
+
+
+def test_an_unset_equipment_name_is_left_out_rather_than_written_empty(tmp_path):
+    """Type 3: absent says "not recorded", empty claims the value is blank."""
+    dataset = write_slices(tmp_path, frames=1)[0]
+
+    assert "StationName" not in dataset
+    assert "InstitutionName" not in dataset
+
+
+def test_the_configured_equipment_is_what_the_instance_names(tmp_path):
+    dataset = write_slices(
+        tmp_path,
+        frames=1,
+        equipment=Equipment(
+            manufacturer="Acme",
+            model_name="Cardio Station",
+            institution_name="St Elsewhere",
+            station_name="READING-3",
+            device_serial_number="SN-7",
+        ),
+    )[0]
+
+    assert dataset.Manufacturer == "Acme"
+    assert dataset.ManufacturerModelName == "Cardio Station"
+    assert dataset.InstitutionName == "St Elsewhere"
+    assert dataset.StationName == "READING-3"
+    assert dataset.DeviceSerialNumber == "SN-7"
+    # Read off the package rather than configured, so it cannot disagree with
+    # the code that wrote the file.
+    assert dataset.SoftwareVersions == version("cardio")
+
+
+def test_a_long_equipment_name_is_refused_rather_than_truncated(tmp_path):
+    with pytest.raises(pc.ValidationError):
+        Equipment(station_name="X" * 17)

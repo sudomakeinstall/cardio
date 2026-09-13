@@ -1,6 +1,15 @@
 """Writing a capture to disk, in whichever format was asked for."""
 
-from .base import CaptureWriter, Context, Frame, Location, Plane, image_to_array
+from .base import (
+    CaptureWriter,
+    Context,
+    Frame,
+    Identity,
+    Location,
+    Plane,
+    image_to_array,
+)
+from .equipment import Equipment
 from .formats import (
     CaptureFormat,
     wants_alpha,
@@ -15,7 +24,9 @@ __all__ = [
     "CaptureFormat",
     "CaptureWriter",
     "Context",
+    "Equipment",
     "Frame",
+    "Identity",
     "Location",
     "Plane",
     "Series",

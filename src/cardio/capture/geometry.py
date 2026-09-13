@@ -10,6 +10,7 @@ import numpy as np
 from vtk.util import numpy_support as vtknp
 
 # Internal
+from ..orientation import axcode_from_direction
 from .base import Location, Plane
 
 
@@ -58,3 +59,26 @@ def plane_from_reslice(reslice) -> Plane:
         thickness=spacing[2],
         location=location_of(image, reslice_axes(reslice)),
     )
+
+
+# DICOM names the two ends of the patient's long axis after the head and the
+# feet; the app's own axis codes name them superior and inferior.
+_PATIENT_LETTERS = {"S": "H", "I": "F"}
+
+
+def patient_orientation(location: Location) -> tuple[str, str]:
+    """Which way a cut's rows and columns run, in anatomical letters.
+
+    The same two vectors ``ImageOrientationPatient`` carries, named rather than
+    measured: Patient Orientation is what a viewer letters the edges of an
+    image from, and it is the one thing Secondary Capture asks for that
+    highdicom will not build an instance without.
+
+    The letters come from ``axcode_from_direction``, so an oblique cut is
+    described by the axes it most nearly runs along rather than refused, and
+    the reading agrees with the orientation the metadata sheet shows.
+    """
+    cosines = np.asarray(location.orientation, dtype=np.float64).reshape(2, 3).T
+    normal = np.cross(cosines[:, 0], cosines[:, 1])
+    axcodes = axcode_from_direction(np.column_stack([cosines, normal]))
+    return tuple(_PATIENT_LETTERS.get(code, code) for code in axcodes[:2])

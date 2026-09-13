@@ -12,8 +12,12 @@ import pathlib as pl
 
 # Third Party
 import numpy as np
+import pydicom as pd
 import vtk
 from vtk.util import numpy_support as vtknp
+
+# Internal
+from .equipment import Equipment
 
 
 @dc.dataclass(frozen=True)
@@ -62,6 +66,41 @@ class Frame:
 
 
 @dc.dataclass(frozen=True)
+class Identity:
+    """Who a capture is of, which study it joins, and what it was made from.
+
+    ``source_images`` are the headers of the instances behind the active
+    volume, empty when it was read from a file.  The first of them is handed
+    whole to the writer, which copies the patient and study modules off it
+    rather than picking tags out one at a time: those fields have to agree with
+    each other, and a capture that names a real study under a placeholder
+    patient is one an archive either refuses or files against the wrong person.
+
+    The whole sequence is what a derived instance cites as its source, so that
+    a reformat can be got back from to the acquisition it is a reformat of.
+
+    Without a source the capture stands alone, under a study of its own, and
+    the placeholder patient stands for all of it rather than for whichever
+    fields happened to be missing.
+    """
+
+    source_images: tuple[pd.dataset.Dataset, ...] = ()
+    study_instance_uid: str = ""
+    patient_id: str = "CARDIO"
+    # A person name is caret-separated components, and a bare word is read as
+    # ambiguous rather than as a family name.  The trailing caret is how DICOM
+    # says a single-component name was meant.
+    patient_name: str = "Anonymous^"
+    frame_of_reference: str = ""
+    modality: str = "OT"
+
+    @property
+    def reference(self) -> pd.dataset.Dataset | None:
+        """The one instance the patient and study are copied off."""
+        return self.source_images[0] if self.source_images else None
+
+
+@dc.dataclass(frozen=True)
 class Context:
     """What the capture as a whole knows, for the writers that need it.
 
@@ -80,10 +119,10 @@ class Context:
     frame_duration: float
     window: float
     level: float
-    identity: dict[str, str]
+    identity: Identity = dc.field(default_factory=Identity)
+    equipment: Equipment = dc.field(default_factory=Equipment)
     series_number: int = 1
     series_description: str = ""
-    frame_of_reference: str = ""
     has_plane: bool = True
     banner: str = ""
 

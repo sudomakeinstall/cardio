@@ -7,7 +7,7 @@ import pydantic as pc
 import pydantic_settings as ps
 import vtk
 
-from .capture import CaptureFormat, SeriesTags
+from .capture import CaptureFormat, Equipment, SeriesTags
 from .mesh import Mesh
 from .mpr_views import MPRViews
 from .playback import Playback
@@ -233,6 +233,14 @@ class Scene(ps.BaseSettings):
             "How each viewport's exported DICOM series is named. "
             "CLI usage: --capture_series.axial.number 400 "
             '--capture_series.axial.description "Cine SAX"'
+        ),
+    )
+    capture_equipment: Equipment = pc.Field(
+        default_factory=Equipment,
+        description=(
+            "Who a DICOM capture says it was made by: the General Equipment "
+            "module every written instance carries. "
+            'CLI usage: --capture_equipment.institution_name "St Elsewhere"'
         ),
     )
     playback: Playback = pc.Field(
