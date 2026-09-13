@@ -36,10 +36,10 @@ class WindowFrames:
         self._filter.ReadFrontBufferOff()
         self.banner = banner
 
-    def capture(self, plane: Plane | None = None) -> Frame:
+    def capture(self, plane: Plane | None = None, phase: int | None = None) -> Frame:
         self._filter.Modified()
         self._filter.Update()
 
         image = vtk.vtkImageData()
         image.ShallowCopy(self._filter.GetOutput())
-        return Frame(image=stamp_image(image, self.banner), plane=plane)
+        return Frame(image=stamp_image(image, self.banner), plane=plane, phase=phase)

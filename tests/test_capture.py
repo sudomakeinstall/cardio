@@ -1651,3 +1651,28 @@ def test_an_enhanced_multiframe_is_still_refused(tmp_path):
 
     with pytest.raises(ValueError, match="enhanced multi-frame"):
         dicom.read_series(pl.Path(tmp_path) / "axial")
+
+
+def test_an_instance_is_timed_by_the_phase_it_stands_at(tmp_path):
+    """A rotation runs through several cycles; a trigger time past one is nothing."""
+    reslice = posed_reslice(phantom())
+    plane = plane_from_reslice(reslice)
+
+    writer = SliceWriter(context(tmp_path))
+    # Four captures of two phases, which is what turning through two cycles
+    # without advancing past the end of one looks like.
+    for index, phase in enumerate([0, 1, 0, 1]):
+        writer.add(index, Frame(image=rgb_frame().image, plane=plane, phase=phase))
+    writer.close()
+
+    times = [
+        float(dataset.TriggerTime) for dataset in written(pl.Path(tmp_path) / "axial")
+    ]
+
+    assert times == [0.0, 50.0, 0.0, 50.0]
+
+
+def test_an_untimed_frame_falls_back_to_its_place_in_the_capture(tmp_path):
+    datasets = write_slices(tmp_path, frames=3)
+
+    assert [float(d.TriggerTime) for d in datasets] == [0.0, 50.0, 100.0]

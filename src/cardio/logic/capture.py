@@ -401,7 +401,7 @@ class CaptureController(Controller):
         def _save_all(i, frame):
             for name, writer in writers.items():
                 plane = self.plane_for(name, frame) if planes else None
-                writer.add(i, sources[name].capture(plane))
+                writer.add(i, sources[name].capture(plane, phase=frame))
 
         with self.server.state as state:
             state.capture_running = True

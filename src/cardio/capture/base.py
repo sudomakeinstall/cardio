@@ -25,8 +25,10 @@ from .uid import DEFAULT_ROOT
 class Location:
     """Where a plane of pixels sits in the patient, in LPS.
 
-    ``orientation`` is the DICOM pair of direction cosines: the column
-    direction followed by the row direction, both unit length.
+    ``orientation`` is the DICOM pair of direction cosines, in the order the
+    standard gives them: the direction the first row runs in -- the way an
+    index along a row advances, which is a cut's own x -- followed by the
+    direction the first column runs in.  Both unit length.
     """
 
     orientation: tuple[float, float, float, float, float, float]
@@ -56,10 +58,16 @@ class Frame:
     writers stay byte-exact; ``rgb`` is the same pixels the way every other
     encoder expects them.  ``plane`` is the data behind the picture, absent for
     a volume render, which has a camera rather than an image plane.
+
+    ``phase`` is where in the cardiac cycle the frame stands, which is not the
+    same as its place in the capture: a rotation capture turns the camera
+    through several cycles, and one that turns without advancing playback
+    records the same phase from every angle.
     """
 
     image: vtk.vtkImageData
     plane: Plane | None = None
+    phase: int | None = None
 
     @property
     def rgb(self) -> np.ndarray:

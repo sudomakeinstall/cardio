@@ -170,7 +170,7 @@ class SeriesWriter(CaptureWriter):
         uid.stamp(dataset, context.uid_root)
         return dataset
 
-    def stamp(self, dataset, index: int, image_type: list[str]):
+    def stamp(self, dataset, index: int, image_type: list[str], phase=None):
         """The attributes that say what the instance is and where it sits.
 
         ``ImageType`` and ``ConversionType`` are overridden rather than
@@ -196,10 +196,12 @@ class SeriesWriter(CaptureWriter):
         # falsified one.
         dataset.BurnedInAnnotation = "YES" if context.banner else "NO"
         if self.timed_per_instance:
-            # Milliseconds into the cycle, which is how the reader orders phases.
-            dataset.TriggerTime = values.decimal(
-                index * context.frame_duration * 1000.0
-            )
+            # Milliseconds into the cycle, which is how the reader orders
+            # phases.  Timed by the phase the frame stands at rather than by
+            # its place in the capture: a rotation runs through several cycles,
+            # and a trigger time past the end of one describes nothing.
+            step = index if phase is None else phase
+            dataset.TriggerTime = values.decimal(step * context.frame_duration * 1000.0)
 
         _derive(dataset, context)
 
@@ -220,7 +222,7 @@ class SecondaryCaptureWriter(SeriesWriter):
             hd.PhotometricInterpretationValues.RGB,
             bits=8,
         )
-        self.stamp(dataset, index, ["DERIVED", "SECONDARY"])
+        self.stamp(dataset, index, ["DERIVED", "SECONDARY"], frame.phase)
         self.save(dataset, index)
 
 
@@ -259,6 +261,7 @@ class SliceWriter(SeriesWriter):
             dataset,
             index,
             ["DERIVED", "SECONDARY", "MPR" if localizable else "MOSAIC"],
+            frame.phase,
         )
 
         dataset.RescaleSlope = values.decimal(slope)
