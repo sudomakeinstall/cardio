@@ -6,8 +6,6 @@ import datetime as dt
 import logging
 
 # Third Party
-import pydicom as pd
-
 from .. import registry
 
 # Internal
@@ -18,6 +16,7 @@ from ..capture import (
     Identity,
     WindowFrames,
     repeated_numbers,
+    uid,
     wants_alpha,
     wants_plane,
     writer_for,
@@ -216,7 +215,7 @@ class CaptureController(Controller):
         source = volume.source if volume is not None else None
 
         if source is None or not source.instances:
-            return Identity(study_instance_uid=pd.uid.generate_uid())
+            return Identity(study_instance_uid=uid.generate(self.scene.uid_root))
 
         return Identity(
             source_images=tuple(source.datasets),
@@ -313,6 +312,7 @@ class CaptureController(Controller):
             level=getattr(state, "mpr_level", self.scene.mpr_level),
             identity=identity,
             equipment=self.scene.capture_equipment,
+            uid_root=self.scene.uid_root,
             series_number=number,
             series_description=description,
             has_plane=viewport in self.plane_sources,

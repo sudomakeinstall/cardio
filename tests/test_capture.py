@@ -5,6 +5,7 @@ expectation about where a cut landed can be computed rather than recorded.
 """
 
 # System
+import logging
 import pathlib as pl
 from importlib.metadata import version
 
@@ -28,6 +29,7 @@ from cardio.capture import (
     Identity,
     Plane,
     image_to_array,
+    uid,
 )
 from cardio.capture.banner import (
     band_height,
@@ -1357,3 +1359,58 @@ def test_the_configured_equipment_is_what_the_instance_names(tmp_path):
 def test_a_long_equipment_name_is_refused_rather_than_truncated(tmp_path):
     with pytest.raises(pc.ValidationError):
         Equipment(station_name="X" * 17)
+
+
+# --- whose UIDs a capture writes under -----------------------------------------
+
+REGISTERED_ROOT = "1.2.840.99999.1"
+
+
+def test_every_uid_is_minted_under_the_configured_root(tmp_path):
+    """Instances under a borrowed root claim a creator that did not create them."""
+    datasets = write_slices(tmp_path, frames=2, uid_root=REGISTERED_ROOT)
+
+    minted = {
+        str(dataset[tag].value)
+        for dataset in datasets
+        for tag in ("SOPInstanceUID", "SeriesInstanceUID")
+    }
+
+    assert len(minted) == 3
+    assert all(value.startswith(f"{REGISTERED_ROOT}.") for value in minted)
+
+
+def test_the_file_says_which_implementation_wrote_it(tmp_path):
+    """highdicom names itself here, which is true of how and not of what."""
+    dataset = write_slices(tmp_path, frames=1, uid_root=REGISTERED_ROOT)[0]
+
+    assert dataset.file_meta.ImplementationClassUID == f"{REGISTERED_ROOT}.1"
+    assert dataset.file_meta.ImplementationVersionName.startswith("CARDIO ")
+    assert len(dataset.file_meta.ImplementationVersionName) <= 16
+
+
+def test_the_study_a_standalone_capture_opens_is_under_the_root_too(tmp_path):
+    _server, _scene, logic = built(
+        tmp_path, "axial", capture_format="dicom-data", uid_root=REGISTERED_ROOT
+    )
+    capture(logic)
+
+    dataset = captured_series(tmp_path)
+
+    assert dataset.StudyInstanceUID.startswith(f"{REGISTERED_ROOT}.")
+
+
+def test_the_default_root_says_it_is_not_the_deployment_s(caplog):
+    assert not uid.is_registered(uid.DEFAULT_ROOT)
+
+    with caplog.at_level(logging.WARNING):
+        assert uid.warn_if_unregistered(uid.DEFAULT_ROOT)
+
+    assert "must not be sent to a production archive" in caplog.text
+
+
+def test_a_registered_root_is_not_warned_about(caplog):
+    with caplog.at_level(logging.WARNING):
+        assert not uid.warn_if_unregistered(REGISTERED_ROOT)
+
+    assert caplog.text == ""

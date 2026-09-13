@@ -36,7 +36,7 @@ import pydicom as pd
 from pydicom.sr.codedict import codes
 
 # Internal
-from . import values
+from . import uid, values
 from .banner import stamp_scalars
 from .base import CaptureWriter, Context, Frame, Plane
 from .geometry import patient_orientation
@@ -101,7 +101,7 @@ class SeriesWriter(CaptureWriter):
         self.context = context
         self.directory = context.directory / context.viewport
         self.directory.mkdir(parents=True, exist_ok=True)
-        self.series_uid = pd.uid.generate_uid()
+        self.series_uid = uid.generate(context.uid_root)
 
     def path_for(self, index: int) -> pl.Path:
         return self.directory / f"{index:04d}.dcm"
@@ -132,7 +132,7 @@ class SeriesWriter(CaptureWriter):
             coordinate_system=hd.CoordinateSystemNames.PATIENT,
             series_instance_uid=self.series_uid,
             series_number=context.series_number,
-            sop_instance_uid=pd.uid.generate_uid(),
+            sop_instance_uid=uid.generate(context.uid_root),
             instance_number=index + 1,
             series_description=describe(
                 context.viewport, kind, context.series_description
@@ -159,6 +159,7 @@ class SeriesWriter(CaptureWriter):
         if orientation is None:
             _clear_orientation(dataset)
 
+        uid.stamp(dataset, context.uid_root)
         return dataset
 
     def stamp(self, dataset, index: int, image_type: list[str]):

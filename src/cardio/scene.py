@@ -8,6 +8,7 @@ import pydantic_settings as ps
 import vtk
 
 from .capture import CaptureFormat, Equipment, SeriesTags
+from .capture.uid import DEFAULT_ROOT as DEFAULT_UID_ROOT
 from .mesh import Mesh
 from .mpr_views import MPRViews
 from .playback import Playback
@@ -233,6 +234,15 @@ class Scene(ps.BaseSettings):
             "How each viewport's exported DICOM series is named. "
             "CLI usage: --capture_series.axial.number 400 "
             '--capture_series.axial.description "Cine SAX"'
+        ),
+    )
+    uid_root: str = pc.Field(
+        default=DEFAULT_UID_ROOT,
+        description=(
+            "The registered root every UID a capture writes is generated "
+            "under. The default is pydicom's own, which is fine for research "
+            "files and must not be used for anything sent to an archive. "
+            "CLI usage: --uid-root 1.2.840.99999"
         ),
     )
     capture_equipment: Equipment = pc.Field(

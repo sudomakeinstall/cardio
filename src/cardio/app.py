@@ -6,6 +6,7 @@ import trame as tm
 import trame.decorators
 
 from . import __version__
+from .capture import uid
 from .scene import Scene
 from .session import Session
 from .ui import UI
@@ -21,9 +22,12 @@ def scene_from_command_line(cli) -> Scene:
     cli_source = ps.CliSettingsSource(Scene, root_parser=cli, cli_parse_args=True)
     args, _unknown = cli.parse_known_args()
 
-    return Scene.load(
+    scene = Scene.load(
         config_file=getattr(args, "cfg_file", None), cli_source=cli_source
     )
+    # Said once, where a session begins, rather than once per written file.
+    uid.warn_if_unregistered(scene.uid_root)
+    return scene
 
 
 @tm.decorators.TrameApp()

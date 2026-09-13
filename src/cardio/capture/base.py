@@ -18,6 +18,7 @@ from vtk.util import numpy_support as vtknp
 
 # Internal
 from .equipment import Equipment
+from .uid import DEFAULT_ROOT
 
 
 @dc.dataclass(frozen=True)
@@ -121,6 +122,7 @@ class Context:
     level: float
     identity: Identity = dc.field(default_factory=Identity)
     equipment: Equipment = dc.field(default_factory=Equipment)
+    uid_root: str = DEFAULT_ROOT
     series_number: int = 1
     series_description: str = ""
     has_plane: bool = True
