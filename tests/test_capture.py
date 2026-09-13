@@ -29,6 +29,7 @@ from cardio.capture import (
     Identity,
     Plane,
     image_to_array,
+    preflight,
     uid,
 )
 from cardio.capture.banner import (
@@ -1414,3 +1415,108 @@ def test_a_registered_root_is_not_warned_about(caplog):
         assert not uid.warn_if_unregistered(REGISTERED_ROOT)
 
     assert caplog.text == ""
+
+
+# --- what a capture is going out without ---------------------------------------
+
+
+def sparse_source(**fields) -> pd.dataset.Dataset:
+    """A source instance carrying only the fields named."""
+    dataset = pd.dataset.Dataset()
+    for name, value in fields.items():
+        setattr(dataset, name, value)
+    return dataset
+
+
+def test_a_complete_source_is_not_warned_about():
+    complete = sparse_source(**{field.name: "1" for field in preflight.SOURCE_FIELDS})
+    equipment = Equipment(institution_name="St Elsewhere")
+
+    assert preflight.missing(complete, equipment) == []
+
+
+def test_every_field_a_sparse_source_lacks_is_named():
+    source = sparse_source(PatientID="X", PatientName="Y")
+
+    absent = {field.name for field in preflight.missing(source, Equipment())}
+
+    assert "PatientID" not in absent
+    assert "PatientName" not in absent
+    assert {"StudyInstanceUID", "FrameOfReferenceUID", "AccessionNumber"} <= absent
+    assert "InstitutionName" in absent
+
+
+def test_an_empty_field_counts_as_missing():
+    """An empty Type 2 element looks exactly like one that was meant to be blank."""
+    source = sparse_source(PatientID="", AccessionNumber="")
+
+    absent = {field.name for field in preflight.missing(source, Equipment())}
+
+    assert {"PatientID", "AccessionNumber"} <= absent
+
+
+def test_a_volume_read_from_a_file_is_missing_all_of_it():
+    absent = preflight.missing(None, Equipment())
+
+    assert len(absent) == len(preflight.SOURCE_FIELDS) + 1
+
+
+def test_the_warning_names_the_fields_and_says_why(caplog):
+    with caplog.at_level(logging.INFO):
+        preflight.report(sparse_source(PatientID="X"), Equipment())
+
+    assert "a receiving archive may want" in caplog.text
+    assert "StudyInstanceUID" in caplog.text
+    assert "routing rules key off it" in caplog.text
+
+
+def test_a_research_capture_is_written_anyway_and_says_what_is_missing(tmp_path):
+    """Whether a field is needed depends on where it is going, which is not ours."""
+    _server, _scene, logic = built(tmp_path, "axial", capture_format="dicom-data")
+
+    capture(logic)
+
+    assert logic.capture.server.state.capture_ok
+    assert "field(s) a receiver may want are missing" in (
+        logic.capture.server.state.capture_summary
+    )
+    assert captured_series(tmp_path)
+
+
+def test_a_production_capture_under_a_borrowed_root_is_refused(tmp_path):
+    _server, _scene, logic = built(
+        tmp_path, "axial", capture_format="dicom-data", production=True
+    )
+
+    capture(logic)
+
+    state = logic.capture.server.state
+    assert not state.capture_ok
+    assert "not this deployment's root" in state.capture_summary
+    assert not (tmp_path / "out" / "screenshots").exists()
+
+
+def test_a_production_capture_under_a_registered_root_is_written(tmp_path):
+    _server, _scene, logic = built(
+        tmp_path,
+        "axial",
+        capture_format="dicom-data",
+        production=True,
+        uid_root=REGISTERED_ROOT,
+    )
+
+    capture(logic)
+
+    assert logic.capture.server.state.capture_ok
+    assert captured_series(tmp_path)
+
+
+def test_a_picture_capture_is_not_pre_flighted(tmp_path):
+    """The checks are about what a receiver wants; a PNG has no receiver."""
+    _server, _scene, logic = built(
+        tmp_path, "axial", capture_format="png", production=True
+    )
+
+    capture(logic)
+
+    assert logic.capture.server.state.capture_ok

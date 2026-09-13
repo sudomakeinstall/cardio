@@ -15,6 +15,7 @@ from ..capture import (
     Context,
     Identity,
     WindowFrames,
+    preflight,
     repeated_numbers,
     uid,
     wants_alpha,
@@ -93,11 +94,17 @@ def as_number(value, fallback: int) -> int:
         return fallback
 
 
-def summary_of(written: list[str], directory) -> str:
-    """The one line the drawer shows about a finished capture."""
+def summary_of(written: list[str], directory, caveat: str = "") -> str:
+    """The one line the drawer shows about a finished capture.
+
+    A caveat rides along with what was written rather than replacing it: the
+    capture did happen, and saying only what is missing from it would read as
+    though it had not.
+    """
     if not written:
         return "Capture wrote nothing"
-    return f"Captured {', '.join(written)} to {directory.name}"
+    line = f"Captured {', '.join(written)} to {directory.name}"
+    return f"{line} ({caveat})" if caveat else line
 
 
 class CaptureController(Controller):
@@ -301,6 +308,30 @@ class CaptureController(Controller):
                 f"{number}; a viewer will not tell them apart."
             )
 
+    def refusal(self, identity) -> str:
+        """Why this capture must not be written, or nothing.
+
+        Only what would be unsafe to send, and only where a deployment has
+        said it is sending: incompleteness is reported and written anyway,
+        because whether a field is needed depends on where it is going.
+
+        The patient and study can no longer disagree with each other -- an
+        identity is taken from a source whole or not at all -- so what is left
+        is the one claim a file makes that nobody downstream can check.
+        """
+        if not self.scene.production:
+            return ""
+        if uid.is_registered(self.scene.uid_root):
+            return ""
+        return (
+            "Refused: production captures cannot be written under "
+            f"{self.scene.uid_root}, which is not this deployment's root"
+        )
+
+    def missing_fields(self, identity) -> list:
+        """Say what the capture is going out without, and hand it back."""
+        return preflight.report(identity.reference, self.scene.capture_equipment)
+
     def _context(self, directory, viewport: str, identity):
         state = self.server.state
         number, description = self.series_for(viewport)
@@ -348,8 +379,16 @@ class CaptureController(Controller):
             name: WindowFrames(window, alpha=wants_alpha(fmt), banner=banner)
             for name, window in windows.items()
         }
+        absent = []
         if writes_series(fmt):
+            refused = self.refusal(identity)
+            if refused:
+                # Before any writer and any frame: a refused capture should not
+                # first spend a cardiac cycle turning the camera.
+                self.report(refused, False)
+                return
             self.report_series(windows)
+            absent = self.missing_fields(identity)
 
         writers = {
             name: writer_for(fmt, self._context(directory, name, identity))
@@ -400,7 +439,10 @@ class CaptureController(Controller):
             # went into it, and a data capture of a viewport with no cut behind
             # it writes nothing at all.  Neither should be reported as saved.
             written = [name for name in windows if written_files(directory, name)]
-            self.report(summary_of(written, directory), bool(written))
+            self.report(
+                summary_of(written, directory, preflight.summarise(absent)),
+                bool(written),
+            )
 
             with self.server.state as state:
                 state.capture_running = False

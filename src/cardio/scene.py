@@ -236,6 +236,15 @@ class Scene(ps.BaseSettings):
             '--capture_series.axial.description "Cine SAX"'
         ),
     )
+    production: bool = pc.Field(
+        default=False,
+        description=(
+            "Whether captures are destined for a real archive. Set, a capture "
+            "is refused rather than written when something about it would be "
+            "unsafe to send -- today, a UID root the deployment has not "
+            "registered. CLI usage: --production"
+        ),
+    )
     uid_root: str = pc.Field(
         default=DEFAULT_UID_ROOT,
         description=(
