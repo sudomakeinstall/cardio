@@ -246,6 +246,34 @@ whatever is missing is named in the log and counted in what the drawer reports.
 The capture is written anyway: whether a given field is needed depends on where
 the file is going, which the app does not know.
 
+### Measurements and segmentations as DICOM
+
+*Save Volumetry* writes the curves and the metrics as two CSV files and the
+charts as pages, which is what a person opens.  Where the measured volume was
+read from DICOM it also writes what a system reads: the segmentation as a DICOM
+SEG, one instance per cardiac phase, and the measurements as a TID 1500
+Structured Report that points at it.
+
+| Written | Holds |
+| --- | --- |
+| `timeseries.csv`, `metrics.csv` | The curves and what they came to |
+| `segmentation/<i>.dcm` | One Segmentation Storage instance per phase |
+| `measurements.dcm` | One Comprehensive 3D SR naming every structure |
+
+A segment is a configured structure rather than a label value, so give each
+group in `volumetry.groups` a `code` -- a SNOMED CT concept id -- to say what it
+is; one without a code is typed only as tissue, and says so in the log.
+
+The report quotes each structure's largest and smallest volume qualified as a
+maximum and a minimum, not as end-diastolic and end-systolic.  Nothing here was
+told which phase a frame was acquired at: the reader is the one who declared the
+structure a pumping chamber, and the stroke volume and ejection fraction follow
+from that declaration rather than from the images.
+
+A volume read from a file gets the tables and nothing else -- a segmentation
+object names the images it segments, and a report names the images it is
+evidence about, and a NIfTI volume gives neither anything to name.
+
 ### Running a session again without a browser
 
 Everything `cardio` can be asked to do has a name, and the console records

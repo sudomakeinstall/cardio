@@ -18,9 +18,12 @@ import csv
 import datetime as dt
 import logging
 
+# Third Party
+import pydicom as pd
+
 # Internal
 from ..action import action
-from ..capture import Context, WindowFrames, wants_alpha, writer_for
+from ..capture import Context, WindowFrames, seg, sr, wants_alpha, writer_for
 from ..volumetry import (
     STRUCTURES,
     Result,
@@ -391,11 +394,59 @@ class VolumetryController(Controller):
         write_csv(directory / "timeseries.csv", *timeseries(result))
         write_csv(directory / "metrics.csv", *metrics_table(result))
         pages = self.write_pages(directory, result)
+        instances = self.write_dicom(directory, result)
 
-        self.report(
-            f"Wrote 2 tables and {pages} pages to {directory.name}",
-            True,
+        written = f"Wrote 2 tables and {pages} pages"
+        if instances:
+            written += f" and {instances} DICOM instance(s)"
+        self.report(f"{written} to {directory.name}", True)
+
+    def write_dicom(self, directory, result) -> int:
+        """The segmentation and the measurements, as objects an archive files.
+
+        Beside the tables rather than instead of them: a person opens a CSV and
+        a system reads a Structured Report, and both are wanted.
+
+        Only where the volume was read from DICOM.  A segmentation object names
+        the images it segments and a report names the images it is evidence
+        about, and a volume read from a file gives neither anything to name --
+        so a research session gets its tables and is told why that is all.
+        """
+        volume = self._active_volume()
+        source = volume.source if volume is not None else None
+        if source is None or not source.instances:
+            logger.info(
+                "The measured volume was not read from DICOM, so there is "
+                "nothing for a segmentation or a report to name; tables only."
+            )
+            return 0
+
+        segmentation = self.segmentation()
+        groups = [measurement.group for measurement in result.measurements]
+        equipment = self.scene.capture_equipment
+        uid_root = self.scene.uid_root
+
+        segmentations = []
+        if segmentation is not None:
+            paths = seg.write_segmentation(
+                segmentation,
+                source,
+                directory / "segmentation",
+                groups=groups,
+                equipment=equipment,
+                uid_root=uid_root,
+            )
+            segmentations = [pd.dcmread(path) for path in paths]
+
+        sr.write_measurements(
+            result,
+            source,
+            directory / "measurements.dcm",
+            segmentations=segmentations,
+            equipment=equipment,
+            uid_root=uid_root,
         )
+        return len(segmentations) + 1
 
     def write_pages(self, directory, result) -> int:
         """One image per structure, through the writer the format asks for.
