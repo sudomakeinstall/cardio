@@ -72,6 +72,15 @@ class StructureGroup(pc.BaseModel):
             "unset, it is the colour its first label is drawn in everywhere else."
         ),
     )
+    code: str | None = pc.Field(
+        default=None,
+        description=(
+            "SNOMED CT concept id for what this structure is, used as the "
+            "segmented property type when the segmentation is written as "
+            "DICOM SEG. Unset, the segment is typed as tissue, which says "
+            "nothing about which tissue. CLI usage: 87878005"
+        ),
+    )
     density: float | None = pc.Field(
         default=None,
         gt=0.0,

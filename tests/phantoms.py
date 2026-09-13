@@ -284,8 +284,16 @@ def write_cine_series(
         dataset.SOPInstanceUID = dataset.file_meta.MediaStorageSOPInstanceUID
         dataset.PatientName = "Phantom^Cine"
         dataset.PatientID = "PHANTOM-1"
+        # Type 2, so a conforming acquisition carries them even when it does
+        # not know them -- which is what a reader of one is entitled to assume.
+        dataset.PatientBirthDate = ""
+        dataset.PatientSex = ""
         dataset.Modality = "MR"
         dataset.StudyDate = "20260101"
+        dataset.StudyTime = ""
+        dataset.StudyID = ""
+        dataset.AccessionNumber = ""
+        dataset.ReferringPhysicianName = ""
         dataset.StudyInstanceUID = study_uid
         dataset.SeriesInstanceUID = uid
         dataset.FrameOfReferenceUID = frame_of_reference_uid

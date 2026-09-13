@@ -395,7 +395,7 @@ def test_a_colour_that_cannot_be_used_falls_back_to_the_labels_own():
 
 
 def test_the_optional_fields_are_the_ones_a_form_may_leave_unset():
-    assert OPTIONAL_FIELDS == {"color", "density"}
+    assert OPTIONAL_FIELDS == {"code", "color", "density"}
 
 
 @pytest.mark.parametrize(
