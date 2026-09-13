@@ -39,7 +39,12 @@ from cardio.capture.banner import (
     stamp_rgb,
     stamp_scalars,
 )
-from cardio.capture.dicom import SecondaryCaptureWriter, SliceWriter, encode
+from cardio.capture.dicom import (
+    MultiFrameRenderedWriter,
+    SecondaryCaptureWriter,
+    SliceWriter,
+    encode,
+)
 from cardio.capture.formats import WRITERS, writer_for, writes_series
 from cardio.capture.geometry import plane_from_reslice, reslice_axes
 from cardio.capture.images import GifWriter, JpegWriter, Mp4Writer, PngWriter
@@ -916,7 +921,12 @@ def test_a_viewport_that_does_not_exist_is_refused():
 def test_only_the_dicom_formats_have_a_series_to_name():
     naming = {fmt for fmt in CaptureFormat if writes_series(fmt)}
 
-    assert naming == {CaptureFormat.DICOM_RENDERED, CaptureFormat.DICOM_DATA}
+    assert naming == {
+        CaptureFormat.DICOM_RENDERED,
+        CaptureFormat.DICOM_DATA,
+        CaptureFormat.DICOM_CINE_RENDERED,
+        CaptureFormat.DICOM_CINE_DATA,
+    }
 
 
 def captured_series(tmp_path, viewport="axial") -> pd.dataset.Dataset:
@@ -1520,3 +1530,124 @@ def test_a_picture_capture_is_not_pre_flighted(tmp_path):
     capture(logic)
 
     assert logic.capture.server.state.capture_ok
+
+
+# --- the cine as one object ----------------------------------------------------
+
+
+def write_cine(tmp_path, frames: int = 3, fmt="dicom-cine-data", **naming) -> list:
+    reslice = posed_reslice(phantom())
+    plane = plane_from_reslice(reslice)
+
+    writer = writer_for(fmt, context(tmp_path, "axial", **naming))
+    for index in range(frames):
+        writer.add(index, Frame(image=rgb_frame().image, plane=plane))
+    writer.close()
+
+    return written(pl.Path(tmp_path) / "axial")
+
+
+def test_a_cine_is_written_as_one_instance_of_many_frames(tmp_path):
+    datasets = write_cine(tmp_path, frames=5)
+
+    assert len(datasets) == 1
+    assert datasets[0].NumberOfFrames == 5
+    assert (
+        datasets[0].SOPClassUID
+        == pd.uid.MultiFrameGrayscaleWordSecondaryCaptureImageStorage
+    )
+
+
+def test_a_cine_says_how_fast_it_runs(tmp_path):
+    """A viewer plays a multi-frame object; a stack of stills it merely sorts."""
+    dataset = write_cine(tmp_path, frames=4)[0]
+
+    assert float(dataset.FrameTime) == 50.0
+    assert dataset.CineRate == 20
+    assert dataset.RecommendedDisplayFrameRate == 20
+    assert dataset.FrameIncrementPointer == pd.tag.Tag(0x0018, 0x1063)
+    # Its timing is said once, in the cine module, not once per frame.
+    assert "TriggerTime" not in dataset
+
+
+def test_a_cine_of_a_fixed_plane_says_where_it_is(tmp_path):
+    plane = plane_from_reslice(posed_reslice(phantom()))
+
+    dataset = write_cine(tmp_path, frames=3)[0]
+
+    assert np.allclose(dataset.ImageOrientationPatient, plane.location.orientation)
+    assert np.allclose(dataset.ImagePositionPatient, plane.location.position)
+    assert dataset.PresentationLUTShape == "IDENTITY"
+
+
+def test_a_cine_whose_plane_moves_is_written_without_a_position(tmp_path, caplog):
+    """One multi-frame instance carries one pose, which a moving cut has not got."""
+    writer = writer_for("dicom-cine-data", context(tmp_path, "axial"))
+    for index in range(3):
+        reslice = posed_reslice(phantom(), origin=[5.0 + index, 27.0, 17.0])
+        writer.add(
+            index, Frame(image=rgb_frame().image, plane=plane_from_reslice(reslice))
+        )
+    with caplog.at_level(logging.WARNING):
+        writer.close()
+
+    dataset = written(pl.Path(tmp_path) / "axial")[0]
+
+    assert "ImagePositionPatient" not in dataset
+    assert "moves over the cycle" in caplog.text
+
+
+def test_a_rendered_cine_is_one_true_colour_object(tmp_path):
+    writer = writer_for("dicom-cine-rendered", context(tmp_path, "vr"))
+    for index in range(3):
+        writer.add(index, rgb_frame(rows=7, columns=9))
+    writer.close()
+
+    dataset = written(pl.Path(tmp_path) / "vr")[0]
+
+    assert dataset.SOPClassUID == pd.uid.MultiFrameTrueColorSecondaryCaptureImageStorage
+    assert dataset.NumberOfFrames == 3
+    assert dataset.SamplesPerPixel == 3
+    assert dataset.pixel_array.shape == (3, 7, 9, 3)
+
+
+def test_a_viewport_with_no_cut_falls_back_to_a_rendered_cine(tmp_path):
+    writer = writer_for(
+        CaptureFormat.DICOM_CINE_DATA, context(tmp_path, "vr", has_plane=False)
+    )
+
+    assert isinstance(writer, MultiFrameRenderedWriter)
+
+
+def test_a_cine_reads_back_as_the_frames_it_was_written_from(tmp_path):
+    scalars = plane_from_reslice(posed_reslice(phantom())).scalars
+    write_cine(tmp_path, frames=3)
+
+    frames = dicom.read_series(pl.Path(tmp_path) / "axial")
+
+    assert len(frames) == 3
+    for frame in frames:
+        array = itk.array_from_image(frame)
+        assert array.shape == (1, *scalars.shape)
+        assert np.allclose(array[0], scalars)
+
+
+def test_a_cine_reads_back_with_the_geometry_it_was_written_with(tmp_path):
+    plane = plane_from_reslice(posed_reslice(phantom()))
+    write_cine(tmp_path, frames=2)
+
+    instances = dicom.select_instances(pl.Path(tmp_path) / "axial")
+
+    assert [instance.frame for instance in instances] == [0, 1]
+    assert np.allclose(instances[0].position, plane.location.position)
+    assert np.allclose(instances[0].orientation, plane.location.orientation)
+
+
+def test_an_enhanced_multiframe_is_still_refused(tmp_path):
+    """Only the objects this app writes are unpacked; the rest are a different thing."""
+    dataset = write_slices(tmp_path, frames=1)[0]
+    dataset.NumberOfFrames = 4
+    dataset.save_as(next((pl.Path(tmp_path) / "axial").glob("*.dcm")))
+
+    with pytest.raises(ValueError, match="enhanced multi-frame"):
+        dicom.read_series(pl.Path(tmp_path) / "axial")

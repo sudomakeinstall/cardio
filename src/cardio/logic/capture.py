@@ -52,6 +52,8 @@ FORMAT_LABELS = {
     CaptureFormat.MP4: "MP4 animation",
     CaptureFormat.DICOM_RENDERED: "DICOM (as shown)",
     CaptureFormat.DICOM_DATA: "DICOM (image data)",
+    CaptureFormat.DICOM_CINE_RENDERED: "DICOM cine (as shown)",
+    CaptureFormat.DICOM_CINE_DATA: "DICOM cine (image data)",
 }
 
 FORMAT_ITEMS = [

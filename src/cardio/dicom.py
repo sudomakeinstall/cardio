@@ -18,6 +18,7 @@ and the geometry is derived the same way it is for any other ITK series.
 
 # System
 import dataclasses as dc
+import functools
 import logging
 import pathlib as pl
 
@@ -25,6 +26,7 @@ import pathlib as pl
 import itk
 import numpy as np
 import pydicom as pd
+from pydicom.pixels import apply_modality_lut
 
 logger = logging.getLogger(__name__)
 
@@ -114,14 +116,33 @@ class Instance:
     acquisition_time: str | None
     pixel_spacing: tuple[float, float]
     slice_thickness: float
+    # Which frame of the file this is, for the multi-frame captures the app
+    # writes; None for a file that holds one image, which is every acquisition.
+    frame: int | None = None
 
 
-def _read_header(path: pl.Path) -> Instance | None:
-    """One file as an ``Instance``, or None if it is not a usable DICOM image."""
+# The multi-frame objects this app writes and can therefore read back.  Anything
+# else multi-frame is an enhanced object whose geometry lives in per-frame
+# functional groups, which is a different thing to unpack and is refused.
+READABLE_MULTIFRAME = frozenset(
+    {
+        pd.uid.MultiFrameGrayscaleWordSecondaryCaptureImageStorage,
+        pd.uid.MultiFrameGrayscaleByteSecondaryCaptureImageStorage,
+    }
+)
+
+
+def _read_header(path: pl.Path) -> list[Instance]:
+    """One file as the images it holds, empty when it holds none usable.
+
+    A list rather than one instance, because a multi-frame capture is a whole
+    cine in one file: the phases of it are what the rest of this module works
+    in, so they are unpacked here rather than special-cased everywhere after.
+    """
     try:
         dataset = pd.dcmread(path, stop_before_pixels=True, specific_tags=HEADER_TAGS)
     except (pd.errors.InvalidDicomError, OSError):
-        return None
+        return []
 
     sop_instance_uid = getattr(dataset, "SOPInstanceUID", None)
     sop_class_uid = getattr(dataset, "SOPClassUID", None)
@@ -139,10 +160,10 @@ def _read_header(path: pl.Path) -> Instance | None:
         or position is None
         or orientation is None
     ):
-        return None
+        return []
 
-    number_of_frames = getattr(dataset, "NumberOfFrames", 1) or 1
-    if int(number_of_frames) > 1:
+    number_of_frames = int(getattr(dataset, "NumberOfFrames", 1) or 1)
+    if number_of_frames > 1 and str(sop_class_uid) not in READABLE_MULTIFRAME:
         raise ValueError(
             f"{path} is an enhanced multi-frame DICOM ({number_of_frames} frames "
             "in one file), which is not supported."
@@ -152,23 +173,34 @@ def _read_header(path: pl.Path) -> Instance | None:
         value = getattr(dataset, name, None)
         return None if value is None else cast(value)
 
-    return Instance(
-        path=path,
-        sop_instance_uid=str(sop_instance_uid),
-        sop_class_uid=str(sop_class_uid),
-        series_uid=str(series_uid),
-        series_description=str(getattr(dataset, "SeriesDescription", "") or ""),
-        position=tuple(float(v) for v in position),
-        orientation=tuple(float(v) for v in orientation),
-        instance_number=optional("InstanceNumber", int),
-        trigger_time=optional("TriggerTime", float),
-        temporal_position=optional("TemporalPositionIdentifier", int),
-        acquisition_time=optional("AcquisitionTime", str),
-        pixel_spacing=tuple(
-            float(v) for v in getattr(dataset, "PixelSpacing", None) or (1.0, 1.0)
-        ),
-        slice_thickness=float(getattr(dataset, "SliceThickness", None) or 1.0),
-    )
+    def instance(frame: int | None, temporal: int | None) -> Instance:
+        return Instance(
+            path=path,
+            sop_instance_uid=str(sop_instance_uid),
+            sop_class_uid=str(sop_class_uid),
+            series_uid=str(series_uid),
+            series_description=str(getattr(dataset, "SeriesDescription", "") or ""),
+            position=tuple(float(v) for v in position),
+            orientation=tuple(float(v) for v in orientation),
+            instance_number=optional("InstanceNumber", int),
+            trigger_time=optional("TriggerTime", float),
+            temporal_position=temporal,
+            acquisition_time=optional("AcquisitionTime", str),
+            pixel_spacing=tuple(
+                float(v) for v in getattr(dataset, "PixelSpacing", None) or (1.0, 1.0)
+            ),
+            slice_thickness=float(getattr(dataset, "SliceThickness", None) or 1.0),
+            frame=frame,
+        )
+
+    if number_of_frames == 1:
+        return [instance(None, optional("TemporalPositionIdentifier", int))]
+
+    # The frames of a multi-frame capture are evenly spaced in time and written
+    # in order, so their position in the file is their position in the cycle.
+    # Saying so is what lets ``temporal_key`` order them alongside everything
+    # else without knowing they came out of one file.
+    return [instance(frame, frame + 1) for frame in range(number_of_frames)]
 
 
 def scan(directory: pl.Path) -> list[Instance]:
@@ -181,9 +213,7 @@ def scan(directory: pl.Path) -> list[Instance]:
     for path in sorted(directory.glob("**/*")):
         if not path.is_file():
             continue
-        instance = _read_header(path)
-        if instance is not None:
-            instances.append(instance)
+        instances.extend(_read_header(path))
     return instances
 
 
@@ -287,20 +317,45 @@ def frame_instances(instances: list[Instance]) -> list[list[Instance]]:
     ]
 
 
+@functools.lru_cache(maxsize=1)
+def _multiframe_array(path: pl.Path) -> np.ndarray:
+    """Every frame of a multi-frame file, in the values the pixels stand for.
+
+    Decoded by pydicom rather than ITK: ITK reads a multi-frame object as a
+    stack of slices, which is what it looks like and not what it is.  The
+    modality LUT is applied here because ITK applies it on the other path, so a
+    cine written one way and a cine written the other read back the same.
+
+    Cached at one file, which is exactly the reuse there is: the frames of a
+    cine are read one after another out of the same file.  ``read_instances``
+    empties it afterwards rather than leaving a decoded cine in memory.
+    """
+    dataset = pd.dcmread(path)
+    return apply_modality_lut(dataset.pixel_array, dataset)
+
+
+def _instance_array(instance: Instance) -> np.ndarray:
+    """The pixels of one instance, as ``(rows, columns)``."""
+    if instance.frame is not None:
+        return _multiframe_array(instance.path)[instance.frame]
+
+    array = itk.array_from_image(itk.imread(str(instance.path)))
+    return array if array.ndim == 2 else array[0]
+
+
 def _read_frame(frame: list[Instance]):
     """One frame's slices as a 3D ITK image.
 
     ITK's series reader derives the geometry from the slice positions, which it
     cannot do for a single-slice acquisition -- a cine of one plane, which is
-    ordinary in cardiac MR -- so that case is assembled from its own header.
+    ordinary in cardiac MR, and every capture this app writes -- so that case
+    is assembled from its own header.
     """
     if len(frame) > 1:
         return itk.imread([str(instance.path) for instance in frame])
 
     instance = frame[0]
-    array = itk.array_from_image(itk.imread(str(instance.path)))
-    if array.ndim == 2:
-        array = array[np.newaxis]
+    array = _instance_array(instance)[np.newaxis]
 
     row_spacing, column_spacing = instance.pixel_spacing
     orientation = np.array(instance.orientation, dtype=np.float64)
@@ -375,7 +430,12 @@ def read_instances(instances: list[Instance]) -> list:
         f"from series {instances[0].series_uid}."
     )
 
-    return [_read_frame(frame) for frame in frames]
+    try:
+        return [_read_frame(frame) for frame in frames]
+    finally:
+        # A decoded cine is worth holding for the length of this read and no
+        # longer.
+        _multiframe_array.cache_clear()
 
 
 def read_series(directory: pl.Path, series_uid: str | None = None) -> list:

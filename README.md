@@ -176,7 +176,15 @@ a trip through another layout does not lose the selection.
 ```toml
 serialization_directory = "./data"
 capture_format = "dicom-data"                          # png (default), jpeg, gif, mp4,
-screenshot_viewports = ["axial", "coronal", "tile"]    # dicom-rendered, dicom-data
+screenshot_viewports = ["axial", "coronal", "tile"]    # dicom-rendered, dicom-data,
+                                                       # dicom-cine-rendered,
+                                                       # dicom-cine-data
+uid_root = "1.2.840.99999"                             # the deployment's own
+production = false                                     # refuse what is unsafe to send
+
+[capture_equipment]
+institution_name = "St Elsewhere"
+station_name = "READING-3"
 ```
 
 ```bash
@@ -189,6 +197,8 @@ $ cardio --capture-format mp4 --screenshot-viewports '["vr"]'
 | `gif`, `mp4` | `<viewport>.<ext>` | The picture, one animation at the configured BPM |
 | `dicom-rendered` | `<viewport>/<i>.dcm` | The picture, as an RGB Secondary Capture series |
 | `dicom-data` | `<viewport>/<i>.dcm` | The pixels behind it, in greyscale |
+| `dicom-cine-rendered` | `<viewport>/0000.dcm` | The picture, as one multi-frame object |
+| `dicom-cine-data` | `<viewport>/0000.dcm` | The pixels behind it, as one multi-frame object |
 
 `dicom-data` is the one that keeps the measurements.  For the MPR views it
 writes the resliced plane itself: the original values, so a viewer reads the
@@ -210,8 +220,31 @@ it.  `cardio` skips such a series when reading rather than misreading it.
 The 3D view has a camera rather than an image plane, so it is always recorded as
 it looked, whichever DICOM mode is chosen.
 
+The two `dicom-cine-*` formats write the whole loop as a single multi-frame
+instance carrying the Cine module, which is what a viewer plays; a series of
+single-frame instances it merely sorts, and whether it plays them is up to the
+viewer.  The trade is that one such instance carries one position, so a cine
+whose plane moves through the cycle -- a snap lock following a valve -- is
+written without one, and says so in the log.  Both read straight back into
+`cardio` the same way the single-frame series does.
+
 When the active volume was read from DICOM, the capture inherits its patient and
-study, so a derived series lands in the study it came from.
+study whole, so a derived series lands in the study it came from, keeps its
+frame of reference, and cites in `SourceImageSequence` the instances it was cut
+through.  A volume read from a file has none of that, and the capture stands
+alone under a study of its own rather than borrowing half an identity.
+
+Every UID is minted under `uid_root`.  The default is pydicom's own registered
+root, which is fine for research files and must not be used for anything sent to
+an archive -- a session opened on it says so at startup.  Setting `production`
+turns that from a warning into a refusal.
+
+Before a DICOM capture is written, the fields a receiving archive is likely to
+want -- accession number, study ID, frame of reference, patient size and weight,
+and the rest -- are checked against what the source series actually carried, and
+whatever is missing is named in the log and counted in what the drawer reports.
+The capture is written anyway: whether a given field is needed depends on where
+the file is going, which the app does not know.
 
 ### Running a session again without a browser
 

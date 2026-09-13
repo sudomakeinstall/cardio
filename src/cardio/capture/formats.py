@@ -5,7 +5,12 @@ import enum
 
 # Internal
 from .base import CaptureWriter, Context
-from .dicom import SecondaryCaptureWriter, SliceWriter
+from .dicom import (
+    MultiFrameRenderedWriter,
+    MultiFrameSliceWriter,
+    SecondaryCaptureWriter,
+    SliceWriter,
+)
 from .images import GifWriter, JpegWriter, Mp4Writer, PngWriter
 
 
@@ -22,6 +27,8 @@ class CaptureFormat(enum.StrEnum):
     MP4 = "mp4"
     DICOM_RENDERED = "dicom-rendered"
     DICOM_DATA = "dicom-data"
+    DICOM_CINE_RENDERED = "dicom-cine-rendered"
+    DICOM_CINE_DATA = "dicom-cine-data"
 
 
 WRITERS = {
@@ -31,6 +38,15 @@ WRITERS = {
     CaptureFormat.MP4: Mp4Writer,
     CaptureFormat.DICOM_RENDERED: SecondaryCaptureWriter,
     CaptureFormat.DICOM_DATA: SliceWriter,
+    CaptureFormat.DICOM_CINE_RENDERED: MultiFrameRenderedWriter,
+    CaptureFormat.DICOM_CINE_DATA: MultiFrameSliceWriter,
+}
+
+# The multi-frame format each single-frame one falls back from, so that a
+# viewport with no cut behind it still records what it looked like.
+RENDERED_FOR = {
+    CaptureFormat.DICOM_DATA: CaptureFormat.DICOM_RENDERED,
+    CaptureFormat.DICOM_CINE_DATA: CaptureFormat.DICOM_CINE_RENDERED,
 }
 
 
@@ -52,12 +68,17 @@ def writes_series(fmt: CaptureFormat) -> bool:
     return CaptureFormat(fmt) in (
         CaptureFormat.DICOM_RENDERED,
         CaptureFormat.DICOM_DATA,
+        CaptureFormat.DICOM_CINE_RENDERED,
+        CaptureFormat.DICOM_CINE_DATA,
     )
 
 
 def wants_plane(fmt: CaptureFormat) -> bool:
     """Whether the format writes the pixels behind the viewport, not a picture."""
-    return CaptureFormat(fmt) is CaptureFormat.DICOM_DATA
+    return CaptureFormat(fmt) in (
+        CaptureFormat.DICOM_DATA,
+        CaptureFormat.DICOM_CINE_DATA,
+    )
 
 
 def writer_for(fmt: CaptureFormat, context: Context) -> CaptureWriter:
@@ -68,5 +89,5 @@ def writer_for(fmt: CaptureFormat, context: Context) -> CaptureWriter:
     """
     fmt = CaptureFormat(fmt)
     if wants_plane(fmt) and not context.has_plane:
-        fmt = CaptureFormat.DICOM_RENDERED
+        fmt = RENDERED_FOR[fmt]
     return WRITERS[fmt](context)

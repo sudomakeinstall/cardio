@@ -27,6 +27,7 @@ from.
 """
 
 # System
+import logging
 import pathlib as pl
 
 # Third Party
@@ -41,6 +42,8 @@ from .banner import stamp_scalars
 from .base import CaptureWriter, Context, Frame, Plane
 from .geometry import patient_orientation
 from .series import describe
+
+logger = logging.getLogger(__name__)
 
 # UTF-8.  The patient's name is copied off the source unchanged, and a receiver
 # is entitled to read it as plain ASCII unless the instance says otherwise.
@@ -96,6 +99,11 @@ def rescale_type(modality: str, slope: float) -> str:
 
 class SeriesWriter(CaptureWriter):
     """One viewport's frames as one series of single-frame instances."""
+
+    # Whether an instance carries the time it stands at in the cycle.  A
+    # multi-frame object says its timing once, in the Cine module, so a trigger
+    # time on it would be the timing of the whole loop rather than of a frame.
+    timed_per_instance = True
 
     def __init__(self, context: Context):
         self.context = context
@@ -187,8 +195,11 @@ class SeriesWriter(CaptureWriter):
         # be, and saying so is the difference between an annotated image and a
         # falsified one.
         dataset.BurnedInAnnotation = "YES" if context.banner else "NO"
-        # Milliseconds into the cycle, which is how the reader orders phases.
-        dataset.TriggerTime = values.decimal(index * context.frame_duration * 1000.0)
+        if self.timed_per_instance:
+            # Milliseconds into the cycle, which is how the reader orders phases.
+            dataset.TriggerTime = values.decimal(
+                index * context.frame_duration * 1000.0
+            )
 
         _derive(dataset, context)
 
@@ -263,6 +274,238 @@ class SliceWriter(SeriesWriter):
         _locate(dataset, plane, self.context.identity.frame_of_reference)
 
         self.save(dataset, index)
+
+
+# --- the cine as one object ----------------------------------------------------
+
+# Frame Time, which is what the frame increment pointer points at: the frames
+# are evenly spaced in time, so one interval describes all of them.
+FRAME_TIME_TAG = pd.tag.Tag(0x0018, 0x1063)
+
+
+class MultiFrameWriter(SeriesWriter):
+    """One viewport's whole cine as a single multi-frame instance.
+
+    A cine viewer plays a multi-frame object; a series of single-frame ones it
+    merely sorts, and whether it plays them depends on the viewer.  Saying the
+    frames are a sequence in time -- which is what the Cine module is for --
+    is the difference between a loop and a stack of pictures.
+
+    The frames are held until ``close`` because a multi-frame object has to
+    declare how many it has before the first of them, and a capture may be cut
+    short at any point.  What has been collected by then is what gets written.
+
+    The pixels are encoded once over the whole stack rather than frame by
+    frame, so every frame is on the same scale and one rescale describes all
+    of them -- which a multi-frame object, carrying one, requires.
+    """
+
+    sop_class_uid: str = ""
+    timed_per_instance = False
+
+    def __init__(self, context: Context):
+        super().__init__(context)
+        self._frames: list[np.ndarray] = []
+        self._planes: list[Plane | None] = []
+
+    def collect(self, frame: Frame):
+        """This frame's pixels, or None when there is nothing behind it."""
+        raise NotImplementedError
+
+    def add(self, index: int, frame: Frame):
+        pixels = self.collect(frame)
+        if pixels is None:
+            return
+        self._frames.append(pixels)
+        self._planes.append(frame.plane)
+
+    def close(self):
+        if not self._frames:
+            return
+
+        shapes = {frame.shape for frame in self._frames}
+        if len(shapes) > 1:
+            # A multi-frame object cannot hold frames of different sizes, and
+            # raising here would mask whatever cut the capture short.
+            logger.error(
+                f"{self.context.viewport} was captured at {len(shapes)} "
+                "different sizes, which one multi-frame instance cannot hold; "
+                "writing none."
+            )
+            return
+
+        self.write(np.stack(self._frames))
+
+    def write(self, stack: np.ndarray):
+        raise NotImplementedError
+
+    def shell(self, kind: str):
+        """The instance every module but the pixels and the timing.
+
+        Built through highdicom's base class rather than by hand, so that a
+        multi-frame object gets the same Type 2 elements, the same equipment
+        module and the same file meta as the single-frame one beside it.
+        """
+        context = self.context
+        identity = context.identity
+        reference = identity.reference
+
+        dataset = hd.base.SOPClass(
+            study_instance_uid=(
+                str(reference.StudyInstanceUID)
+                if reference is not None
+                else identity.study_instance_uid
+            ),
+            series_instance_uid=self.series_uid,
+            series_number=context.series_number,
+            sop_instance_uid=uid.generate(context.uid_root),
+            sop_class_uid=self.sop_class_uid,
+            instance_number=1,
+            modality=identity.modality,
+            transfer_syntax_uid=pd.uid.ExplicitVRLittleEndian,
+            specific_character_set=CHARACTER_SET,
+            series_description=describe(
+                context.viewport, kind, context.series_description
+            ),
+            patient_id=None if reference is not None else identity.patient_id,
+            patient_name=None if reference is not None else identity.patient_name,
+            **context.equipment.attributes,
+        )
+
+        if reference is not None:
+            dataset.copy_patient_and_study_information(reference)
+
+        uid.stamp(dataset, context.uid_root)
+        return dataset
+
+    def cine(self, dataset, frames: int):
+        """Say that the frames are a sequence in time, and how fast it runs."""
+        milliseconds = self.context.frame_duration * 1000.0
+
+        dataset.NumberOfFrames = frames
+        # What the frames advance by, named by the tag of the attribute that
+        # says how much: evenly spaced, so one interval covers all of them.
+        dataset.FrameIncrementPointer = FRAME_TIME_TAG
+        dataset.FrameTime = values.decimal(milliseconds)
+        dataset.CineRate = round(1000.0 / milliseconds)
+        dataset.RecommendedDisplayFrameRate = dataset.CineRate
+        dataset.PreferredPlaybackSequencing = 0
+
+    def locate(self, dataset):
+        """Say where the frames are, if they are all in the same place.
+
+        A multi-frame Secondary Capture carries one position and one
+        orientation, not one per frame.  That is true of a cine of a fixed
+        plane and false of one whose plane moves through the cycle -- a snap
+        lock following a valve, say -- and the honest thing to do about a pose
+        the object cannot express is to leave it out, exactly as the mosaic
+        does.
+        """
+        located = [plane.location for plane in self._planes if plane is not None]
+        if not located or any(location is None for location in located):
+            return
+
+        poses = {
+            (tuple(location.orientation), tuple(location.position))
+            for location in located
+        }
+        if len(poses) > 1:
+            logger.warning(
+                f"The {self.context.viewport} cut moves over the cycle, which "
+                "one multi-frame instance cannot say; it is written without a "
+                "position."
+            )
+            return
+
+        _locate(dataset, self._planes[0], self.context.identity.frame_of_reference)
+
+
+class MultiFrameRenderedWriter(MultiFrameWriter):
+    """The viewport as it looked, all of it in one object."""
+
+    sop_class_uid = pd.uid.MultiFrameTrueColorSecondaryCaptureImageStorage
+    bits_allocated = 8
+
+    def collect(self, frame: Frame):
+        return np.ascontiguousarray(frame.rgb[:, :, :3])
+
+    def write(self, stack: np.ndarray):
+        dataset = self.shell("rendered")
+        self.stamp(dataset, 0, ["DERIVED", "SECONDARY"])
+        self.cine(dataset, len(stack))
+
+        dataset.SamplesPerPixel = 3
+        dataset.PhotometricInterpretation = "RGB"
+        dataset.PlanarConfiguration = 0
+        dataset.BitsAllocated = 8
+        dataset.BitsStored = 8
+        dataset.HighBit = 7
+        dataset.PixelRepresentation = 0
+        dataset.Rows, dataset.Columns = stack.shape[1:3]
+        dataset.PatientOrientation = []
+        dataset.PixelData = _even(np.ascontiguousarray(stack).tobytes())
+
+        self.save(dataset, 0)
+
+
+class MultiFrameSliceWriter(MultiFrameWriter):
+    """The pixels behind the viewport, all of them in one object."""
+
+    sop_class_uid = pd.uid.MultiFrameGrayscaleWordSecondaryCaptureImageStorage
+
+    def collect(self, frame: Frame):
+        if frame.plane is None:
+            return None
+        return stamp_scalars(frame.plane.scalars, self.context.banner)
+
+    def write(self, stack: np.ndarray):
+        stored, slope, intercept = encode(stack)
+        plane = next((p for p in self._planes if p is not None), None)
+        localizable = plane is not None and plane.location is not None
+
+        dataset = self.shell(_kind(localizable))
+        self.stamp(
+            dataset,
+            0,
+            ["DERIVED", "SECONDARY", "MPR" if localizable else "MOSAIC"],
+        )
+        self.cine(dataset, len(stored))
+
+        dataset.SamplesPerPixel = 1
+        dataset.PhotometricInterpretation = "MONOCHROME2"
+        dataset.BitsAllocated = 16
+        dataset.BitsStored = 16
+        dataset.HighBit = 15
+        dataset.PixelRepresentation = 0
+        dataset.Rows, dataset.Columns = stored.shape[1:3]
+
+        dataset.RescaleSlope = values.decimal(slope)
+        dataset.RescaleIntercept = values.decimal(intercept)
+        dataset.RescaleType = rescale_type(self.context.identity.modality, slope)
+        # Type 1C for a MONOCHROME2 multi-frame capture: the stored values go
+        # to the display unchanged, the window being only how they are shown.
+        dataset.PresentationLUTShape = "IDENTITY"
+
+        dataset.WindowWidth = values.decimal(max(float(self.context.window), 1.0))
+        dataset.WindowCenter = values.decimal(self.context.level)
+
+        if plane is not None:
+            dataset.PixelSpacing = values.decimals(plane.pixel_spacing)
+            dataset.SliceThickness = values.decimal(plane.thickness)
+        self.locate(dataset)
+        if not localizable:
+            dataset.PatientOrientation = []
+        else:
+            dataset.PatientOrientation = list(patient_orientation(plane.location))
+
+        dataset.PixelData = _even(np.ascontiguousarray(stored).tobytes())
+
+        self.save(dataset, 0)
+
+
+def _even(data: bytes) -> bytes:
+    """``data`` padded to the even length every DICOM element is written at."""
+    return data if len(data) % 2 == 0 else data + b"\x00"
 
 
 def _kind(localizable: bool) -> str:
