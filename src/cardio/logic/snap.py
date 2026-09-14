@@ -33,11 +33,11 @@ def _without_alignment(steps):
 
 
 def alignment_rotation(axes: np.ndarray) -> np.ndarray:
-    """The rotation that puts the axial view in the plane ``axes`` describes.
+    """The rotation that puts the upper-left view in the plane ``axes`` describes.
 
     The reslice matrix is cumulative @ view_transform, so the rotation the
-    views need satisfies R @ T_axial = axes. In ITK, as all the rotation math
-    is.
+    views need satisfies R @ T_ul = axes, T_ul being the LAS frame that view
+    is seeded from. In ITK, as all the rotation math is.
     """
     return axes @ axcode_transform_matrix("LPS", "LAS").T
 

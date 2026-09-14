@@ -133,7 +133,7 @@ def framed(views: MPRViews) -> MPRViews:
 
 
 def test_world_per_pixel_is_positive_once_the_view_is_sized(views):
-    assert framed(views).world_per_pixel("axial") > 0.0
+    assert framed(views).world_per_pixel("ul") > 0.0
 
 
 def test_world_per_pixel_is_zero_before_the_window_is_sized(views):
@@ -141,24 +141,24 @@ def test_world_per_pixel_is_zero_before_the_window_is_sized(views):
     views.show(slices())
     views.reset_cameras()
 
-    assert views.world_per_pixel("axial") == 0.0
+    assert views.world_per_pixel("ul") == 0.0
 
 
 def test_world_per_pixel_spans_the_fitted_image(views):
     """A fit puts the image across the viewport, so a pixel is a fraction of it."""
     framed(views)
-    width = slices()["axial"]["actor"].GetBounds()[1] * 2
+    width = slices()["ul"]["actor"].GetBounds()[1] * 2
 
-    assert 0.0 < views.world_per_pixel("axial") < width
+    assert 0.0 < views.world_per_pixel("ul") < width
 
 
 def test_zooming_out_makes_each_pixel_cover_more_world(views):
     framed(views)
-    before = views.world_per_pixel("axial")
-    camera = views.renderer("axial").GetActiveCamera()
+    before = views.world_per_pixel("ul")
+    camera = views.renderer("ul").GetActiveCamera()
     camera.Dolly(0.5)
 
-    assert views.world_per_pixel("axial") > before
+    assert views.world_per_pixel("ul") > before
 
 
 def test_world_per_pixel_is_measured_per_view(views):
@@ -194,18 +194,18 @@ def test_zoom_scales_every_view_by_the_same_factor(views):
 
 def test_zooming_out_undoes_zooming_in(views):
     framed(views)
-    before = views.world_per_pixel("axial")
+    before = views.world_per_pixel("ul")
 
     views.zoom(1.5)
     views.zoom(1 / 1.5)
 
-    assert views.world_per_pixel("axial") == pytest.approx(before)
+    assert views.world_per_pixel("ul") == pytest.approx(before)
 
 
 def test_zoom_leaves_the_focal_point_alone(views):
     """The origin sits at the focal point, so the crosshair must not drift."""
     framed(views)
-    camera = views.renderer("axial").GetActiveCamera()
+    camera = views.renderer("ul").GetActiveCamera()
     before = camera.GetFocalPoint()
 
     views.zoom(2.0)
@@ -216,11 +216,11 @@ def test_zoom_leaves_the_focal_point_alone(views):
 @pytest.mark.parametrize("factor", [0.0, -1.0])
 def test_a_degenerate_zoom_is_ignored(views, factor):
     framed(views)
-    before = views.world_per_pixel("axial")
+    before = views.world_per_pixel("ul")
 
     views.zoom(factor)
 
-    assert views.world_per_pixel("axial") == pytest.approx(before)
+    assert views.world_per_pixel("ul") == pytest.approx(before)
 
 
 # The fit

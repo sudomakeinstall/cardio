@@ -79,7 +79,7 @@ def test_alignment_rotation_matches_the_published_quaternion(tmp_path):
     )
 
 
-def test_alignment_rotation_carries_the_basis_onto_the_axial_view():
+def test_alignment_rotation_carries_the_basis_onto_the_upper_left_view():
     axes = tilted_plane(25)
     rotation = alignment_rotation(axes)
     assert rotation.T @ rotation == pytest.approx(np.eye(3), abs=1e-12)
@@ -181,7 +181,7 @@ def tiled(segmentation, **overrides) -> FakeApp:
         tile_rows=3,
         tile_cols=3,
         tile_source=TileSource.TRAVERSE.value,
-        tile_plane="axial",
+        tile_plane="ul",
         tile_spacing=10.0,
     )
     # MPRController.register seeds these in the real app; the fake has no register
@@ -255,7 +255,7 @@ def test_a_tile_matches_the_quad_view_at_the_same_fraction(tmp_path):
         rotation = logic.rotations.rotation_matrix()
         origin = logic.mpr.convention.point_to_itk(logic.server.state.mpr_origin)
         expected = np.eye(4)
-        expected[:3, :3] = rotation @ VIEW_TRANSFORMS["axial"]
+        expected[:3, :3] = rotation @ VIEW_TRANSFORMS["ul"]
         expected[:3, 3] = origin
         assert tiles[tile] == pytest.approx(expected, abs=1e-9)
 
@@ -271,13 +271,13 @@ def test_a_user_rotation_carries_into_every_tile(tmp_path):
     logic.tiles.update_tiles(0)
     after = posed_matrices(logic)
 
-    # The reslice matrix is cumulative @ T_axial, so compare the cumulative
+    # The reslice matrix is cumulative @ T_ul, so compare the cumulative
     # rotations rather than the matrices, which carry the view transform too.
     spin = euler_angle_to_rotation_matrix("Z", 20.0)
-    axial = VIEW_TRANSFORMS["axial"]
+    upper_left = VIEW_TRANSFORMS["ul"]
     for was, now in zip(before, after):
-        assert now[:3, :3] @ axial.T == pytest.approx(
-            was[:3, :3] @ axial.T @ spin, abs=1e-9
+        assert now[:3, :3] @ upper_left.T == pytest.approx(
+            was[:3, :3] @ upper_left.T @ spin, abs=1e-9
         )
 
 
@@ -402,7 +402,7 @@ def test_a_parallel_stack_keeps_the_alignment_step(tmp_path):
     )
     logic.tiles.update_tiles(0)
 
-    expected = logic.rotations.rotation_matrix() @ VIEW_TRANSFORMS["axial"]
+    expected = logic.rotations.rotation_matrix() @ VIEW_TRANSFORMS["ul"]
     assert posed_matrices(logic)[0][:3, :3] == pytest.approx(expected, abs=1e-9)
 
 
@@ -428,11 +428,11 @@ def test_changing_the_plane_re_poses_the_stack(tmp_path):
     logic = stacked(stacked_segmentation(tmp_path))
     logic.tiles.update_tiles(0)
 
-    logic.server.state.tile_plane = "coronal"
+    logic.server.state.tile_plane = "ll"
     logic.tiles._on_path_changed()
 
     origins = posed_origins(logic)
-    normal = (logic.rotations.rotation_matrix() @ VIEW_TRANSFORMS["coronal"])[:, 2]
+    normal = (logic.rotations.rotation_matrix() @ VIEW_TRANSFORMS["ll"])[:, 2]
     assert origins[1] - origins[0] == pytest.approx(10.0 * normal, abs=1e-9)
 
 
@@ -449,7 +449,7 @@ def spanning(segmentation, **overrides) -> FakeApp:
     )
 
 
-def label_reach(logic: FakeApp, labels: list[int], plane: str = "axial"):
+def label_reach(logic: FakeApp, labels: list[int], plane: str = "ul"):
     """The labels' own low and high projections on the plane normal, in ITK."""
     cloud = logic.scene.segmentations[0].label_cloud(labels)
     normal = (logic.rotations.rotation_matrix() @ VIEW_TRANSFORMS[plane])[:, 2]
@@ -462,7 +462,7 @@ def test_the_outer_tiles_land_on_the_labels_own_bounds(tmp_path):
     logic.tiles.update_tiles(0)
     origins = posed_origins(logic)
 
-    normal = (logic.rotations.rotation_matrix() @ VIEW_TRANSFORMS["axial"])[:, 2]
+    normal = (logic.rotations.rotation_matrix() @ VIEW_TRANSFORMS["ul"])[:, 2]
     low, high = label_reach(logic, [1, 2, 3])
     assert origins[0] @ normal == pytest.approx(low, abs=1e-9)
     assert origins[-1] @ normal == pytest.approx(high, abs=1e-9)
@@ -493,18 +493,16 @@ def test_a_lone_spanning_tile_sits_at_the_middle_of_the_labels(tmp_path):
     logic = spanning(stacked_segmentation(tmp_path), tile_rows=1, tile_cols=1)
     logic.tiles.update_tiles(0)
 
-    normal = (logic.rotations.rotation_matrix() @ VIEW_TRANSFORMS["axial"])[:, 2]
+    normal = (logic.rotations.rotation_matrix() @ VIEW_TRANSFORMS["ul"])[:, 2]
     low, high = label_reach(logic, [1, 2, 3])
     assert posed_origins(logic)[0] @ normal == pytest.approx((low + high) / 2, abs=1e-9)
 
 
 def test_spanning_one_label_is_shorter_than_spanning_them_all(tmp_path):
-    """The stack is along x, so sagittal is the plane its slabs are stacked in."""
-    whole = spanning(stacked_segmentation(tmp_path), tile_plane="sagittal")
+    """The stack is along x, so lr is the plane its slabs are stacked in."""
+    whole = spanning(stacked_segmentation(tmp_path), tile_plane="lr")
     whole.tiles.update_tiles(0)
-    part = spanning(
-        stacked_segmentation(tmp_path), tile_plane="sagittal", tile_labels=[2]
-    )
+    part = spanning(stacked_segmentation(tmp_path), tile_plane="lr", tile_labels=[2])
     part.tiles.update_tiles(0)
 
     def reach(logic):
@@ -535,11 +533,11 @@ def test_a_stray_voxel_does_not_lengthen_the_stack(tmp_path):
     another's.
     """
     seg = stacked_segmentation(tmp_path)
-    logic = spanning(seg, tile_plane="sagittal")
+    logic = spanning(seg, tile_plane="lr")
     logic.tiles.update_tiles(0)
     clean = posed_origins(logic)
 
-    normal = (logic.rotations.rotation_matrix() @ VIEW_TRANSFORMS["sagittal"])[:, 2]
+    normal = (logic.rotations.rotation_matrix() @ VIEW_TRANSFORMS["lr"])[:, 2]
     cloud = seg.label_cloud([1, 2, 3])
     far = cloud[(cloud @ normal).argmax()] + 80.0 * normal
     seg._label_clouds[(1, 2, 3)] = np.vstack([cloud, far[None, :]])
@@ -566,7 +564,7 @@ def test_the_labels_selection_is_the_grids_own(tmp_path):
     """Snap and zoom both keep their own; a third control follows suit."""
     logic = spanning(
         stacked_segmentation(tmp_path),
-        tile_plane="sagittal",
+        tile_plane="lr",
         tile_labels=[2],
         snap_labels_a=[1],
         snap_labels_b=[3],
@@ -575,8 +573,8 @@ def test_the_labels_selection_is_the_grids_own(tmp_path):
     logic.tiles.update_tiles(0)
     origins = posed_origins(logic)
 
-    normal = (logic.rotations.rotation_matrix() @ VIEW_TRANSFORMS["sagittal"])[:, 2]
-    low, high = label_reach(logic, [2], "sagittal")
+    normal = (logic.rotations.rotation_matrix() @ VIEW_TRANSFORMS["lr"])[:, 2]
+    low, high = label_reach(logic, [2], "lr")
     assert origins[0] @ normal == pytest.approx(low, abs=1e-9)
     assert origins[-1] @ normal == pytest.approx(high, abs=1e-9)
 
@@ -697,7 +695,7 @@ def test_a_stack_cut_in_a_new_plane_is_framed_again(tmp_path):
 
     for renderer in logic.scene.tile_views.renderers:
         renderer.GetActiveCamera().SetParallelScale(999.0)
-    logic.server.state.tile_plane = "sagittal"
+    logic.server.state.tile_plane = "lr"
     logic.tiles._on_path_changed()
 
     assert 999.0 not in scales(logic)

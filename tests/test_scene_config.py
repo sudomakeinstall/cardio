@@ -126,7 +126,7 @@ def test_the_quad_layout_is_the_empty_state_value():
     assert Layout.TILE.state_value == "tile"
 
 
-@pytest.mark.parametrize("layout", ["volume", "axial", "coronal", "sagittal", "tile"])
+@pytest.mark.parametrize("layout", ["volume", "ul", "ll", "lr", "tile"])
 def test_every_maximizable_layout_keeps_its_name(layout):
     assert Layout(layout).state_value == layout
 
@@ -144,9 +144,9 @@ def test_the_state_value_reads_back_as_its_layout(value, expected):
     "layout,shows",
     [
         (Layout.QUAD, True),
-        (Layout.AXIAL, True),
-        (Layout.CORONAL, True),
-        (Layout.SAGITTAL, True),
+        (Layout.UL, True),
+        (Layout.LL, True),
+        (Layout.LR, True),
         (Layout.VOLUME, False),
         (Layout.TILE, False),
         (Layout.VOLUMETRY, False),
@@ -159,11 +159,11 @@ def test_only_the_layouts_with_slices_in_them_want_the_reslice(layout, shows):
 @pytest.mark.parametrize(
     "layout,drawn",
     [
-        (Layout.QUAD, {Layout.AXIAL, Layout.CORONAL, Layout.SAGITTAL, Layout.VOLUME}),
+        (Layout.QUAD, {Layout.UL, Layout.LL, Layout.LR, Layout.VOLUME}),
         (Layout.VOLUME, {Layout.VOLUME}),
-        (Layout.AXIAL, {Layout.AXIAL}),
-        (Layout.CORONAL, {Layout.CORONAL}),
-        (Layout.SAGITTAL, {Layout.SAGITTAL}),
+        (Layout.UL, {Layout.UL}),
+        (Layout.LL, {Layout.LL}),
+        (Layout.LR, {Layout.LR}),
         (Layout.TILE, {Layout.TILE}),
         (Layout.VOLUMETRY, {Layout.VOLUMETRY}),
     ],
@@ -187,12 +187,12 @@ def test_the_charts_resample_no_cut_and_so_draw_none():
 def test_a_maximized_cut_is_alone_on_screen_though_all_three_are_resliced():
     """The distinction ``shows_slices`` cannot make, and a capture needs.
 
-    A maximized axial view still resamples the coronal and sagittal cuts, so
+    A maximized upper-left view still resamples the other two cuts, so
     their windows are current -- but nobody can see them, and capturing them
     would be writing a view the user never chose.
     """
-    assert Layout.AXIAL.shows_slices
-    assert Layout.AXIAL.on_screen == {Layout.AXIAL}
+    assert Layout.UL.shows_slices
+    assert Layout.UL.on_screen == {Layout.UL}
 
 
 def test_unknown_layout_is_rejected():
@@ -226,7 +226,7 @@ def test_toml_view_table_reaches_the_scene(tmp_path):
 [view]
 layout = "tile"
 theme = "light"
-camera_lock = "LL"
+camera_lock = "ll"
 drawer_sections = ["orientation", "tiles"]
 help_visible = true
 """,

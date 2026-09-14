@@ -16,9 +16,9 @@ from ..common import SWALLOW_KEYS
 
 VIEWPORT_LABELS = {
     "vr": "3D",
-    "axial": "Axial",
-    "coronal": "Coronal",
-    "sagittal": "Sagittal",
+    "ul": "UL",
+    "ll": "LL",
+    "lr": "LR",
     "tile": "Tiles",
     "volumetry": "Volumetry",
 }

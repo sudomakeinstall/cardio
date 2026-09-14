@@ -63,7 +63,7 @@ class SeriesTags(pc.BaseModel):
     """The naming of every viewport's series, one entry each.
 
     A field per viewport rather than a mapping, so that a config names one the
-    way it names everything else -- ``--capture_series.axial.number 400`` --
+    way it names everything else -- ``--capture_series.ul.number 400`` --
     and a viewport that does not exist is a misspelling rather than a key that
     quietly configures nothing.
     """
@@ -74,17 +74,17 @@ class SeriesTags(pc.BaseModel):
         default_factory=lambda: _numbered("vr"),
         description="The volume rendering's series.",
     )
-    axial: Series = pc.Field(
-        default_factory=lambda: _numbered("axial"),
-        description="The axial view's series.",
+    ul: Series = pc.Field(
+        default_factory=lambda: _numbered("ul"),
+        description="The upper-left view's series.",
     )
-    coronal: Series = pc.Field(
-        default_factory=lambda: _numbered("coronal"),
-        description="The coronal view's series.",
+    ll: Series = pc.Field(
+        default_factory=lambda: _numbered("ll"),
+        description="The lower-left view's series.",
     )
-    sagittal: Series = pc.Field(
-        default_factory=lambda: _numbered("sagittal"),
-        description="The sagittal view's series.",
+    lr: Series = pc.Field(
+        default_factory=lambda: _numbered("lr"),
+        description="The lower-right view's series.",
     )
     tile: Series = pc.Field(
         default_factory=lambda: _numbered("tile"),

@@ -18,9 +18,9 @@ from tests.fakes import FakeApp, FakeScene
 
 # The out-of-plane direction of each view before any rotation, in ITK order.
 BASE_NORMALS = {
-    "axial": [0.0, 0.0, 1.0],
-    "sagittal": [1.0, 0.0, 0.0],
-    "coronal": [0.0, 1.0, 0.0],
+    "ul": [0.0, 0.0, 1.0],
+    "lr": [1.0, 0.0, 0.0],
+    "ll": [0.0, 1.0, 0.0],
 }
 
 # R_x(90) and R_y(90), written out rather than composed, so the expectations
@@ -51,7 +51,7 @@ def test_unrotated_views_scroll_along_their_own_axis(view, normal):
     assert np.allclose(make_app().mpr.scroll_vector(view), normal)
 
 
-def test_an_unknown_view_falls_back_to_the_axial_normal():
+def test_an_unknown_view_falls_back_to_the_upper_left_normal():
     """The volume viewport shares the handler but has no slice to scroll."""
     assert np.allclose(make_app().mpr.scroll_vector("vr"), [0.0, 0.0, 1.0])
 
@@ -69,9 +69,9 @@ def test_roma_returns_the_normal_in_roma_order(view, normal):
 @pytest.mark.parametrize(
     "view,expected",
     [
-        ("axial", [0.0, -1.0, 0.0]),
-        ("sagittal", [1.0, 0.0, 0.0]),
-        ("coronal", [0.0, 0.0, 1.0]),
+        ("ul", [0.0, -1.0, 0.0]),
+        ("lr", [1.0, 0.0, 0.0]),
+        ("ll", [0.0, 0.0, 1.0]),
     ],
 )
 def test_a_single_rotation_turns_every_normal(view, expected):
@@ -85,10 +85,10 @@ def test_steps_compose_in_order():
     x_then_y = make_app([{"axis": "X", "angle": 90.0}, {"axis": "Y", "angle": 90.0}])
     y_then_x = make_app([{"axis": "Y", "angle": 90.0}, {"axis": "X", "angle": 90.0}])
 
-    assert np.allclose(x_then_y.mpr.scroll_vector("axial"), X90 @ Y90 @ [0, 0, 1])
-    assert np.allclose(y_then_x.mpr.scroll_vector("axial"), Y90 @ X90 @ [0, 0, 1])
+    assert np.allclose(x_then_y.mpr.scroll_vector("ul"), X90 @ Y90 @ [0, 0, 1])
+    assert np.allclose(y_then_x.mpr.scroll_vector("ul"), Y90 @ X90 @ [0, 0, 1])
     assert not np.allclose(
-        x_then_y.mpr.scroll_vector("axial"), y_then_x.mpr.scroll_vector("axial")
+        x_then_y.mpr.scroll_vector("ul"), y_then_x.mpr.scroll_vector("ul")
     )
 
 
@@ -98,15 +98,13 @@ def test_radians_and_degrees_describe_the_same_rotation():
         [{"axis": "X", "angle": np.pi / 2}], angle_units=AngleUnits.RADIANS
     )
 
-    assert np.allclose(
-        degrees.mpr.scroll_vector("axial"), radians.mpr.scroll_vector("axial")
-    )
+    assert np.allclose(degrees.mpr.scroll_vector("ul"), radians.mpr.scroll_vector("ul"))
 
 
 def test_hidden_steps_do_not_contribute():
     """The eye toggle in the rotation panel must move the slice normal back."""
     app = make_app([{"axis": "X", "angle": 90.0, "visible": False}])
-    assert np.allclose(app.mpr.scroll_vector("axial"), [0.0, 0.0, 1.0])
+    assert np.allclose(app.mpr.scroll_vector("ul"), [0.0, 0.0, 1.0])
 
 
 def test_a_quaternion_step_matches_the_euler_step_it_encodes():
@@ -115,8 +113,8 @@ def test_a_quaternion_step_matches_the_euler_step_it_encodes():
     quaternion = make_app([{"quaternion": [half, 0.0, 0.0, half]}])
 
     assert np.allclose(
-        euler.mpr.scroll_vector("axial"),
-        quaternion.mpr.scroll_vector("axial"),
+        euler.mpr.scroll_vector("ul"),
+        quaternion.mpr.scroll_vector("ul"),
         atol=1e-9,
     )
 
@@ -148,7 +146,7 @@ def test_switching_convention_does_not_move_the_slice(view):
 def test_scrolling_walks_the_origin_along_the_normal():
     app = make_app(origin=(1.0, 2.0, 3.0))
 
-    app.mpr.scroll_slice("axial", 2.5)
+    app.mpr.scroll_slice("ul", 2.5)
 
     assert app.server.state.mpr_origin == [1.0, 2.0, 5.5]
 
@@ -156,9 +154,9 @@ def test_scrolling_walks_the_origin_along_the_normal():
 def test_scrolling_accumulates_and_reverses():
     app = make_app(origin=(0.0, 0.0, 0.0))
 
-    app.mpr.scroll_slice("sagittal", 3.0)
-    app.mpr.scroll_slice("sagittal", 3.0)
-    app.mpr.scroll_slice("sagittal", -1.0)
+    app.mpr.scroll_slice("lr", 3.0)
+    app.mpr.scroll_slice("lr", 3.0)
+    app.mpr.scroll_slice("lr", -1.0)
 
     assert app.server.state.mpr_origin == [5.0, 0.0, 0.0]
 
@@ -166,7 +164,7 @@ def test_scrolling_accumulates_and_reverses():
 def test_scrolling_follows_the_rotated_normal():
     app = make_app([{"axis": "X", "angle": 90.0}], origin=(0.0, 0.0, 0.0))
 
-    app.mpr.scroll_slice("axial", 4.0)
+    app.mpr.scroll_slice("ul", 4.0)
 
     assert np.allclose(app.server.state.mpr_origin, [0.0, -4.0, 0.0])
 
@@ -187,8 +185,8 @@ def test_roma_scrolls_the_same_physical_axis_as_itk():
     itk = make_app(origin=(0.0, 0.0, 0.0))
     roma = make_app(index_order=IndexOrder.ROMA, origin=(0.0, 0.0, 0.0))
 
-    itk.mpr.scroll_slice("axial", 2.0)
-    roma.mpr.scroll_slice("axial", 2.0)
+    itk.mpr.scroll_slice("ul", 2.0)
+    roma.mpr.scroll_slice("ul", 2.0)
 
     assert itk.server.state.mpr_origin == [0.0, 0.0, 2.0]
     assert roma.server.state.mpr_origin == [2.0, 0.0, 0.0]

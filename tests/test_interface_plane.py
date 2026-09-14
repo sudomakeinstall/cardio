@@ -8,7 +8,7 @@ import pytest
 from cardio.logic import ALIGN_STEP_NAME
 from cardio.orientation import IndexOrder
 from cardio.segmentation import Segmentation, plane_basis, principal_axes
-from tests.fakes import FakeApp, axial_normal, make_logic
+from tests.fakes import FakeApp, make_logic, ul_normal
 from tests.geometry import axis_angle_between
 from tests.phantoms import write_segmentation
 
@@ -153,13 +153,13 @@ def test_interface_plane_requires_both_groups(tmp_path):
     assert seg.interface_plane([1], [7], 0) is None
 
 
-def test_align_puts_axial_view_in_the_interface_plane(tmp_path):
+def test_align_puts_upper_left_view_in_the_interface_plane(tmp_path):
     seg = make_segmentation(tmp_path, "oblique3d")
     logic = make_logic(seg)
     _, axes, _ = seg.interface_plane([1], [2], 0)
 
     logic.snap.align_to_interface()
-    assert axial_normal(logic) == pytest.approx(axes[:, 2], abs=1e-6)
+    assert ul_normal(logic) == pytest.approx(axes[:, 2], abs=1e-6)
 
 
 def test_align_also_centres_on_the_interface(tmp_path):
@@ -175,12 +175,12 @@ def test_align_is_idempotent(tmp_path):
     """Re-aligning replaces the previous step instead of stacking."""
     logic = make_logic(make_segmentation(tmp_path, "oblique3d"))
     logic.snap.align_to_interface()
-    first = axial_normal(logic)
+    first = ul_normal(logic)
     logic.snap.align_to_interface()
 
     steps = logic.server.state.mpr_rotation_data["angles_list"]
     assert [s["name"] for s in steps] == [ALIGN_STEP_NAME]
-    assert axial_normal(logic) == pytest.approx(first, abs=1e-9)
+    assert ul_normal(logic) == pytest.approx(first, abs=1e-9)
 
 
 def user_rotation(axis: str, angle: float) -> dict:
@@ -209,15 +209,15 @@ def test_in_plane_rotation_stays_in_the_plane(tmp_path):
     seg = make_segmentation(tmp_path, "oblique3d")
     logic = make_logic(seg)
     logic.snap.align_to_interface()
-    aligned = axial_normal(logic)
+    aligned = ul_normal(logic)
     _, axes, _ = seg.interface_plane([1], [2], 0)
 
     steps = logic.server.state.mpr_rotation_data["angles_list"]
     logic.server.state.mpr_rotation_data = {
         "angles_list": steps + [user_rotation("Z", 30.0)]
     }
-    assert axial_normal(logic) == pytest.approx(aligned, abs=1e-9)
-    assert axial_normal(logic) == pytest.approx(axes[:, 2], abs=1e-6)
+    assert ul_normal(logic) == pytest.approx(aligned, abs=1e-9)
+    assert ul_normal(logic) == pytest.approx(axes[:, 2], abs=1e-6)
 
 
 @pytest.mark.parametrize("axis", ["X", "Y"])
@@ -233,9 +233,7 @@ def test_out_of_plane_rotation_tilts_by_that_angle(tmp_path, axis, angle):
     logic.server.state.mpr_rotation_data = {
         "angles_list": steps + [user_rotation(axis, angle)]
     }
-    tilt = np.degrees(
-        np.arccos(abs(np.clip(axial_normal(logic) @ axes[:, 2], -1.0, 1.0)))
-    )
+    tilt = np.degrees(np.arccos(abs(np.clip(ul_normal(logic) @ axes[:, 2], -1.0, 1.0))))
     assert tilt == pytest.approx(angle, abs=1e-6)
 
 
@@ -245,7 +243,7 @@ def test_align_round_trips_through_roma_convention(tmp_path):
     _, axes, _ = seg.interface_plane([1], [2], 0)
 
     logic.snap.align_to_interface()
-    assert axial_normal(logic) == pytest.approx(axes[:, 2], abs=1e-6)
+    assert ul_normal(logic) == pytest.approx(axes[:, 2], abs=1e-6)
 
 
 def test_align_records_flatness(tmp_path):
@@ -287,21 +285,21 @@ def test_swap_leaves_an_unlocked_view_alone(tmp_path):
     """Swapping is an edit to the selection, not a command to move the views."""
     logic = make_logic(make_segmentation(tmp_path, "oblique3d"))
     logic.snap.align_to_interface()
-    before = axial_normal(logic)
+    before = ul_normal(logic)
 
     logic.snap.swap_groups()
-    assert axial_normal(logic) == pytest.approx(before, abs=1e-9)
+    assert ul_normal(logic) == pytest.approx(before, abs=1e-9)
 
 
-def test_align_after_a_swap_flips_the_axial_normal(tmp_path):
+def test_align_after_a_swap_flips_the_upper_left_normal(tmp_path):
     """The flip lands on the next align, viewing the interface from behind."""
     logic = make_logic(make_segmentation(tmp_path, "oblique3d"))
     logic.snap.align_to_interface()
-    before = axial_normal(logic)
+    before = ul_normal(logic)
 
     logic.snap.swap_groups()
     logic.snap.align_to_interface()
-    assert axial_normal(logic) == pytest.approx(-before, abs=1e-6)
+    assert ul_normal(logic) == pytest.approx(-before, abs=1e-6)
 
 
 def test_swap_does_not_align_a_view_that_was_not_aligned(tmp_path):
@@ -312,10 +310,10 @@ def test_swap_does_not_align_a_view_that_was_not_aligned(tmp_path):
 
 def test_swap_flips_a_locked_view_immediately(tmp_path):
     logic = locked_logic(tmp_path)
-    before = axial_normal(logic)
+    before = ul_normal(logic)
 
     logic.snap.swap_groups()
-    assert axial_normal(logic) == pytest.approx(-before, abs=1e-6)
+    assert ul_normal(logic) == pytest.approx(-before, abs=1e-6)
 
 
 def test_swap_leaves_the_origin_where_it_was(tmp_path):
@@ -338,12 +336,12 @@ def test_swap_does_not_stack_alignment_steps(tmp_path):
 
 def test_swap_round_trips(tmp_path):
     logic = locked_logic(tmp_path)
-    before = axial_normal(logic)
+    before = ul_normal(logic)
 
     logic.snap.swap_groups()
     logic.snap.swap_groups()
     assert logic.server.state.snap_labels_a == [1]
-    assert axial_normal(logic) == pytest.approx(before, abs=1e-6)
+    assert ul_normal(logic) == pytest.approx(before, abs=1e-6)
 
 
 def test_swap_keeps_user_rotations(tmp_path):
@@ -376,7 +374,7 @@ def test_orientation_lock_tracks_a_tilting_interface(tmp_path):
         logic.server.state.frame = frame
         logic.snap.apply_frame_lock(frame)
         _, axes, _ = seg.interface_plane([1], [2], frame)
-        assert axial_normal(logic) == pytest.approx(axes[:, 2], abs=1e-6)
+        assert ul_normal(logic) == pytest.approx(axes[:, 2], abs=1e-6)
 
 
 def test_one_shot_align_drifts_as_the_interface_tilts(tmp_path):
@@ -384,7 +382,7 @@ def test_one_shot_align_drifts_as_the_interface_tilts(tmp_path):
     seg = tilting_segmentation(tmp_path)
     logic = make_logic(seg)
     logic.snap.align_to_interface()
-    fixed = axial_normal(logic)
+    fixed = ul_normal(logic)
 
     _, axes, _ = seg.interface_plane([1], [2], TILT_FRAMES - 1)
     assert fixed != pytest.approx(axes[:, 2], abs=1e-2)
@@ -401,7 +399,7 @@ def test_orientation_lock_is_independent_of_position_lock(tmp_path):
     logic.snap.apply_frame_lock(2)
     assert logic.server.state.mpr_origin == [9.0, 9.0, 9.0]
     _, axes, _ = seg.interface_plane([1], [2], 2)
-    assert axial_normal(logic) == pytest.approx(axes[:, 2], abs=1e-6)
+    assert ul_normal(logic) == pytest.approx(axes[:, 2], abs=1e-6)
 
 
 def test_position_lock_alone_leaves_orientation_alone(tmp_path):
@@ -426,7 +424,7 @@ def test_both_locks_together(tmp_path):
     for frame in range(TILT_FRAMES):
         logic.snap.apply_frame_lock(frame)
         _, axes, _ = seg.interface_plane([1], [2], frame)
-        assert axial_normal(logic) == pytest.approx(axes[:, 2], abs=1e-6)
+        assert ul_normal(logic) == pytest.approx(axes[:, 2], abs=1e-6)
         assert logic.server.state.mpr_origin == pytest.approx(
             seg.interface_centroid([1], [2], frame)
         )
@@ -452,7 +450,7 @@ def test_orientation_lock_preserves_user_rotations_each_frame(tmp_path):
         logic.snap.apply_frame_lock(frame)
         _, axes, _ = seg.interface_plane([1], [2], frame)
         tilt = np.degrees(
-            np.arccos(abs(np.clip(axial_normal(logic) @ axes[:, 2], -1.0, 1.0)))
+            np.arccos(abs(np.clip(ul_normal(logic) @ axes[:, 2], -1.0, 1.0)))
         )
         # the plane is re-tracked every frame, with the user's 20 degrees kept
         assert tilt == pytest.approx(20.0, abs=1e-6)
@@ -678,10 +676,10 @@ def test_index_order_switch_preserves_alignment(tmp_path, start, switch_to):
     seg = make_segmentation(tmp_path, "oblique3d")
     logic = make_logic_with_metadata(seg, index_order=start)
     logic.snap.align_to_interface()
-    before = axial_normal(logic)
+    before = ul_normal(logic)
 
     logic.rotations.sync_index_order(switch_to)
-    assert axial_normal(logic) == pytest.approx(before, abs=1e-9)
+    assert ul_normal(logic) == pytest.approx(before, abs=1e-9)
 
 
 def test_index_order_switch_preserves_alignment_with_user_rotation(tmp_path):
@@ -694,10 +692,10 @@ def test_index_order_switch_preserves_alignment_with_user_rotation(tmp_path):
         "angles_list": steps + [user_rotation("Y", 25.0)],
         "metadata": {"index_order": "itk", "angle_units": "degrees"},
     }
-    before = axial_normal(logic)
+    before = ul_normal(logic)
 
     logic.rotations.sync_index_order("roma")
-    assert axial_normal(logic) == pytest.approx(before, abs=1e-9)
+    assert ul_normal(logic) == pytest.approx(before, abs=1e-9)
 
 
 def test_index_order_switch_round_trips(tmp_path):

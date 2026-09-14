@@ -19,9 +19,9 @@ QUAD_LAYOUT = ""
 # assignment, so that a session with no page can say which of them are allowed
 # to have no implementation without importing the page to find out.
 RENDER_VIEWS = (
-    "axial_update",
-    "coronal_update",
-    "sagittal_update",
+    "ul_update",
+    "ll_update",
+    "lr_update",
     "volume_update",
     "tile_update",
     "volumetry_update",
@@ -39,9 +39,9 @@ class Layout(str, enum.Enum):
 
     QUAD = "quad"
     VOLUME = "volume"
-    AXIAL = "axial"
-    CORONAL = "coronal"
-    SAGITTAL = "sagittal"
+    UL = "ul"
+    LL = "ll"
+    LR = "lr"
     TILE = "tile"
     VOLUMETRY = "volumetry"
 
@@ -72,7 +72,7 @@ class Layout(str, enum.Enum):
     def shows_reslice(self) -> bool:
         """Whether this layout draws a resampled cut of the volume at all.
 
-        Wider than ``shows_slices`` at one end. A maximized axial view draws
+        Wider than ``shows_slices`` at one end. A maximized upper-left view draws
         the same cut the quad view does, and the tile grid draws its own along
         the traverse path -- so those want the controls over a cut even though
         they are not the three MPR views.
@@ -92,13 +92,11 @@ class Layout(str, enum.Enum):
         thing that says which of them anybody can see.
 
         Deliberately not ``shows_slices``, which means "this layout resamples
-        the cuts": that is true of a maximized axial view for all three cuts,
+        the cuts": that is true of a maximized upper-left view for all three cuts,
         only one of which is on screen.
         """
         if self is Layout.QUAD:
-            return frozenset(
-                {Layout.AXIAL, Layout.CORONAL, Layout.SAGITTAL, Layout.VOLUME}
-            )
+            return frozenset({Layout.UL, Layout.LL, Layout.LR, Layout.VOLUME})
         return frozenset({self})
 
 
@@ -106,9 +104,9 @@ class CameraLock(str, enum.Enum):
     """Which MPR view the volume rendering's camera is tied to, if any."""
 
     FREE = "free"
-    UL = "UL"
-    LL = "LL"
-    LR = "LR"
+    UL = "ul"
+    LL = "ll"
+    LR = "lr"
 
 
 class DrawerSection(str, enum.Enum):

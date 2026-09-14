@@ -25,7 +25,7 @@ HANDLED_EVENTS = [
     "KeyPress",
 ]
 
-MPR_VIEWS = {"axial", "sagittal", "coronal"}
+MPR_VIEWS = {"ul", "lr", "ll"}
 
 # The one view whose drags VTK handles itself, turning the camera with its own
 # trackball. Nothing tells us it moved, so the release is when we go and look.
@@ -39,12 +39,14 @@ DRAG_VIEWS = MPR_VIEWS | {"tile"}
 # already names a view, and because it is where a console usually is.
 CONSOLE_KEY = "`"
 
-# Keys that maximize a view, and the view each one names
+# Keys that maximize a view, and the view each one names. The cut views kept
+# their anatomical letters when they were renamed for where they sit, since
+# the keys are what fingers know and no pane letter is free anyway.
 MAXIMIZE_KEYS = {
     "v": "volume",
-    "a": "axial",
-    "c": "coronal",
-    "s": "sagittal",
+    "a": "ul",
+    "c": "ll",
+    "s": "lr",
     "t": "tile",
     "y": "volumetry",
 }

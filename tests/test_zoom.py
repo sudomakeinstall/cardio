@@ -91,8 +91,8 @@ def test_a_lopsided_cloud_is_a_centre_offset_from_the_origin():
 
 
 def test_the_extent_is_taken_in_the_plane_s_own_axes():
-    """A point on the axial normal casts no shadow on the axial plane."""
-    frame = VIEW_TRANSFORMS["axial"]
+    """A point on a pane's normal casts no shadow on that pane's plane."""
+    frame = VIEW_TRANSFORMS["ul"]
     normal = frame[:, 2]
 
     centre, half_span = plane_shadow(np.array([normal * 30.0]), frame, np.zeros(3))
@@ -128,11 +128,11 @@ def test_a_trim_takes_the_same_share_off_each_end():
 
 
 def test_a_turned_plane_sees_a_turned_shadow():
-    frame = rotation_about_z(45.0) @ VIEW_TRANSFORMS["axial"]
+    frame = rotation_about_z(45.0) @ VIEW_TRANSFORMS["ul"]
     cloud = np.array([[10.0, 10.0, 0.0]])
 
     turned, _ = plane_shadow(cloud, frame, np.zeros(3))
-    square, _ = plane_shadow(cloud, VIEW_TRANSFORMS["axial"], np.zeros(3))
+    square, _ = plane_shadow(cloud, VIEW_TRANSFORMS["ul"], np.zeros(3))
 
     assert max(abs(turned)) == pytest.approx(np.hypot(10.0, 10.0))
     assert max(abs(square)) == pytest.approx(10.0)

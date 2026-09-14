@@ -179,9 +179,9 @@ class Scene(ps.BaseSettings):
     )
     mpr_crosshair_colors: dict = pc.Field(
         default_factory=lambda: {
-            "axial": (0.0, 0.5, 1.0),
-            "sagittal": (1.0, 0.3, 0.3),
-            "coronal": (0.3, 1.0, 0.3),
+            "ul": (0.0, 0.5, 1.0),
+            "lr": (1.0, 0.3, 0.3),
+            "ll": (0.3, 1.0, 0.3),
         },
         description="RGB colors for crosshair lines (keyed by view name)",
     )
@@ -206,10 +206,10 @@ class Scene(ps.BaseSettings):
         ),
     )
     screenshot_viewports: list[str] = pc.Field(
-        default=["vr", "axial", "coronal", "sagittal", "tile", "volumetry"],
+        default=["vr", "ul", "ll", "lr", "tile", "volumetry"],
         description=(
-            "Viewports to capture in screenshots. Options: vr, axial, coronal, "
-            "sagittal, tile, volumetry"
+            "Viewports to capture in screenshots. Options: vr, ul, ll, lr, "
+            "tile, volumetry"
         ),
     )
     capture_format: CaptureFormat = pc.Field(
@@ -232,8 +232,8 @@ class Scene(ps.BaseSettings):
         default_factory=SeriesTags,
         description=(
             "How each viewport's exported DICOM series is named. "
-            "CLI usage: --capture_series.axial.number 400 "
-            '--capture_series.axial.description "Cine SAX"'
+            "CLI usage: --capture_series.ul.number 400 "
+            '--capture_series.ul.description "Cine SAX"'
         ),
     )
     research: bool = pc.Field(
@@ -277,7 +277,7 @@ class Scene(ps.BaseSettings):
     )
     zoom: Zoom = pc.Field(
         default_factory=Zoom,
-        description='Labels the views are fitted to. CLI usage: --zoom.labels "[1]" --zoom.plane coronal',
+        description='Labels the views are fitted to. CLI usage: --zoom.labels "[1]" --zoom.plane ll',
     )
     tile: Tile = pc.Field(
         default_factory=Tile,

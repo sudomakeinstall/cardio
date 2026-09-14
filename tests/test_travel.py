@@ -36,7 +36,7 @@ def traverse(logic):
 def test_scrolling_travels_the_path_in_traverse_mode(logic):
     logic.server.state.snap_traverse = 40
 
-    logic.mpr.scroll_slice("axial", 5.0)
+    logic.mpr.scroll_slice("ul", 5.0)
 
     assert traverse(logic) == 45
 
@@ -44,7 +44,7 @@ def test_scrolling_travels_the_path_in_traverse_mode(logic):
 def test_scrolling_back_travels_the_other_way(logic):
     logic.server.state.snap_traverse = 40
 
-    logic.mpr.scroll_slice("axial", -5.0)
+    logic.mpr.scroll_slice("ul", -5.0)
 
     assert traverse(logic) == 35
 
@@ -54,7 +54,7 @@ def test_travelling_writes_only_the_fraction(logic):
     logic.snap.align_to_interface()
     before = list(logic.server.state.mpr_origin)
 
-    logic.mpr.scroll_slice("axial", 20.0)
+    logic.mpr.scroll_slice("ul", 20.0)
 
     assert traverse(logic) == 20
     assert logic.server.state.mpr_origin == before
@@ -64,7 +64,7 @@ def test_travelling_writes_only_the_fraction(logic):
 
 
 def test_the_path_is_travelled_from_any_view(logic):
-    for view in ("axial", "sagittal", "coronal"):
+    for view in ("ul", "lr", "ll"):
         logic.server.state.snap_traverse = 50
         logic.mpr.scroll_slice(view, 10.0)
         assert traverse(logic) == 60
@@ -73,7 +73,7 @@ def test_the_path_is_travelled_from_any_view(logic):
 def test_travelling_stops_at_the_far_end(logic):
     logic.server.state.snap_traverse = 95
 
-    logic.mpr.scroll_slice("axial", 20.0)
+    logic.mpr.scroll_slice("ul", 20.0)
 
     assert traverse(logic) == 100
 
@@ -81,7 +81,7 @@ def test_travelling_stops_at_the_far_end(logic):
 def test_travelling_stops_at_the_near_end(logic):
     logic.server.state.snap_traverse = 5
 
-    logic.mpr.scroll_slice("axial", -20.0)
+    logic.mpr.scroll_slice("ul", -20.0)
 
     assert traverse(logic) == 0
 
@@ -91,7 +91,7 @@ def test_holding_at_an_end_does_not_fall_back_to_moving_the_origin(logic):
     logic.server.state.snap_traverse = 100
     before = list(logic.server.state.mpr_origin)
 
-    logic.mpr.scroll_slice("axial", 20.0)
+    logic.mpr.scroll_slice("ul", 20.0)
 
     assert traverse(logic) == 100
     assert logic.server.state.mpr_origin == before
@@ -102,7 +102,7 @@ def test_a_slow_trackpad_scroll_still_travels(logic):
     logic.server.state.snap_traverse = 0
 
     for _ in range(4):
-        logic.mpr.scroll_slice("axial", 0.25)
+        logic.mpr.scroll_slice("ul", 0.25)
 
     assert traverse(logic) == 1
 
@@ -115,7 +115,7 @@ def test_a_position_lock_does_not_suspend_travelling(logic):
     logic.server.state.snap_locked = True
     logic.server.state.snap_traverse = 30
 
-    logic.mpr.scroll_slice("axial", 10.0)
+    logic.mpr.scroll_slice("ul", 10.0)
 
     assert traverse(logic) == 40
 
@@ -124,7 +124,7 @@ def test_an_orientation_lock_does_not_suspend_travelling(logic):
     logic.server.state.snap_orientation_locked = True
     logic.server.state.snap_traverse = 30
 
-    logic.mpr.scroll_slice("axial", 10.0)
+    logic.mpr.scroll_slice("ul", 10.0)
 
     assert traverse(logic) == 40
 
@@ -137,7 +137,7 @@ def test_other_modes_still_scroll_out_of_the_plane(logic, mode):
     logic.server.state.snap_mode = mode
     before = list(logic.server.state.mpr_origin)
 
-    logic.mpr.scroll_slice("axial", 5.0)
+    logic.mpr.scroll_slice("ul", 5.0)
 
     assert logic.server.state.mpr_origin != before
     assert traverse(logic) == 0
@@ -149,7 +149,7 @@ def test_a_position_lock_still_suspends_scrolling_off_the_path(logic, mode):
     logic.server.state.snap_locked = True
     before = list(logic.server.state.mpr_origin)
 
-    logic.mpr.scroll_slice("axial", 5.0)
+    logic.mpr.scroll_slice("ul", 5.0)
 
     assert logic.server.state.mpr_origin == before
 
@@ -159,7 +159,7 @@ def test_traverse_without_a_path_scrolls_out_of_the_plane(logic):
     logic.server.state.snap_labels_c = []
     before = list(logic.server.state.mpr_origin)
 
-    logic.mpr.scroll_slice("axial", 5.0)
+    logic.mpr.scroll_slice("ul", 5.0)
 
     assert logic.server.state.mpr_origin != before
     assert traverse(logic) == 0
@@ -169,7 +169,7 @@ def test_travelling_moves_along_the_line_it_names(logic):
     """Scrolling to the end lands where aligning at 100 percent would."""
     logic.server.state.snap_traverse = 0
 
-    logic.mpr.scroll_slice("axial", 100.0)
+    logic.mpr.scroll_slice("ul", 100.0)
     logic.snap.align_to_interface()
     travelled = list(logic.server.state.mpr_origin)
 

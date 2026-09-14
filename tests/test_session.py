@@ -78,11 +78,11 @@ def test_asking_a_view_to_update_draws_it(session):
     reaches a render at all, which an empty implementation would not.
     """
     session.ready()
-    window = session.window("axial")
+    window = session.window("ul")
     renders = []
     window.AddObserver("StartEvent", lambda *_: renders.append(1))
 
-    session.server.controller.axial_update()
+    session.server.controller.ul_update()
 
     assert renders, "the update did not render"
 
@@ -202,7 +202,7 @@ def test_the_size_a_session_renders_at_is_configured(tmp_path):
     session.ready()
 
     assert session.scene.renderWindow.GetSize() == (320, 240)
-    assert session.scene.mpr_views["axial"].GetSize() == (320, 240)
+    assert session.scene.mpr_views["ul"].GetSize() == (320, 240)
 
 
 def test_a_config_file_is_the_scene(tmp_path):

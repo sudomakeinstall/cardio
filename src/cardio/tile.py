@@ -53,10 +53,10 @@ class Tile(pc.BaseModel):
         ),
     )
     plane: str = pc.Field(
-        default="axial",
+        default="ul",
         description=(
             "Plane the parallel sources cut in, and step along the normal of. "
-            "CLI usage: --tile.plane coronal"
+            "CLI usage: --tile.plane ll"
         ),
     )
     spacing: float = pc.Field(

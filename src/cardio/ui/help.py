@@ -33,13 +33,13 @@ def help_dialog():
                     html.Td("Toggle 3D volume view")
                 with html.Tr():
                     html.Td("a")
-                    html.Td("Toggle axial view")
+                    html.Td("Toggle upper-left view")
                 with html.Tr():
                     html.Td("c")
-                    html.Td("Toggle coronal view")
+                    html.Td("Toggle lower-left view")
                 with html.Tr():
                     html.Td("s")
-                    html.Td("Toggle sagittal view")
+                    html.Td("Toggle lower-right view")
                 with html.Tr():
                     html.Td("t")
                     html.Td("Toggle tile view")

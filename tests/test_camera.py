@@ -39,9 +39,9 @@ def test_a_pose_survives_being_written_down():
 
 
 def test_only_the_slice_poses_that_are_set_are_offered():
-    cameras = Cameras(axial=Pose.of(vtk.vtkCamera()))
+    cameras = Cameras(ul=Pose.of(vtk.vtkCamera()))
 
-    assert list(cameras.slices) == ["axial"]
+    assert list(cameras.slices) == ["ul"]
 
 
 def test_an_unknown_camera_is_refused():
@@ -104,7 +104,7 @@ def test_every_view_that_exists_is_mirrored(app):
     cameras = Cameras(**server.state.cameras)
 
     assert cameras.volume is not None
-    assert set(cameras.slices) == {"axial", "coronal", "sagittal"}
+    assert set(cameras.slices) == {"ul", "ll", "lr"}
     assert cameras.tile_scale is not None
 
 
@@ -259,12 +259,12 @@ def test_a_configured_slice_pose_waits_for_its_view_to_exist(tmp_path):
         view_up=(0.0, 1.0, 0.0),
         parallel_scale=5.0,
     )
-    scene = build_scene(tmp_path, view={"cameras": {"axial": pose.model_dump()}})
+    scene = build_scene(tmp_path, view={"cameras": {"ul": pose.model_dump()}})
     server, scene, _, _ = build_app(scene)
     connect(server)
 
-    axial = scene.mpr_views.renderer("axial").GetActiveCamera()
-    assert Pose.of(axial) == pose
+    camera = scene.mpr_views.renderer("ul").GetActiveCamera()
+    assert Pose.of(camera) == pose
 
 
 def test_a_cine_does_not_fill_the_journal_with_a_change_per_frame(app):

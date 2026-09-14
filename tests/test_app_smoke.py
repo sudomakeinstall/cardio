@@ -266,7 +266,7 @@ def test_dispatch_checks_its_arguments(read_only_app):
         logic.dispatch("add_rotation")
 
     with pytest.raises(pc.ValidationError):
-        logic.dispatch("toggle_maximized", nonsense="axial")
+        logic.dispatch("toggle_maximized", nonsense="ul")
 
 
 def test_an_action_reads_its_arguments_by_name(app):
@@ -294,7 +294,7 @@ EQUIVALENT = [
     ),
     (
         "pan_view",
-        {"view_name": "axial", "dx": 3.0, "dy": -2.0},
+        {"view_name": "ul", "dx": 3.0, "dy": -2.0},
         lambda logic: logic.mpr.pan_view,
     ),
 ]
@@ -359,7 +359,7 @@ UNDOABLE = [
     ("adjust_window_level", {"window_delta": 10.0, "level_delta": -5.0}),
     ("add_rotation", {"axis": "Z"}),
     ("toggle_crosshairs", {}),
-    ("scroll_slice", {"view_name": "axial", "distance": 2.0}),
+    ("scroll_slice", {"view_name": "ul", "distance": 2.0}),
     ("set_window_level_preset", {"preset": 3}),
 ]
 
@@ -399,13 +399,13 @@ def test_maximizing_a_view_toggles_and_switches(app):
     server, _, logic, _ = app
     connect(server)
 
-    logic.dispatch("toggle_maximized", view="axial")
-    assert server.state.maximized_view == "axial"
+    logic.dispatch("toggle_maximized", view="ul")
+    assert server.state.maximized_view == "ul"
 
-    logic.dispatch("toggle_maximized", view="coronal")
-    assert server.state.maximized_view == "coronal"
+    logic.dispatch("toggle_maximized", view="ll")
+    assert server.state.maximized_view == "ll"
 
-    logic.dispatch("toggle_maximized", view="coronal")
+    logic.dispatch("toggle_maximized", view="ll")
     assert server.state.maximized_view == ""
 
 
@@ -413,7 +413,7 @@ def test_mpr_views_are_built_and_shared_with_the_scene(read_only_app):
     _, scene, _, _ = read_only_app
 
     assert scene.mpr_views is not None
-    for view in ("axial", "coronal", "sagittal"):
+    for view in ("ul", "ll", "lr"):
         assert scene.mpr_views[view] is not None
 
 
@@ -784,7 +784,7 @@ def test_the_spacing_source_follows_the_plane_it_is_given(app):
         server.state.maximized_view = "tile"
         server.state.tile_source = "spacing"
     with server.state:
-        server.state.tile_plane = "coronal"
+        server.state.tile_plane = "ll"
 
     assert tile_props(scene) == [1] * len(scene.tile_views)
 
@@ -869,14 +869,14 @@ def test_the_fit_frames_the_tiles_while_the_tiles_are_what_is_on_screen(app):
         server.state.zoom_labels = [1]
 
     before = tile_scales(scene)
-    mpr_before = scene.mpr_views.renderer("axial").GetActiveCamera().GetParallelScale()
+    mpr_before = scene.mpr_views.renderer("ul").GetActiveCamera().GetParallelScale()
 
     server.controller.zoom_to_labels()
 
     after = tile_scales(scene)
     assert after != before, "the fit never reached the grid"
     assert len(set(after)) == 1, "the tiles must keep their one shared scale"
-    assert scene.mpr_views.renderer("axial").GetActiveCamera().GetParallelScale() == (
+    assert scene.mpr_views.renderer("ul").GetActiveCamera().GetParallelScale() == (
         pytest.approx(mpr_before)
     ), "a factor sized against a tile frames nothing in an MPR window"
 
@@ -912,15 +912,15 @@ def test_the_fit_measures_in_the_plane_the_tiles_are_cut_in(app):
         server.state.maximized_view = "tile"
         server.state.tile_source = "spacing"
     with server.state:
-        server.state.tile_plane = "coronal"
-        server.state.zoom_plane = "sagittal"
+        server.state.tile_plane = "ll"
+        server.state.zoom_plane = "lr"
 
-    assert logic.zoom.fit_plane == "coronal"
+    assert logic.zoom.fit_plane == "ll"
 
     with server.state:
         server.state.maximized_view = ""
 
-    assert logic.zoom.fit_plane == "sagittal"
+    assert logic.zoom.fit_plane == "lr"
 
 
 def test_leaving_tile_mode_stops_retiling(app):
@@ -1073,7 +1073,7 @@ def test_the_reslice_condition_names_every_layout_that_draws_a_cut(read_only_app
     """The controls over a cut should be up wherever a cut is.
 
     Written out by hand, this named the quad view and the tile grid, and so
-    hid the overlay controls in a maximized axial view that was drawing the
+    hid the overlay controls in a maximized upper-left view that was drawing the
     overlays they control.
     """
     named = set(re.findall(r"'([^']*)'", common.RESLICE_ACTIVE))
@@ -1086,7 +1086,7 @@ def test_the_overlay_controls_survive_a_maximized_slice_view(read_only_app):
     """Which is where a person zooms in on the overlay they are judging."""
     _, _, _, ui = read_only_app
 
-    assert "'axial'" in common.RESLICE_ACTIVE and "'sagittal'" in common.RESLICE_ACTIVE
+    assert "'ul'" in common.RESLICE_ACTIVE and "'lr'" in common.RESLICE_ACTIVE
     body = _appearance_group(ui.layout.html, common.RESLICE_ACTIVE)
     assert 'v-model="mpr_segmentation_opacity"' in body
 
@@ -1372,8 +1372,8 @@ def test_configured_snap_survives_startup(tmp_path):
 
 
 def test_configured_layout_opens_maximized(tmp_path):
-    server, _, _, _ = build_ready(tmp_path, view={"layout": "sagittal"})
-    assert server.state.maximized_view == "sagittal"
+    server, _, _, _ = build_ready(tmp_path, view={"layout": "lr"})
+    assert server.state.maximized_view == "lr"
 
 
 def test_the_quad_layout_leaves_maximized_view_empty(tmp_path):
@@ -1452,13 +1452,13 @@ def drawn(scene) -> dict[str, int]:
     }
 
 
-def reslice_matrix(obj, view: str = "axial", frame: int = 0) -> np.ndarray:
+def reslice_matrix(obj, view: str = "ul", frame: int = 0) -> np.ndarray:
     """The 4x4 an object's reslice for ``view`` is cutting under."""
     reslice = obj.get_mpr_actors_for_frame(frame)[view]["reslice"]
     return matrix_array(reslice.GetResliceAxes())
 
 
-def slice_origin(obj, view: str = "axial") -> list[float]:
+def slice_origin(obj, view: str = "ul") -> list[float]:
     """Where a view's reslice is currently aimed, in ITK coordinates."""
     return list(reslice_matrix(obj, view)[:3, 3])
 
@@ -1472,7 +1472,7 @@ def test_a_layout_that_hides_the_slices_does_not_reslice(tmp_path, layout):
     assert set(drawn(scene).values()) == {0}
 
 
-@pytest.mark.parametrize("layout", ["quad", "axial"])
+@pytest.mark.parametrize("layout", ["quad", "ul"])
 def test_a_layout_that_shows_the_slices_draws_them(tmp_path, layout):
     _, scene, logic, _ = build_ready(tmp_path, view={"layout": layout})
 
@@ -1535,7 +1535,7 @@ def test_leaving_a_hidden_layout_poses_the_volume_like_its_overlay(tmp_path, lay
     pose = reslice_matrix(scene.volumes[0])
     assert pose == pytest.approx(reslice_matrix(scene.segmentations[0]))
     # And to the traversed plane, rather than both sitting on the plain cut
-    assert not np.allclose(pose[:3, :3], VIEW_TRANSFORMS["axial"])
+    assert not np.allclose(pose[:3, :3], VIEW_TRANSFORMS["ul"])
 
 
 def test_a_freshly_built_volume_is_posed_where_the_views_are(tmp_path):
@@ -1558,7 +1558,7 @@ def test_a_freshly_built_volume_is_posed_where_the_views_are(tmp_path):
 def test_a_locked_volume_camera_follows_while_the_slices_are_hidden(tmp_path):
     """The volume rendering is on screen in exactly the layout the slices are not."""
     _, scene, logic, _ = build_ready(
-        tmp_path, view={"layout": "volume", "camera_lock": "LL"}
+        tmp_path, view={"layout": "volume", "camera_lock": "ll"}
     )
     camera = scene.renderer.GetActiveCamera()
     camera.SetViewUp(1.0, 0.0, 0.0)
@@ -1570,14 +1570,14 @@ def test_a_locked_volume_camera_follows_while_the_slices_are_hidden(tmp_path):
 
 def test_configured_camera_lock_reaches_state(tmp_path):
     """Seeding this fires a camera sync on the first flush, so it is built here."""
-    server, _, _, _ = build_ready(tmp_path, view={"camera_lock": "LL"})
+    server, _, _, _ = build_ready(tmp_path, view={"camera_lock": "ll"})
 
-    assert server.state.camera_lock == "LL"
+    assert server.state.camera_lock == "ll"
     assert [item["value"] for item in server.state.camera_lock_items] == [
         "free",
-        "UL",
-        "LL",
-        "LR",
+        "ul",
+        "ll",
+        "lr",
     ]
 
 

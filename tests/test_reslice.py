@@ -24,7 +24,7 @@ def reslice_axes(reslice) -> np.ndarray:
 
 def expected_axes(view: str, rotation: np.ndarray, origin: list[float]) -> np.ndarray:
     """Recompute the pre-refactor matrix independently of ResliceSet."""
-    axcodes = {"axial": "LAS", "sagittal": "ASL", "coronal": "LSA"}
+    axcodes = {"ul": "LAS", "lr": "ASL", "ll": "LSA"}
     transform = rotation @ axcode_transform_matrix("LPS", axcodes[view])
     return matrix_array(create_vtk_reslice_matrix(transform, origin))
 
@@ -35,8 +35,8 @@ def reslice_set() -> ResliceSet:
 
 
 def test_views_are_the_three_mpr_orientations(reslice_set):
-    assert set(reslice_set.views) == {"axial", "sagittal", "coronal"}
-    assert VIEWS == ("axial", "sagittal", "coronal")
+    assert set(reslice_set.views) == {"ul", "lr", "ll"}
+    assert VIEWS == ("ul", "lr", "ll")
 
 
 def test_new_set_is_centred_on_the_image(reslice_set):

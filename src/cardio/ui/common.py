@@ -31,7 +31,7 @@ NOT_TILE_ACTIVE = "maximized_view !== 'tile'"
 # The layouts with a cut on screen, which is every one that is not the volume
 # rendering. Listed from ``Layout`` rather than written out, because the two
 # had drifted: this used to name the quad view and the tile grid, and so took
-# the overlay controls away from a maximized axial view that was drawing the
+# the overlay controls away from a maximized upper-left view that was drawing the
 # overlays it controls.
 _RESLICE_LAYOUTS = ", ".join(
     f"'{layout.state_value}'" for layout in Layout if layout.shows_reslice
@@ -114,7 +114,7 @@ def target_group(title: str, icon: str, subtitle: str, **kwargs):
 
 
 # A text field swallows its own key events, or they reach the render view's
-# interactor and typing `a` maximizes the axial view. Here rather than beside
+# interactor and typing `a` maximizes the upper-left view. Here rather than beside
 # one panel because several want it; the console prompt and the rotation names
 # guard `keyup` as well, for reasons of their own that are written down there.
 SWALLOW_KEYS = {

@@ -63,9 +63,9 @@ class Cameras(pc.BaseModel):
     model_config = pc.ConfigDict(extra="forbid")
 
     volume: Pose | None = None
-    axial: Pose | None = None
-    coronal: Pose | None = None
-    sagittal: Pose | None = None
+    ul: Pose | None = None
+    ll: Pose | None = None
+    lr: Pose | None = None
     tile_scale: float | None = None
 
     @property
@@ -73,7 +73,7 @@ class Cameras(pc.BaseModel):
         """The MPR poses that are set, by view name."""
         return {
             view: pose
-            for view in ("axial", "coronal", "sagittal")
+            for view in ("ul", "ll", "lr")
             if (pose := getattr(self, view)) is not None
         }
 

@@ -24,9 +24,9 @@ from tests.fakes import FakeApp, FakeScene
 # The in-plane (right, up) axes of each view before any rotation, in ITK order.
 # Columns 0 and 1 of each view's axcode: LAS, ASL, LSA.
 BASE_AXES = {
-    "axial": ([1.0, 0.0, 0.0], [0.0, -1.0, 0.0]),  # Left, Anterior
-    "sagittal": ([0.0, -1.0, 0.0], [0.0, 0.0, 1.0]),  # Anterior, Superior
-    "coronal": ([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]),  # Left, Superior
+    "ul": ([1.0, 0.0, 0.0], [0.0, -1.0, 0.0]),  # Left, Anterior
+    "lr": ([0.0, -1.0, 0.0], [0.0, 0.0, 1.0]),  # Anterior, Superior
+    "ll": ([1.0, 0.0, 0.0], [0.0, 0.0, 1.0]),  # Left, Superior
 }
 
 X90 = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]])
@@ -90,7 +90,7 @@ def test_the_in_plane_axes_are_a_unit_orthogonal_pair(view):
     assert np.dot(right, up) == pytest.approx(0.0, abs=1e-9)
 
 
-def test_a_rotation_turns_the_in_plane_axes(view="axial"):
+def test_a_rotation_turns_the_in_plane_axes(view="ul"):
     right, up = make_app([{"axis": "X", "angle": 90.0}]).mpr.pan_vectors(view)
 
     assert np.allclose(right, X90 @ BASE_AXES[view][0])
@@ -99,10 +99,10 @@ def test_a_rotation_turns_the_in_plane_axes(view="axial"):
 
 def test_hidden_steps_do_not_contribute():
     app = make_app([{"axis": "X", "angle": 90.0, "visible": False}])
-    right, up = app.mpr.pan_vectors("axial")
+    right, up = app.mpr.pan_vectors("ul")
 
-    assert np.allclose(right, BASE_AXES["axial"][0])
-    assert np.allclose(up, BASE_AXES["axial"][1])
+    assert np.allclose(right, BASE_AXES["ul"][0])
+    assert np.allclose(up, BASE_AXES["ul"][1])
 
 
 @pytest.mark.parametrize("view", VIEWS)
@@ -120,7 +120,7 @@ def test_panning_moves_the_origin_against_the_drag():
     """The origin travels the other way, so the image follows the cursor."""
     app = make_app(origin=(0.0, 0.0, 0.0))
 
-    app.mpr.pan_view("axial", 3.0, 0.0)
+    app.mpr.pan_view("ul", 3.0, 0.0)
 
     assert np.allclose(app.server.state.mpr_origin, [-3.0, 0.0, 0.0])
 
@@ -128,7 +128,7 @@ def test_panning_moves_the_origin_against_the_drag():
 def test_panning_combines_both_axes():
     app = make_app(origin=(0.0, 0.0, 0.0))
 
-    app.mpr.pan_view("axial", 3.0, 5.0)
+    app.mpr.pan_view("ul", 3.0, 5.0)
 
     # -3 * Left - 5 * Anterior
     assert np.allclose(app.server.state.mpr_origin, [-3.0, 5.0, 0.0])
@@ -138,7 +138,7 @@ def test_panning_scales_with_the_world_per_pixel():
     """A drag is a grab, so a pixel must cover the world the camera shows."""
     app = make_app(origin=(0.0, 0.0, 0.0), scale=0.25)
 
-    app.mpr.pan_view("axial", 8.0, 0.0)
+    app.mpr.pan_view("ul", 8.0, 0.0)
 
     assert np.allclose(app.server.state.mpr_origin, [-2.0, 0.0, 0.0])
 
@@ -146,8 +146,8 @@ def test_panning_scales_with_the_world_per_pixel():
 def test_panning_accumulates_and_reverses():
     app = make_app(origin=(1.0, 2.0, 3.0))
 
-    app.mpr.pan_view("sagittal", 4.0, 2.0)
-    app.mpr.pan_view("sagittal", -4.0, -2.0)
+    app.mpr.pan_view("lr", 4.0, 2.0)
+    app.mpr.pan_view("lr", -4.0, -2.0)
 
     assert np.allclose(app.server.state.mpr_origin, [1.0, 2.0, 3.0])
 
@@ -156,16 +156,16 @@ def test_panning_stays_in_the_plane_it_started_in():
     """Panning must never scroll: the normal component stays untouched."""
     app = make_app([{"axis": "X", "angle": 30.0}], origin=(0.0, 0.0, 0.0))
 
-    app.mpr.pan_view("coronal", 7.0, -3.0)
+    app.mpr.pan_view("ll", 7.0, -3.0)
 
-    normal = app.mpr.scroll_vector("coronal")
+    normal = app.mpr.scroll_vector("ll")
     assert np.dot(app.server.state.mpr_origin, normal) == pytest.approx(0.0, abs=1e-9)
 
 
 def test_panning_follows_the_rotated_axes():
     app = make_app([{"axis": "X", "angle": 90.0}], origin=(0.0, 0.0, 0.0))
 
-    app.mpr.pan_view("axial", 2.0, 0.0)
+    app.mpr.pan_view("ul", 2.0, 0.0)
 
     assert np.allclose(app.server.state.mpr_origin, -2.0 * (X90 @ [1.0, 0.0, 0.0]))
 
@@ -182,7 +182,7 @@ def test_panning_an_unknown_view_leaves_the_origin_alone():
 def test_panning_before_the_views_exist_leaves_the_origin_alone():
     app = make_app(origin=(1.0, 2.0, 3.0), mpr_views=None)
 
-    app.mpr.pan_view("axial", 5.0, 5.0)
+    app.mpr.pan_view("ul", 5.0, 5.0)
 
     assert app.server.state.mpr_origin == [1.0, 2.0, 3.0]
 
@@ -191,7 +191,7 @@ def test_panning_an_unsized_view_leaves_the_origin_alone():
     """world_per_pixel reports zero until the window has a viewport."""
     app = make_app(origin=(1.0, 2.0, 3.0), scale=0.0)
 
-    app.mpr.pan_view("axial", 5.0, 5.0)
+    app.mpr.pan_view("ul", 5.0, 5.0)
 
     assert app.server.state.mpr_origin == [1.0, 2.0, 3.0]
 
@@ -202,8 +202,8 @@ def test_roma_pans_the_same_physical_axes_as_itk():
     itk = make_app(steps)
     roma = make_app([exchange_step(step) for step in steps], IndexOrder.ROMA)
 
-    itk.mpr.pan_view("axial", 6.0, -2.0)
-    roma.mpr.pan_view("axial", 6.0, -2.0)
+    itk.mpr.pan_view("ul", 6.0, -2.0)
+    roma.mpr.pan_view("ul", 6.0, -2.0)
 
     assert np.allclose(
         exchange_point(roma.server.state.mpr_origin), itk.server.state.mpr_origin

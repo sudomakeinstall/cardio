@@ -97,13 +97,19 @@ start.
 
 ### Opening in a particular view
 
+The three cut views are named for where they sit in the quad view -- `ul`, `ll`
+and `lr` -- rather than for an anatomical plane.  They open on the axial,
+coronal and sagittal frames of an unrotated volume, but a rotation makes those
+names false while the panes stay where they are, and a capture written as
+`ll.gif` does not claim to be a coronal cut.
+
 The layout and theme the app opens in, and where the playback controls start:
 
 ```toml
 [view]
-layout = "tile"     # quad (default), volume, axial, coronal, sagittal, tile
+layout = "tile"     # quad (default), volume, ul, ll, lr, tile
 theme = "dark"      # selects between the two [background] colours
-camera_lock = "LL"  # MPR view the volume rendering's camera follows, or "free"
+camera_lock = "ll"  # MPR view the volume rendering's camera follows, or "free"
 drawer_sections = ["playback", "tiles"]   # sections open on load
 help_visible = false                      # open showing the shortcut reference
 
@@ -116,7 +122,7 @@ rotating = true     # rotate the camera while playing
 rows = 3            # rows in the tile grid, 1 to 6
 cols = 3            # columns in the tile grid, 1 to 6
 source = "spacing"  # traverse, spacing, or labels
-plane = "axial"     # plane the parallel sources cut in: axial, coronal, sagittal
+plane = "ul"        # pane the parallel sources cut in: ul, ll, lr
 spacing = 10.0      # millimetres between adjacent cuts, in the spacing source
 labels = [1, 2]     # labels the grid spans end to end, in the labels source
 reverse = false     # walk the path from the far end, without turning the cut
@@ -184,7 +190,7 @@ a trip through another layout does not lose the selection.
 ```toml
 serialization_directory = "./data"
 capture_format = "dicom-data"                          # png (default), jpeg, gif, mp4,
-screenshot_viewports = ["axial", "coronal", "tile"]    # dicom-rendered, dicom-data,
+screenshot_viewports = ["ul", "ll", "tile"]            # dicom-rendered, dicom-data,
                                                        # dicom-cine-rendered,
                                                        # dicom-cine-data
 uid_root = "1.2.840.99999"                             # the deployment's own

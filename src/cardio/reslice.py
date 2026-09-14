@@ -15,10 +15,13 @@ from .orientation import (
     cumulative_rotation_matrix,
 )
 
+# Each pane is named for where it sits in the quad view rather than for an
+# anatomical plane, which a rotation makes false; the axcode is the frame the
+# pane is seeded from, and stays true of an unrotated volume.
 VIEW_AXCODES = {
-    "axial": "LAS",  # Left-Anterior-Superior
-    "sagittal": "ASL",  # Anterior-Superior-Left
-    "coronal": "LSA",  # Left-Superior-Anterior
+    "ul": "LAS",  # Left-Anterior-Superior, axial when unrotated
+    "lr": "ASL",  # Anterior-Superior-Left, sagittal when unrotated
+    "ll": "LSA",  # Left-Superior-Anterior, coronal when unrotated
 }
 
 VIEWS = tuple(VIEW_AXCODES)
@@ -86,7 +89,7 @@ def build_pipeline(
 
 
 class ResliceSet:
-    """One frame's axial, sagittal and coronal reslice pipelines.
+    """One frame's three reslice pipelines, one per MPR pane.
 
     All three views share an origin and a rotation; ``set_pose`` is the only way
     to move them, so the views cannot drift out of step.
@@ -192,9 +195,7 @@ class TileSet:
     def values(self):
         return iter(self.tiles)
 
-    def set_poses(
-        self, poses: list[tuple[list[float], np.ndarray]], view: str = "axial"
-    ):
+    def set_poses(self, poses: list[tuple[list[float], np.ndarray]], view: str = "ul"):
         """Aim each tile at its own origin and rotation, both in LPS (ITK).
 
         ``view`` is the plane each pose is cut in, composed onto the rotation

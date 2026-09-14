@@ -114,7 +114,7 @@ def wheel(interaction, view, spin_y):
 
 
 def test_listeners_cover_every_handled_event(interaction):
-    listeners = interaction.listeners_for_view("axial")
+    listeners = interaction.listeners_for_view("ul")
     assert set(listeners) == set(HANDLED_EVENTS)
 
 
@@ -122,9 +122,9 @@ def test_listeners_cover_every_handled_event(interaction):
     "key,view",
     [
         ("v", "volume"),
-        ("a", "axial"),
-        ("c", "coronal"),
-        ("s", "sagittal"),
+        ("a", "ul"),
+        ("c", "ll"),
+        ("s", "lr"),
         ("t", "tile"),
         ("y", "volumetry"),
     ],
@@ -173,15 +173,15 @@ def test_a_digit_with_no_preset_is_ignored(interaction):
 def test_repeated_keys_are_debounced(interaction):
     interaction.on_event({"type": "KeyPress", "key": "a"})
     interaction.on_event({"type": "KeyPress", "key": "a"})
-    assert interaction.logic.arguments("toggle_maximized") == [{"view": "axial"}]
+    assert interaction.logic.arguments("toggle_maximized") == [{"view": "ul"}]
 
 
 def test_left_drag_adjusts_window_and_level(interaction):
     interaction.on_event(
         {"type": "LeftButtonPress", "position": {"x": 100, "y": 100}},
-        view_name="axial",
+        view_name="ul",
     )
-    move(interaction, "axial", 110, 90)
+    move(interaction, "ul", 110, 90)
 
     assert interaction.logic.mpr.window_level == [
         (-10 * interaction.window_sensitivity, 10 * interaction.level_sensitivity)
@@ -189,21 +189,19 @@ def test_left_drag_adjusts_window_and_level(interaction):
 
 
 def test_both_buttons_drag_scrolls_slices(interaction):
-    press_buttons(interaction, "coronal", 100, 100)
-    move(interaction, "coronal", 100, 120)
+    press_buttons(interaction, "ll", 100, 100)
+    move(interaction, "ll", 100, 120)
 
-    assert interaction.logic.mpr.scrolls == [
-        ("coronal", 20 * interaction.slice_sensitivity)
-    ]
+    assert interaction.logic.mpr.scrolls == [("ll", 20 * interaction.slice_sensitivity)]
     assert interaction.logic.mpr.window_level == []
 
 
 def test_right_drag_alone_does_nothing(interaction):
     interaction.on_event(
         {"type": "RightButtonPress", "position": {"x": 100, "y": 100}},
-        view_name="coronal",
+        view_name="ll",
     )
-    move(interaction, "coronal", 110, 120)
+    move(interaction, "ll", 110, 120)
 
     assert interaction.logic.mpr.scrolls == []
     assert interaction.logic.mpr.window_level == []
@@ -211,10 +209,10 @@ def test_right_drag_alone_does_nothing(interaction):
 
 def test_releasing_the_right_button_resumes_window_level(interaction):
     """The remaining drag continues from where it is, without a jump."""
-    press_buttons(interaction, "axial", 100, 100)
-    move(interaction, "axial", 100, 120)
-    interaction.on_event({"type": "RightButtonRelease"}, view_name="axial")
-    move(interaction, "axial", 110, 110)
+    press_buttons(interaction, "ul", 100, 100)
+    move(interaction, "ul", 100, 120)
+    interaction.on_event({"type": "RightButtonRelease"}, view_name="ul")
+    move(interaction, "ul", 110, 110)
 
     assert interaction.logic.mpr.window_level == [
         (-10 * interaction.window_sensitivity, 10 * interaction.level_sensitivity)
@@ -222,17 +220,17 @@ def test_releasing_the_right_button_resumes_window_level(interaction):
 
 
 def test_moving_without_a_button_does_nothing(interaction):
-    move(interaction, "axial", 10, 10)
+    move(interaction, "ul", 10, 10)
     assert interaction.logic.mpr.window_level == []
     assert interaction.logic.mpr.scrolls == []
 
 
 def test_releasing_ends_the_drag(interaction):
     interaction.on_event(
-        {"type": "LeftButtonPress", "position": {"x": 0, "y": 0}}, view_name="axial"
+        {"type": "LeftButtonPress", "position": {"x": 0, "y": 0}}, view_name="ul"
     )
-    interaction.on_event({"type": "LeftButtonRelease"}, view_name="axial")
-    move(interaction, "axial", 50, 50)
+    interaction.on_event({"type": "LeftButtonRelease"}, view_name="ul")
+    move(interaction, "ul", 50, 50)
 
     assert interaction.logic.mpr.window_level == []
 
@@ -274,34 +272,34 @@ def test_an_empty_event_payload_is_ignored(interaction):
 
 def test_wheel_scrolls_slices(interaction):
     """vtk.js normalises a notch to a spin of one."""
-    wheel(interaction, "axial", 1.0)
+    wheel(interaction, "ul", 1.0)
 
     assert interaction.logic.mpr.scrolls == [
-        ("axial", 1.0 * interaction.wheel_sensitivity)
+        ("ul", 1.0 * interaction.wheel_sensitivity)
     ]
 
 
 def test_wheel_reverses_with_the_spin_direction(interaction):
-    wheel(interaction, "sagittal", -1.0)
+    wheel(interaction, "lr", -1.0)
 
     assert interaction.logic.mpr.scrolls == [
-        ("sagittal", -1.0 * interaction.wheel_sensitivity)
+        ("lr", -1.0 * interaction.wheel_sensitivity)
     ]
 
 
 def test_a_trackpad_spin_scrolls_proportionally(interaction):
-    wheel(interaction, "coronal", 0.25)
+    wheel(interaction, "ll", 0.25)
 
     assert interaction.logic.mpr.scrolls == [
-        ("coronal", 0.25 * interaction.wheel_sensitivity)
+        ("ll", 0.25 * interaction.wheel_sensitivity)
     ]
 
 
 def test_the_wheel_travels_the_same_way_as_an_upward_drag(interaction):
     """The two slice-scroll gestures must not fight each other."""
-    press_buttons(interaction, "axial", 100, 100)
-    move(interaction, "axial", 100, 110)
-    wheel(interaction, "axial", 1.0)
+    press_buttons(interaction, "ul", 100, 100)
+    move(interaction, "ul", 100, 110)
+    wheel(interaction, "ul", 1.0)
 
     dragged, wheeled = (distance for _, distance in interaction.logic.mpr.scrolls)
     assert dragged > 0 and wheeled > 0
@@ -316,13 +314,13 @@ def test_wheel_outside_the_mpr_views_is_ignored(interaction, view):
 
 
 def test_a_wheel_event_without_a_spin_is_ignored(interaction):
-    interaction.on_event({"type": "MouseWheel"}, view_name="axial")
+    interaction.on_event({"type": "MouseWheel"}, view_name="ul")
 
     assert interaction.logic.mpr.scrolls == []
 
 
 def test_the_wheel_does_not_disturb_window_level(interaction):
-    wheel(interaction, "axial", -1.0)
+    wheel(interaction, "ul", -1.0)
 
     assert interaction.logic.mpr.window_level == []
 
@@ -334,20 +332,20 @@ def press_middle(interaction, view, x, y):
 
 
 def test_middle_drag_pans(interaction):
-    press_middle(interaction, "axial", 100, 100)
-    move(interaction, "axial", 110, 90)
+    press_middle(interaction, "ul", 100, 100)
+    move(interaction, "ul", 110, 90)
 
-    assert interaction.logic.mpr.pans == [("axial", 10, -10)]
+    assert interaction.logic.mpr.pans == [("ul", 10, -10)]
     assert interaction.logic.mpr.window_level == []
     assert interaction.logic.mpr.scrolls == []
 
 
 def test_middle_drag_pans_one_to_one_with_the_cursor(interaction):
     """Panning is a grab, so the delta reaches the view unscaled."""
-    press_middle(interaction, "coronal", 0, 0)
-    move(interaction, "coronal", 37, 11)
+    press_middle(interaction, "ll", 0, 0)
+    move(interaction, "ll", 37, 11)
 
-    assert interaction.logic.mpr.pans == [("coronal", 37, 11)]
+    assert interaction.logic.mpr.pans == [("ll", 37, 11)]
 
 
 @pytest.mark.parametrize("view", ["tile", "volume"])
@@ -374,35 +372,35 @@ def press_right_middle(interaction, view, x, y):
 
 def test_left_and_middle_rotates(interaction):
     """Rotation gets both positions: it is an angle swept, not a distance."""
-    press_left_middle(interaction, "axial", 100, 100)
-    move(interaction, "axial", 110, 90)
+    press_left_middle(interaction, "ul", 100, 100)
+    move(interaction, "ul", 110, 90)
 
-    assert interaction.logic.mpr.rotations == [("axial", [100, 100], [110, 90])]
+    assert interaction.logic.mpr.rotations == [("ul", [100, 100], [110, 90])]
 
 
 def test_each_move_rotates_from_where_the_last_one_left_off(interaction):
-    press_left_middle(interaction, "axial", 100, 100)
-    move(interaction, "axial", 110, 90)
-    move(interaction, "axial", 130, 70)
+    press_left_middle(interaction, "ul", 100, 100)
+    move(interaction, "ul", 110, 90)
+    move(interaction, "ul", 130, 70)
 
     assert interaction.logic.mpr.rotations == [
-        ("axial", [100, 100], [110, 90]),
-        ("axial", [110, 90], [130, 70]),
+        ("ul", [100, 100], [110, 90]),
+        ("ul", [110, 90], [130, 70]),
     ]
 
 
 def test_rotating_is_not_also_a_pan_or_a_window_level(interaction):
     """The middle button is in three gestures; only one may fire."""
-    press_left_middle(interaction, "axial", 100, 100)
-    move(interaction, "axial", 110, 90)
+    press_left_middle(interaction, "ul", 100, 100)
+    move(interaction, "ul", 110, 90)
 
     assert interaction.logic.mpr.pans == []
     assert interaction.logic.mpr.window_level == []
 
 
 def test_right_and_middle_zooms(interaction):
-    press_right_middle(interaction, "axial", 100, 100)
-    move(interaction, "axial", 100, 120)
+    press_right_middle(interaction, "ul", 100, 100)
+    move(interaction, "ul", 100, 120)
 
     assert interaction.logic.mpr.zooms == [
         pytest.approx(math.exp(20 * interaction.zoom_sensitivity))
@@ -410,9 +408,9 @@ def test_right_and_middle_zooms(interaction):
 
 
 def test_dragging_up_zooms_in_and_down_zooms_out(interaction):
-    press_right_middle(interaction, "axial", 100, 100)
-    move(interaction, "axial", 100, 120)
-    move(interaction, "axial", 100, 80)
+    press_right_middle(interaction, "ul", 100, 100)
+    move(interaction, "ul", 100, 120)
+    move(interaction, "ul", 100, 80)
 
     zoomed_in, zoomed_out = interaction.logic.mpr.zooms
     assert zoomed_in > 1.0
@@ -420,8 +418,8 @@ def test_dragging_up_zooms_in_and_down_zooms_out(interaction):
 
 
 def test_zoom_ignores_horizontal_movement(interaction):
-    press_right_middle(interaction, "axial", 100, 100)
-    move(interaction, "axial", 150, 100)
+    press_right_middle(interaction, "ul", 100, 100)
+    move(interaction, "ul", 150, 100)
 
     assert interaction.logic.mpr.zooms == [pytest.approx(1.0)]
 
@@ -447,8 +445,8 @@ def test_zooming_over_the_tile_grid_zooms_the_grid(interaction):
 
 
 def test_zooming_over_an_mpr_view_leaves_the_tile_grid_alone(interaction):
-    press_right_middle(interaction, "axial", 100, 100)
-    move(interaction, "axial", 100, 120)
+    press_right_middle(interaction, "ul", 100, 100)
+    move(interaction, "ul", 100, 120)
 
     assert interaction.logic.tiles.zooms == []
     assert interaction.logic.mpr.zooms != []
@@ -464,10 +462,10 @@ def test_zooming_over_the_volume_view_zooms_nothing(interaction):
 
 
 def test_releasing_the_middle_button_returns_to_window_level(interaction):
-    press_left_middle(interaction, "axial", 100, 100)
-    move(interaction, "axial", 110, 90)
-    interaction.on_event({"type": "MiddleButtonRelease"}, view_name="axial")
-    move(interaction, "axial", 120, 80)
+    press_left_middle(interaction, "ul", 100, 100)
+    move(interaction, "ul", 110, 90)
+    interaction.on_event({"type": "MiddleButtonRelease"}, view_name="ul")
+    move(interaction, "ul", 120, 80)
 
     assert len(interaction.logic.mpr.rotations) == 1
     assert interaction.logic.mpr.window_level == [
@@ -476,8 +474,8 @@ def test_releasing_the_middle_button_returns_to_window_level(interaction):
 
 
 def test_releasing_the_middle_button_ends_the_pan(interaction):
-    press_middle(interaction, "axial", 100, 100)
-    interaction.on_event({"type": "MiddleButtonRelease"}, view_name="axial")
-    move(interaction, "axial", 150, 150)
+    press_middle(interaction, "ul", 100, 100)
+    interaction.on_event({"type": "MiddleButtonRelease"}, view_name="ul")
+    move(interaction, "ul", 150, 150)
 
     assert interaction.logic.mpr.pans == []

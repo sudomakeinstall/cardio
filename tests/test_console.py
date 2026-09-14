@@ -30,8 +30,8 @@ CALLS = [
     ("add_rotation", {"axis": "Z"}),
     ("set_window_level_preset", {"preset": 3}),
     ("adjust_window_level", {"window_delta": 10.0, "level_delta": -5.0}),
-    ("pan_view", {"view_name": "axial", "dx": 3.0, "dy": -2.0}),
-    ("rotate_view", {"view_name": "axial", "start": [1.0, 2.0], "end": [3.0, 4.0]}),
+    ("pan_view", {"view_name": "ul", "dx": 3.0, "dy": -2.0}),
+    ("rotate_view", {"view_name": "ul", "start": [1.0, 2.0], "end": [3.0, 4.0]}),
     ("toggle_maximized", {"view": ""}),
     ("set_snap_mode", {"enabled": True, "label": None}),
 ]
@@ -63,10 +63,10 @@ def test_an_enum_argument_is_spelled_as_its_value():
     """A bare repr would print the member, which is not something to type back."""
     from cardio.view import Layout
 
-    text = console.format_call("toggle_maximized", {"view": Layout.AXIAL})
+    text = console.format_call("toggle_maximized", {"view": Layout.UL})
 
-    assert text == "toggle_maximized(view='axial')"
-    assert console.parse_call(text) == ("toggle_maximized", [], {"view": "axial"})
+    assert text == "toggle_maximized(view='ul')"
+    assert console.parse_call(text) == ("toggle_maximized", [], {"view": "ul"})
 
 
 def test_a_bare_name_is_a_call_with_no_arguments():
@@ -76,9 +76,9 @@ def test_a_bare_name_is_a_call_with_no_arguments():
 
 def test_positional_arguments_are_allowed():
     """``Action.bind`` resolves them, so the syntax need not forbid them."""
-    assert console.parse_call("toggle_maximized('axial')") == (
+    assert console.parse_call("toggle_maximized('ul')") == (
         "toggle_maximized",
-        ["axial"],
+        ["ul"],
         {},
     )
 
@@ -265,7 +265,7 @@ WALKED = [
     "do.add_rotation(axis='Z')",
     "do.toggle_console()",
     "do.set_state(key='tile_cols', value=4)",
-    "do.toggle_maximized(view='axial')",
+    "do.toggle_maximized(view='ul')",
 ]
 
 
@@ -277,7 +277,7 @@ def test_a_walk_is_narrowed_by_what_is_typed():
     """The whole feature: what is typed is the start of what is wanted."""
     assert console.matching(WALKED, "do.t") == [
         "do.toggle_console()",
-        "do.toggle_maximized(view='axial')",
+        "do.toggle_maximized(view='ul')",
     ]
 
 
@@ -319,12 +319,12 @@ def walked(steps, lines=None, typed=""):
 
 
 def test_a_step_back_takes_the_newest_line():
-    assert walked([-1]) == ["do.toggle_maximized(view='axial')"]
+    assert walked([-1]) == ["do.toggle_maximized(view='ul')"]
 
 
 def test_stepping_back_walks_the_log_backwards():
     assert walked([-1, -1, -1]) == [
-        "do.toggle_maximized(view='axial')",
+        "do.toggle_maximized(view='ul')",
         "do.set_state(key='tile_cols', value=4)",
         "do.toggle_console()",
     ]
@@ -337,9 +337,9 @@ def test_the_far_end_of_the_log_is_where_a_walk_stops():
 
 def test_stepping_forward_comes_back():
     assert walked([-1, -1, 1]) == [
-        "do.toggle_maximized(view='axial')",
+        "do.toggle_maximized(view='ul')",
         "do.set_state(key='tile_cols', value=4)",
-        "do.toggle_maximized(view='axial')",
+        "do.toggle_maximized(view='ul')",
     ]
 
 
@@ -362,8 +362,8 @@ def test_editing_a_recalled_line_searches_for_the_edit():
     history = console.History()
     history.walk(WALKED, "", -1)
 
-    assert history.walk(WALKED, "do.t", -1) == "do.toggle_maximized(view='axial')"
-    assert history.walk(WALKED, "do.toggle_maximized(view='axial')", -1) == (
+    assert history.walk(WALKED, "do.t", -1) == "do.toggle_maximized(view='ul')"
+    assert history.walk(WALKED, "do.toggle_maximized(view='ul')", -1) == (
         "do.toggle_console()"
     ), "and goes on walking what it found"
 
@@ -398,7 +398,7 @@ def test_what_was_typed_survives_the_log_moving_on():
     history = console.History()
     history.walk(WALKED[:2], "", -1)
 
-    assert history.walk(WALKED, "do.t", -1) == "do.toggle_maximized(view='axial')"
+    assert history.walk(WALKED, "do.t", -1) == "do.toggle_maximized(view='ul')"
 
 
 def test_forgetting_a_walk_starts_the_next_one_over():
@@ -1133,7 +1133,7 @@ def test_the_arrows_walk_the_log_from_the_prompt(page):
 
 
 def test_the_prompt_does_not_let_a_keystroke_reach_the_interactor(page):
-    """Or typing `a` in the box would maximize the axial view.
+    """Or typing `a` in the box would maximize the upper-left view.
 
     Not on ``keyup``, which is the event the submit is on: two handlers for
     one event, one of them stopping immediate propagation, is a question about

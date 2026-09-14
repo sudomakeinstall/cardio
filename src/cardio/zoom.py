@@ -35,8 +35,8 @@ class Zoom(pc.BaseModel):
         description='Labels the views are fitted to. CLI usage: --zoom.labels "[1,2]"',
     )
     plane: str = pc.Field(
-        default="axial",
-        description="Plane the labels are projected onto. CLI usage: --zoom.plane coronal",
+        default="ul",
+        description="Plane the labels are projected onto. CLI usage: --zoom.plane ll",
     )
     fill: int = pc.Field(
         default=80,

@@ -1,7 +1,7 @@
 """Test the mouse-driven rotation: an in-plane roll of the view being dragged.
 
 The gesture spins the slice frame about the dragged view's own normal -- the
-axis ``scroll_slice`` travels along -- so the axial view turns about the
+axis ``scroll_slice`` travels along -- so the upper-left view turns about the
 craniocaudal axis and goes on showing the same cut. That normal is a signed
 L/A/S direction before any rotation is applied, so a drag lands in
 ``mpr_rotation_data`` as an ordinary Euler step rather than a quaternion:
@@ -26,7 +26,7 @@ from cardio.reslice import VIEW_TRANSFORMS, VIEWS
 from tests.fakes import FakeApp, FakeScene
 
 # The axis each view rolls about, named by the ITK axis it lies along.
-VIEW_ROLL_AXIS = {"axial": "Z", "sagittal": "X", "coronal": "Y"}
+VIEW_ROLL_AXIS = {"ul": "Z", "lr": "X", "ll": "Y"}
 
 
 CENTRE = (200.0, 150.0)
@@ -126,7 +126,7 @@ def test_rolling_leaves_the_dragged_views_scroll_axis_fixed(view):
     """Roll and scroll share an axis, so rolling never redirects the scroll.
 
     Compared before against after rather than against the axcode column, which
-    would bake in ``scroll_vector``'s sign for the coronal normal.
+    would bake in ``scroll_vector``'s sign for the lower-left normal.
     """
     app = make_app()
     before = app.mpr.scroll_vector(view)
@@ -138,7 +138,7 @@ def test_rolling_leaves_the_dragged_views_scroll_axis_fixed(view):
 
 @pytest.mark.parametrize("view,axis", VIEW_ROLL_AXIS.items())
 def test_each_view_rolls_about_its_own_normal(view, axis):
-    """Axial turns about the craniocaudal axis, and so on round the three."""
+    """The upper-left view turns about the craniocaudal axis, and so on round the three."""
     app = make_app()
 
     sweep(app, view, 10.0)
@@ -177,8 +177,8 @@ def test_dragging_back_the_other_way_spins_back(view):
 def test_dragging_on_about_the_same_axis_accumulates_into_one_step():
     app = make_app()
 
-    sweep(app, "axial", 10.0)
-    sweep(app, "axial", 10.0)
+    sweep(app, "ul", 10.0)
+    sweep(app, "ul", 10.0)
 
     (step,) = mouse_steps(app)
     assert step.angle == pytest.approx(-20.0)
@@ -187,8 +187,8 @@ def test_dragging_on_about_the_same_axis_accumulates_into_one_step():
 def test_dragging_back_cancels():
     app = make_app()
 
-    sweep(app, "axial", 12.0)
-    sweep(app, "axial", -12.0)
+    sweep(app, "ul", 12.0)
+    sweep(app, "ul", -12.0)
 
     assert np.allclose(app.rotations.rotation_matrix(), np.eye(3))
 
@@ -196,8 +196,8 @@ def test_dragging_back_cancels():
 def test_rolling_two_views_keeps_two_steps():
     app = make_app()
 
-    sweep(app, "axial", 10.0)
-    sweep(app, "sagittal", 10.0)
+    sweep(app, "ul", 10.0)
+    sweep(app, "lr", 10.0)
 
     assert {s.name for s in mouse_steps(app)} == {
         MOUSE_STEP_NAMES["Z"],
@@ -209,8 +209,8 @@ def test_the_axis_being_dragged_goes_last():
     """Last is composed first, the only place a roll stays in its own plane."""
     app = make_app()
 
-    sweep(app, "axial", 6.0)
-    sweep(app, "coronal", 9.0)
+    sweep(app, "ul", 6.0)
+    sweep(app, "ll", 9.0)
 
     assert [s.name for s in mouse_steps(app)] == [
         MOUSE_STEP_NAMES["Z"],
@@ -222,9 +222,9 @@ def test_changing_axis_starts_a_step_rather_than_reordering():
     """Reordering would recompose the rotation and move the views."""
     app = make_app()
 
-    sweep(app, "axial", 6.0)
-    sweep(app, "coronal", 9.0)
-    sweep(app, "axial", 6.0)
+    sweep(app, "ul", 6.0)
+    sweep(app, "ll", 9.0)
+    sweep(app, "ul", 6.0)
 
     assert [s.name for s in mouse_steps(app)] == [
         MOUSE_STEP_NAMES["Z"],
@@ -273,7 +273,7 @@ def test_a_roll_turns_by_the_swept_angle_whatever_was_rolled_before(prior, view)
 def test_a_hidden_mouse_step_is_not_accumulated_into():
     """The eye toggle would otherwise swallow the drag."""
     app = make_app()
-    sweep(app, "axial", 10.0)
+    sweep(app, "ul", 10.0)
 
     # rotation_sequence() parses state afresh, so hide it on one object and
     # publish that same one back
@@ -281,7 +281,7 @@ def test_a_hidden_mouse_step_is_not_accumulated_into():
     sequence.angles_list[-1].visible = False
     app.rotations.publish(sequence)
 
-    sweep(app, "axial", 10.0)
+    sweep(app, "ul", 10.0)
 
     assert len(mouse_steps(app)) == 2
 
@@ -289,7 +289,7 @@ def test_a_hidden_mouse_step_is_not_accumulated_into():
 def test_a_still_drag_writes_nothing():
     app = make_app()
 
-    sweep(app, "axial", 0.0)
+    sweep(app, "ul", 0.0)
 
     assert steps_of(app) == []
 
@@ -306,7 +306,7 @@ def test_steps_the_user_built_are_kept_and_stay_first():
     """A hand-built rotation keeps its meaning underneath the mouse step."""
     app = make_app([{"axis": "Z", "angle": 30.0, "name": "Mine"}])
 
-    sweep(app, "axial", 10.0)
+    sweep(app, "ul", 10.0)
 
     assert steps_of(app)[0].name == "Mine"
     assert steps_of(app)[0].angle == 30.0
@@ -328,7 +328,7 @@ def test_rotating_does_not_move_the_origin():
     app = make_app()
     app.server.state.mpr_origin = [1.0, 2.0, 3.0]
 
-    sweep(app, "axial", 20.0)
+    sweep(app, "ul", 20.0)
 
     assert app.server.state.mpr_origin == [1.0, 2.0, 3.0]
 
@@ -340,8 +340,8 @@ def test_radians_sequences_store_the_angle_in_radians():
     degrees = make_app(angle_units=AngleUnits.DEGREES)
     radians = make_app(angle_units=AngleUnits.RADIANS)
 
-    sweep(degrees, "axial", 90.0)
-    sweep(radians, "axial", 90.0)
+    sweep(degrees, "ul", 90.0)
+    sweep(radians, "ul", 90.0)
 
     assert np.allclose(
         np.radians(mouse_steps(degrees)[0].angle), mouse_steps(radians)[0].angle
@@ -353,8 +353,8 @@ def test_roma_turns_the_same_physical_axis_as_itk():
     itk = make_app(index_order=IndexOrder.ITK)
     roma = make_app(index_order=IndexOrder.ROMA)
 
-    sweep(itk, "axial", 12.0)
-    sweep(roma, "axial", 12.0)
+    sweep(itk, "ul", 12.0)
+    sweep(roma, "ul", 12.0)
 
     assert np.allclose(
         itk.rotations.rotation_matrix(), roma.rotations.rotation_matrix()
@@ -373,19 +373,19 @@ def test_the_image_turns_by_exactly_the_angle_swept(view):
 @pytest.mark.parametrize("radius", [30.0, 100.0, 400.0])
 def test_the_radius_does_not_change_the_angle(radius):
     """Only the angle between the spokes counts, not how long they are."""
-    assert content_turn("axial", 45.0, radius=radius) == pytest.approx(45.0)
+    assert content_turn("ul", 45.0, radius=radius) == pytest.approx(45.0)
 
 
 @pytest.mark.parametrize("bearing", [0.0, 90.0, 200.0, -75.0])
 def test_where_the_drag_starts_does_not_change_the_angle(bearing):
-    assert content_turn("axial", 45.0, start_bearing=bearing) == pytest.approx(45.0)
+    assert content_turn("ul", 45.0, start_bearing=bearing) == pytest.approx(45.0)
 
 
 def test_a_radial_drag_does_not_turn_the_image():
     """Straight out from the origin sweeps no angle at all."""
     app = make_app()
 
-    app.mpr.rotate_view("axial", spoke(0.0, 60.0), spoke(0.0, 250.0))
+    app.mpr.rotate_view("ul", spoke(0.0, 60.0), spoke(0.0, 250.0))
 
     assert steps_of(app) == []
 
@@ -395,7 +395,7 @@ def test_a_drag_across_the_origin_does_not_spin_wildly():
     app = make_app()
 
     app.mpr.rotate_view(
-        "axial", (CENTRE[0] + 1, CENTRE[1] + 1), (CENTRE[0] - 1, CENTRE[1] - 1)
+        "ul", (CENTRE[0] + 1, CENTRE[1] + 1), (CENTRE[0] - 1, CENTRE[1] - 1)
     )
 
     assert steps_of(app) == []
@@ -403,14 +403,14 @@ def test_a_drag_across_the_origin_does_not_spin_wildly():
 
 def test_a_sweep_beyond_a_half_turn_reads_as_the_short_way_round():
     """Per-event sweeps are small; the wrap only matters if one is not."""
-    assert content_turn("axial", 350.0) == pytest.approx(-10.0)
+    assert content_turn("ul", 350.0) == pytest.approx(-10.0)
 
 
 def test_rotating_before_the_views_exist_writes_nothing():
     app = make_app()
     app.scene.mpr_views = None
 
-    sweep(app, "axial", 30.0)
+    sweep(app, "ul", 30.0)
 
     assert steps_of(app) == []
 
@@ -425,6 +425,6 @@ def test_rotating_before_the_window_is_sized_writes_nothing():
     app = make_app()
     app.scene.mpr_views = UnsizedViews()
 
-    sweep(app, "axial", 30.0)
+    sweep(app, "ul", 30.0)
 
     assert steps_of(app) == []

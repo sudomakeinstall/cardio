@@ -60,7 +60,7 @@ def spoke(bearing, radius=100.0):
     )
 
 
-def roll(app, view="axial", degrees=25.0):
+def roll(app, view="ul", degrees=25.0):
     app.mpr.rotate_view(view, spoke(0.0), spoke(-degrees))
 
 
@@ -102,12 +102,12 @@ def test_label_mode_cannot_hold_an_orientation():
 def test_panning_is_refused_while_the_position_is_locked():
     app = make_app(snap_locked=True)
 
-    app.mpr.pan_view("axial", 30.0, 20.0)
+    app.mpr.pan_view("ul", 30.0, 20.0)
 
     assert app.server.state.mpr_origin == ORIGIN
 
 
-@pytest.mark.parametrize("view", ["axial", "sagittal", "coronal"])
+@pytest.mark.parametrize("view", ["ul", "lr", "ll"])
 def test_scrolling_is_refused_while_the_position_is_locked(view):
     """The wheel goes through scroll_slice too, so it stands down with it."""
     app = make_app(snap_locked=True)
@@ -121,8 +121,8 @@ def test_panning_and_scrolling_work_once_the_lock_is_off():
     """Centring without locking must leave every gesture available."""
     app = make_app(snap_locked=False)
 
-    app.mpr.pan_view("axial", 30.0, 20.0)
-    app.mpr.scroll_slice("axial", 5.0)
+    app.mpr.pan_view("ul", 30.0, 20.0)
+    app.mpr.scroll_slice("ul", 5.0)
 
     assert app.server.state.mpr_origin != ORIGIN
 
@@ -169,7 +169,7 @@ def test_an_orientation_lock_does_not_stand_down_pan_or_scroll():
     """It holds the alignment step, not the origin."""
     app = make_app(snap_orientation_locked=True, snap_mode="interface")
 
-    app.mpr.pan_view("axial", 30.0, 20.0)
+    app.mpr.pan_view("ul", 30.0, 20.0)
 
     assert app.server.state.mpr_origin != ORIGIN
 
@@ -180,8 +180,8 @@ def test_an_orientation_lock_does_not_stand_down_pan_or_scroll():
 def test_both_locks_stand_down_everything_that_writes_either():
     app = make_app(snap_locked=True, snap_orientation_locked=True, snap_mode="traverse")
 
-    app.mpr.pan_view("axial", 30.0, 20.0)
-    app.mpr.scroll_slice("axial", 5.0)
+    app.mpr.pan_view("ul", 30.0, 20.0)
+    app.mpr.scroll_slice("ul", 5.0)
     roll(app)
 
     assert app.server.state.mpr_origin == ORIGIN
@@ -243,7 +243,7 @@ def test_the_lock_that_re_applies_is_the_lock_that_stands_gestures_down():
     assert app.snap.position_locked is True
     assert app.snap.orientation_locked is False
 
-    app.mpr.pan_view("axial", 30.0, 20.0)
+    app.mpr.pan_view("ul", 30.0, 20.0)
     roll(app)
 
     assert app.server.state.mpr_origin == ORIGIN

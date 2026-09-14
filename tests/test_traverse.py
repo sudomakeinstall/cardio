@@ -10,7 +10,7 @@ import pytest
 from cardio.logic import ALIGN_STEP_NAME
 from cardio.orientation import minimal_rotation, slerp_rotation_matrices
 from cardio.segmentation import interpolate_planes
-from tests.fakes import align_at, axial_normal, traverse_logic
+from tests.fakes import align_at, traverse_logic, ul_normal
 from tests.geometry import angle_between, tilted_plane
 from tests.phantoms import (
     MOVING_FRAMES,
@@ -111,9 +111,9 @@ def test_endpoints_match_the_two_interfaces(tmp_path):
     logic = traverse_logic(seg)
 
     align_at(logic, 0)
-    start_normal = axial_normal(logic)
+    start_normal = ul_normal(logic)
     align_at(logic, 100)
-    end_normal = axial_normal(logic)
+    end_normal = ul_normal(logic)
 
     assert start_normal == pytest.approx(
         logic.snap._interface_plane(0)[1][:, 2], abs=1e-9
@@ -126,11 +126,11 @@ def test_midpoint_is_halfway_between_the_interfaces(tmp_path):
     logic = traverse_logic(stacked_segmentation(tmp_path))
 
     align_at(logic, 0)
-    start_normal = axial_normal(logic)
+    start_normal = ul_normal(logic)
     align_at(logic, 100)
-    end_normal = axial_normal(logic)
+    end_normal = ul_normal(logic)
     align_at(logic, 50)
-    middle_normal = axial_normal(logic)
+    middle_normal = ul_normal(logic)
 
     tilt = angle_between(start_normal, end_normal)
     assert angle_between(middle_normal, start_normal) == pytest.approx(
@@ -160,7 +160,7 @@ def test_traversal_is_continuous(tmp_path):
     poses = []
     for traverse in range(0, 101, 10):
         align_at(logic, traverse)
-        poses.append((np.array(logic.server.state.mpr_origin), axial_normal(logic)))
+        poses.append((np.array(logic.server.state.mpr_origin), ul_normal(logic)))
 
     steps = [
         (
@@ -281,11 +281,11 @@ def test_swap_reverses_the_direction_of_travel(tmp_path):
 def test_swap_reverses_the_normal(tmp_path):
     logic = traverse_logic(stacked_segmentation(tmp_path))
     align_at(logic, 50)
-    before = axial_normal(logic)
+    before = ul_normal(logic)
 
     logic.snap.swap_groups()
     logic.snap.align_to_interface()
-    assert axial_normal(logic) == pytest.approx(-before, abs=1e-6)
+    assert ul_normal(logic) == pytest.approx(-before, abs=1e-6)
 
 
 # Locking

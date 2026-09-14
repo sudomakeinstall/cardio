@@ -118,7 +118,7 @@ def _prompt(server):
     """Where a call is typed, in the syntax the log above is written in.
 
     The field swallows its own key events. Without that they reach the render
-    view's interactor, where typing `a` maximizes the axial view -- the same
+    view's interactor, where typing `a` maximizes the upper-left view -- the same
     guard the rotation name field carries, for the same reason.
 
     It guards ``keydown`` and ``keypress`` and not ``keyup``, which is the one

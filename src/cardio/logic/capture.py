@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # other name is shared, so this is the whole of the translation.
 VIEWPORT_FOR_LAYOUT = {Layout.VOLUME: "vr"}
 
-MPR_VIEWPORTS = ("axial", "coronal", "sagittal")
+MPR_VIEWPORTS = ("ul", "ll", "lr")
 
 # What each format is, in the terms that decide between them: a still per
 # frame, one animation, or a series a DICOM viewer can open.
@@ -246,7 +246,7 @@ class CaptureController(Controller):
         return compose(
             volume.mpr_image_data(frame),
             poses,
-            VIEW_TRANSFORMS["axial"],
+            VIEW_TRANSFORMS["ul"],
             views.rows,
             views.cols,
         )

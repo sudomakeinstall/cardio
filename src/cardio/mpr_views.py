@@ -1,7 +1,7 @@
 """The three MPR render windows, addressed by view name rather than by field.
 
 Every caller used to unroll the same block once per orientation, which is how
-the axial, coronal and sagittal paths drifted apart. Going through this type
+the three panes' paths drifted apart. Going through this type
 means a change reaches all three views or none.
 """
 

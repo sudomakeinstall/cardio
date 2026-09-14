@@ -171,8 +171,8 @@ def align_at(logic: FakeApp, traverse: int):
     logic.snap.align_to_interface()
 
 
-def axial_normal(logic: FakeApp) -> np.ndarray:
-    """The axial slice normal the reslice pipeline will actually use."""
+def ul_normal(logic: FakeApp) -> np.ndarray:
+    """The upper-left slice normal the reslice pipeline will actually use."""
     sequence, angles = logic.rotations.visible_rotation_data()
     cumulative = cumulative_rotation_matrix(sequence, angles, AngleUnits.DEGREES)
     return (cumulative @ axcode_transform_matrix("LPS", "LAS"))[:, 2]

@@ -290,7 +290,7 @@ def test_the_two_layout_conversions_are_inverses(layout):
 def test_the_quad_layout_is_why_that_pair_exists():
     """Guarding the guard above, which every other member would pass anyway."""
     assert registry.to_state("maximized_view", view.Layout.QUAD) == ""
-    assert registry.to_state("maximized_view", view.Layout.AXIAL) == "axial"
+    assert registry.to_state("maximized_view", view.Layout.UL) == "ul"
 
 
 @pytest.mark.parametrize(

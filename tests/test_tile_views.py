@@ -202,7 +202,7 @@ def test_a_tile_set_builds_one_pipeline_per_tile():
     )
 
 
-def test_set_poses_writes_the_axial_matrix_each_tile_asks_for():
+def test_set_poses_writes_the_upper_left_matrix_each_tile_asks_for():
     grid = tiles(3)
     poses = [
         ([float(i), 1.0, 2.0], np.diag([1.0, -1.0, -1.0]) if i else np.eye(3))
@@ -211,9 +211,7 @@ def test_set_poses_writes_the_axial_matrix_each_tile_asks_for():
     grid.set_poses(poses)
 
     for tile, (origin, rotation) in enumerate(poses):
-        expected = create_vtk_reslice_matrix(
-            rotation @ VIEW_TRANSFORMS["axial"], origin
-        )
+        expected = create_vtk_reslice_matrix(rotation @ VIEW_TRANSFORMS["ul"], origin)
         actual = grid[tile]["reslice"].GetResliceAxes()
         for row in range(4):
             for column in range(4):

@@ -111,7 +111,7 @@ class Volume(Object):
         """
         crosshairs = {}
 
-        for view_name in ["axial", "sagittal", "coronal"]:
+        for view_name in ["ul", "lr", "ll"]:
             view_crosshairs = {}
 
             for line_name in ["line1", "line2"]:
@@ -157,26 +157,26 @@ class Volume(Object):
                 }
 
             # Set colors based on which planes the lines represent
-            if view_name == "axial":
+            if view_name == "ul":
                 view_crosshairs["line1"]["actor"].GetProperty().SetColor(
-                    *colors.get("sagittal", (1, 0, 0))
+                    *colors.get("lr", (1, 0, 0))
                 )
                 view_crosshairs["line2"]["actor"].GetProperty().SetColor(
-                    *colors.get("coronal", (0, 1, 0))
+                    *colors.get("ll", (0, 1, 0))
                 )
-            elif view_name == "sagittal":
+            elif view_name == "lr":
                 view_crosshairs["line1"]["actor"].GetProperty().SetColor(
-                    *colors.get("coronal", (0, 1, 0))
+                    *colors.get("ll", (0, 1, 0))
                 )
                 view_crosshairs["line2"]["actor"].GetProperty().SetColor(
-                    *colors.get("axial", (0, 0, 1))
+                    *colors.get("ul", (0, 0, 1))
                 )
-            else:  # coronal
+            else:  # ll
                 view_crosshairs["line1"]["actor"].GetProperty().SetColor(
-                    *colors.get("sagittal", (1, 0, 0))
+                    *colors.get("lr", (1, 0, 0))
                 )
                 view_crosshairs["line2"]["actor"].GetProperty().SetColor(
-                    *colors.get("axial", (0, 0, 1))
+                    *colors.get("ul", (0, 0, 1))
                 )
 
             crosshairs[view_name] = view_crosshairs

@@ -108,15 +108,15 @@ def viewports(server, scene, listeners, handled_events, update_all_views):
         # Setup MPR render windows in Scene
         scene.setup_mpr_render_windows()
 
-        # First row: Axial and Volume (50% height)
+        # First row: upper-left cut and volume (50% height)
         with vuetify.VRow(classes="ma-0", style="height: 50%;"):
             with vuetify.VCol(cols="6", classes="pa-1", style="height: 100%;"):
-                # Axial view
-                axial_view = vtk_widgets.VtkRemoteView(
-                    scene.mpr_views["axial"],
+                # Upper-left view
+                ul_view = vtk_widgets.VtkRemoteView(
+                    scene.mpr_views["ul"],
                     style="height: 100%; width: 100%;",
                     interactor_events=("event_types", handled_events),
-                    **listeners("axial"),
+                    **listeners("ul"),
                     interactive_ratio=1,
                 )
             with vuetify.VCol(cols="6", classes="pa-1", style="height: 100%;"):
@@ -129,24 +129,24 @@ def viewports(server, scene, listeners, handled_events, update_all_views):
                     interactive_ratio=1,
                 )
 
-        # Second row: Coronal and Sagittal (50% height)
+        # Second row: lower-left and lower-right cuts (50% height)
         with vuetify.VRow(classes="ma-0", style="height: 50%;"):
             with vuetify.VCol(cols="6", classes="pa-1", style="height: 100%;"):
-                # Coronal view
-                coronal_view = vtk_widgets.VtkRemoteView(
-                    scene.mpr_views["coronal"],
+                # Lower-left view
+                ll_view = vtk_widgets.VtkRemoteView(
+                    scene.mpr_views["ll"],
                     style="height: 100%; width: 100%;",
                     interactor_events=("event_types", handled_events),
-                    **listeners("coronal"),
+                    **listeners("ll"),
                     interactive_ratio=1,
                 )
             with vuetify.VCol(cols="6", classes="pa-1", style="height: 100%;"):
-                # Sagittal view
-                sagittal_view = vtk_widgets.VtkRemoteView(
-                    scene.mpr_views["sagittal"],
+                # Lower-right view
+                lr_view = vtk_widgets.VtkRemoteView(
+                    scene.mpr_views["lr"],
                     style="height: 100%; width: 100%;",
                     interactor_events=("event_types", handled_events),
-                    **listeners("sagittal"),
+                    **listeners("lr"),
                     interactive_ratio=1,
                 )
 
@@ -160,34 +160,34 @@ def viewports(server, scene, listeners, handled_events, update_all_views):
         )
 
         # Store individual view update functions
-        server.controller.axial_update = axial_view.update
-        server.controller.coronal_update = coronal_view.update
-        server.controller.sagittal_update = sagittal_view.update
+        server.controller.ul_update = ul_view.update
+        server.controller.ll_update = ll_view.update
+        server.controller.lr_update = lr_view.update
         server.controller.volume_update = volume_view.update
 
-    # Maximized axial view
+    # Maximized upper-left view
     with vuetify.VContainer(
-        v_if="maximized_view === 'axial'",
+        v_if="maximized_view === 'ul'",
         fluid=True,
         classes="pa-0 fill-height",
     ):
-        axial_maximized_view = vtk_widgets.VtkRemoteView(
-            scene.mpr_views["axial"],
+        ul_maximized_view = vtk_widgets.VtkRemoteView(
+            scene.mpr_views["ul"],
             interactor_events=("event_types", handled_events),
-            **listeners("axial"),
+            **listeners("ul"),
             interactive_ratio=1,
         )
 
-    # Maximized coronal view
+    # Maximized lower-left view
     with vuetify.VContainer(
-        v_if="maximized_view === 'coronal'",
+        v_if="maximized_view === 'll'",
         fluid=True,
         classes="pa-0 fill-height",
     ):
-        coronal_maximized_view = vtk_widgets.VtkRemoteView(
-            scene.mpr_views["coronal"],
+        ll_maximized_view = vtk_widgets.VtkRemoteView(
+            scene.mpr_views["ll"],
             interactor_events=("event_types", handled_events),
-            **listeners("coronal"),
+            **listeners("ll"),
             interactive_ratio=1,
         )
 
@@ -221,15 +221,15 @@ def viewports(server, scene, listeners, handled_events, update_all_views):
         )
         server.controller.volumetry_update = volumetry_view.update
 
-    # Maximized sagittal view
+    # Maximized lower-right view
     with vuetify.VContainer(
-        v_if="maximized_view === 'sagittal'",
+        v_if="maximized_view === 'lr'",
         fluid=True,
         classes="pa-0 fill-height",
     ):
-        sagittal_maximized_view = vtk_widgets.VtkRemoteView(
-            scene.mpr_views["sagittal"],
+        lr_maximized_view = vtk_widgets.VtkRemoteView(
+            scene.mpr_views["lr"],
             interactor_events=("event_types", handled_events),
-            **listeners("sagittal"),
+            **listeners("lr"),
             interactive_ratio=1,
         )

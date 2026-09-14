@@ -46,9 +46,9 @@ def _swept_degrees(centre, start, end) -> float:
 # new member without a label fails here rather than silently missing from it.
 CAMERA_LOCK_TITLES = {
     CameraLock.FREE: "Free",
-    CameraLock.UL: "UL (Axial)",
-    CameraLock.LL: "LL (Coronal)",
-    CameraLock.LR: "LR (Sagittal)",
+    CameraLock.UL: "UL",
+    CameraLock.LL: "LL",
+    CameraLock.LR: "LR",
 }
 
 
@@ -354,23 +354,21 @@ class MPRController(Controller):
         if lock == "free":
             return
 
-        orientation = {"UL": "axial", "LL": "coronal", "LR": "sagittal"}[lock]
-
         # Base slice normals and up vectors in LPS coordinates.
         # Normal = out-of-plane direction; up = Y axis of the reslice frame.
         base_normals = {
-            "axial": np.array([0.0, 0.0, 1.0]),  # Superior (Z in LAS)
-            "sagittal": np.array([1.0, 0.0, 0.0]),  # Left (Z in ASL)
-            "coronal": np.array([0.0, 1.0, 0.0]),  # Posterior (Z in LSA)
+            "ul": np.array([0.0, 0.0, 1.0]),  # Superior (Z in LAS)
+            "lr": np.array([1.0, 0.0, 0.0]),  # Left (Z in ASL)
+            "ll": np.array([0.0, 1.0, 0.0]),  # Posterior (Z in LSA)
         }
         base_ups = {
-            "axial": np.array([0.0, -1.0, 0.0]),  # Anterior (Y in LAS)
-            "sagittal": np.array([0.0, 0.0, 1.0]),  # Superior (Y in ASL)
-            "coronal": np.array([0.0, 0.0, 1.0]),  # Superior (Y in LSA)
+            "ul": np.array([0.0, -1.0, 0.0]),  # Anterior (Y in LAS)
+            "lr": np.array([0.0, 0.0, 1.0]),  # Superior (Y in ASL)
+            "ll": np.array([0.0, 0.0, 1.0]),  # Superior (Y in LSA)
         }
 
-        normal = base_normals[orientation]
-        up = base_ups[orientation]
+        normal = base_normals[lock]
+        up = base_ups[lock]
 
         active_volume = self._active_volume()
         if active_volume is not None:
@@ -529,9 +527,9 @@ class MPRController(Controller):
         then handed back in the convention ``mpr_origin`` is stored in.
         """
         base_normals = {
-            "axial": np.array([0.0, 0.0, 1.0]),
-            "sagittal": np.array([1.0, 0.0, 0.0]),
-            "coronal": np.array([0.0, 1.0, 0.0]),
+            "ul": np.array([0.0, 0.0, 1.0]),
+            "lr": np.array([1.0, 0.0, 0.0]),
+            "ll": np.array([0.0, 1.0, 0.0]),
         }
         if view_name not in base_normals:
             return np.array([0.0, 0.0, 1.0])
@@ -550,7 +548,7 @@ class MPRController(Controller):
         what scrolling there is for; every other mode leaves the slice along
         its own normal.
         """
-        if view_name not in ("axial", "sagittal", "coronal"):
+        if view_name not in ("ul", "lr", "ll"):
             return
 
         # Traverse mode has a line to travel, and it is the more useful one:
@@ -578,8 +576,8 @@ class MPRController(Controller):
         the image keeps up with the cursor at any radius.
 
         The turn is a roll about the view's own normal, the axis
-        ``scroll_slice`` travels along, so the axial view turns about the
-        craniocaudal axis and goes on showing the same cut. That normal is a
+        ``scroll_slice`` travels along, so the upper-left view turns, unrotated,
+        about the craniocaudal axis and goes on showing the same cut. That normal is a
         signed L/A/S direction before any rotation is applied, so the drag
         lands as a plain Euler step about X, Y or Z rather than a quaternion.
 
@@ -603,9 +601,9 @@ class MPRController(Controller):
         frame = VIEW_TRANSFORMS[view_name]
 
         # Which way a turn reads on screen flips with the frame's handedness,
-        # and the axcode frames do not agree on it: coronal's is the odd one,
-        # the same disagreement scroll_vector settles by taking P rather than
-        # the axcode's A as its normal.
+        # and the axcode frames do not agree on it: the lower-left frame is the
+        # odd one out, the same disagreement scroll_vector settles by taking P
+        # rather than the axcode's A as its normal.
         hand = float(np.linalg.det(frame))
 
         axis, sign = _signed_axis(frame[:, 2])

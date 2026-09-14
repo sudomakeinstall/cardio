@@ -32,7 +32,7 @@ DRIVEN = [
     ("toggle_crosshairs", None),
     ("adjust_window_level", {"window_delta": 40.0, "level_delta": -10.0}),
     ("zoom_views", {"factor": 1.5}),
-    ("toggle_maximized", {"view": "axial"}),
+    ("toggle_maximized", {"view": "ul"}),
     ("place_camera", None),
 ]
 
@@ -104,14 +104,14 @@ def test_a_maximized_view_survives_the_layout_being_spelled_differently(
     """State says "" for the quad view; a config calls every layout by name."""
     reopen = reopened(driven.save(tmp_path / "saved.toml"))
 
-    assert reopen.scene.view.layout.value == "axial"
-    assert reopen.server.state.maximized_view == "axial"
+    assert reopen.scene.view.layout.value == "ul"
+    assert reopen.server.state.maximized_view == "ul"
 
 
 def test_the_quad_view_survives_being_the_empty_one(tmp_path):
     session = session_on(tmp_path)
-    session.do("toggle_maximized", view="axial")
-    session.do("toggle_maximized", view="axial")
+    session.do("toggle_maximized", view="ul")
+    session.do("toggle_maximized", view="ul")
     assert session.server.state.maximized_view == ""
 
     reopen = reopened(session.save(tmp_path / "saved.toml"))
@@ -144,7 +144,7 @@ def test_the_ticked_viewports_are_what_is_saved(tmp_path):
 
     scene = scene_from_state(session.server.state, session.scene)
 
-    assert scene.screenshot_viewports == ["axial", "coronal", "sagittal"]
+    assert scene.screenshot_viewports == ["ul", "ll", "lr"]
 
 
 def test_a_selected_preset_survives_beside_the_values_it_implies(tmp_path):

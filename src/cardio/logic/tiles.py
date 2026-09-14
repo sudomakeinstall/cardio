@@ -227,9 +227,9 @@ class TileController(Controller):
         path interpolates, which its poses already carry.
         """
         if self.source == TileSource.TRAVERSE:
-            return "axial"
-        plane = getattr(self.server.state, "tile_plane", "axial")
-        return plane if plane in VIEW_TRANSFORMS else "axial"
+            return "ul"
+        plane = getattr(self.server.state, "tile_plane", "ul")
+        return plane if plane in VIEW_TRANSFORMS else "ul"
 
     @property
     def tile_count(self) -> int:
@@ -262,7 +262,7 @@ class TileController(Controller):
         The rotation is the same composition the quad view gets: the plane at
         that point of the path, with whatever rotations the user has stacked on
         top of the alignment step applied after it. A tile is therefore the quad
-        view's axial cut, taken at its own fraction.
+        view's upper-left cut, taken at its own fraction.
         """
         user_rotation = self.app.rotations.rotation_matrix(exclude=ALIGN_STEP_NAME)
 

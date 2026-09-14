@@ -99,7 +99,7 @@ def turned(degrees: float = POSE_DEGREES) -> np.ndarray:
 
 
 def posed_reslice(image_data, rotation=None, origin=None) -> vtk.vtkImageReslice:
-    """One axial cut of the phantom, posed the way the MPR views pose theirs."""
+    """One upper-left cut of the phantom, posed the way the MPR views pose theirs."""
     reslice = vtk.vtkImageReslice()
     reslice.SetInputData(image_data)
     reslice.SetOutputDimensionality(2)
@@ -109,7 +109,7 @@ def posed_reslice(image_data, rotation=None, origin=None) -> vtk.vtkImageReslice
     reslice.SetOutputDirection(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)
     reslice.SetResliceAxes(
         create_vtk_reslice_matrix(
-            (turned() if rotation is None else rotation) @ VIEW_TRANSFORMS["axial"],
+            (turned() if rotation is None else rotation) @ VIEW_TRANSFORMS["ul"],
             POSE_ORIGIN if origin is None else origin,
         )
     )
@@ -148,7 +148,7 @@ def identity(modality: str = "MR") -> Identity:
     )
 
 
-def context(tmp_path, viewport="axial", **kwargs) -> Context:
+def context(tmp_path, viewport="ul", **kwargs) -> Context:
     fields = {
         "directory": pl.Path(tmp_path),
         "viewport": viewport,
@@ -239,7 +239,7 @@ def test_an_axis_aligned_cut_keeps_the_volume_spacing():
 
     plane = plane_from_reslice(reslice)
 
-    # The axial transform maps the volume's x and y onto the plane's.
+    # The upper-left transform maps the volume's x and y onto the plane's.
     assert np.allclose(plane.pixel_spacing, (VOLUME_SPACING[1], VOLUME_SPACING[0]))
 
 
@@ -293,7 +293,7 @@ def written(directory: pl.Path) -> list[pd.dataset.Dataset]:
     return [pd.dcmread(path) for path in sorted(directory.glob("*.dcm"))]
 
 
-def write_slices(tmp_path, frames: int = 3, viewport="axial", **naming) -> list:
+def write_slices(tmp_path, frames: int = 3, viewport="ul", **naming) -> list:
     reslice = posed_reslice(phantom())
     plane = plane_from_reslice(reslice)
 
@@ -357,13 +357,13 @@ def test_a_viewport_showing_nothing_writes_nothing(tmp_path):
     writer.add(0, Frame(image=rgb_frame().image, plane=None))
     writer.close()
 
-    assert written(pl.Path(tmp_path) / "axial") == []
+    assert written(pl.Path(tmp_path) / "ul") == []
 
 
 def test_a_slice_series_reads_back_as_the_frames_it_was_written_from(tmp_path):
     write_slices(tmp_path, frames=3)
 
-    frames = dicom.read_series(pl.Path(tmp_path) / "axial")
+    frames = dicom.read_series(pl.Path(tmp_path) / "ul")
 
     assert len(frames) == 3
 
@@ -383,7 +383,7 @@ def mosaic_of(rows: int, columns: int) -> Plane:
     return compose(
         phantom(),
         poses(rows * columns),
-        VIEW_TRANSFORMS["axial"],
+        VIEW_TRANSFORMS["ul"],
         rows,
         columns,
     )
@@ -399,8 +399,8 @@ def test_a_mosaic_has_one_spacing_and_no_place():
 
 def test_a_mosaic_is_the_grid_it_was_asked_for():
     """The same six cuts, laid out two ways, tile to the same size."""
-    wide = compose(phantom(), poses(6), VIEW_TRANSFORMS["axial"], 1, 6)
-    grid = compose(phantom(), poses(6), VIEW_TRANSFORMS["axial"], 2, 3)
+    wide = compose(phantom(), poses(6), VIEW_TRANSFORMS["ul"], 1, 6)
+    grid = compose(phantom(), poses(6), VIEW_TRANSFORMS["ul"], 2, 3)
 
     tile_rows, tile_columns = wide.scalars.shape[0], wide.scalars.shape[1] // 6
     assert grid.scalars.shape == (2 * tile_rows, 3 * tile_columns)
@@ -415,8 +415,8 @@ def test_a_mosaic_keeps_the_volume_values():
 
 def test_the_tiles_are_laid_out_row_major_from_the_top_left():
     """Four cuts down a column are the same four cuts along a row, in order."""
-    tall = compose(phantom(), poses(4), VIEW_TRANSFORMS["axial"], 4, 1)
-    wide = compose(phantom(), poses(4), VIEW_TRANSFORMS["axial"], 1, 4)
+    tall = compose(phantom(), poses(4), VIEW_TRANSFORMS["ul"], 4, 1)
+    wide = compose(phantom(), poses(4), VIEW_TRANSFORMS["ul"], 1, 4)
 
     tile_rows, tile_columns = tall.scalars.shape[0] // 4, tall.scalars.shape[1]
 
@@ -636,7 +636,7 @@ def test_a_data_capture_of_the_volume_render_records_the_picture(tmp_path):
 
 
 def test_a_data_capture_of_a_cut_records_the_values(tmp_path):
-    writer = writer_for(CaptureFormat.DICOM_DATA, context(tmp_path, "axial"))
+    writer = writer_for(CaptureFormat.DICOM_DATA, context(tmp_path, "ul"))
 
     assert isinstance(writer, SliceWriter)
 
@@ -701,9 +701,9 @@ def tick(server, *names):
 @pytest.mark.parametrize(
     "layout,available",
     [
-        ("", {"axial", "coronal", "sagittal", "vr"}),
+        ("", {"ul", "ll", "lr", "vr"}),
         ("volume", {"vr"}),
-        ("axial", {"axial"}),
+        ("ul", {"ul"}),
         ("tile", {"tile"}),
         ("volumetry", {"volumetry"}),
     ],
@@ -728,15 +728,15 @@ def test_the_offer_follows_the_layout(tmp_path):
 @pytest.mark.parametrize(
     "layout,ticked,expected",
     [
-        ("tile", ["axial"], set()),
-        ("tile", ["tile", "axial"], {"tile"}),
+        ("tile", ["ul"], set()),
+        ("tile", ["tile", "ul"], {"tile"}),
         # The two that used to be written from a window nobody was looking at.
         ("tile", ["vr"], set()),
-        ("axial", ["vr", "coronal"], set()),
+        ("ul", ["vr", "ll"], set()),
         ("", ["tile"], set()),
-        ("", ["axial", "vr"], {"axial", "vr"}),
+        ("", ["ul", "vr"], {"ul", "vr"}),
         ("volumetry", ["volumetry"], {"volumetry"}),
-        ("volumetry", ["axial", "vr"], set()),
+        ("volumetry", ["ul", "vr"], set()),
     ],
 )
 def test_an_off_screen_viewport_is_never_captured(tmp_path, layout, ticked, expected):
@@ -769,7 +769,7 @@ def test_a_capture_with_nothing_on_screen_does_not_run_the_cine(tmp_path):
     a phantom with a single frame would sit at frame zero either way.
     """
     server, scene, logic = built(tmp_path, "tile")
-    tick(server, "axial")
+    tick(server, "ul")
     with server.state:
         server.state.rotating = True
 
@@ -795,7 +795,7 @@ def test_a_capture_that_can_write_does_run_the_cine(tmp_path):
 
 def test_a_capture_with_nothing_on_screen_says_so(tmp_path):
     server, _, logic = built(tmp_path, "tile")
-    tick(server, "axial")
+    tick(server, "ul")
 
     capture(logic)
 
@@ -872,7 +872,7 @@ def test_an_unnamed_series_says_which_viewport_it_came_off(tmp_path):
     """The fallback still has to be tellable from the series written beside it."""
     dataset = write_slices(tmp_path, frames=1)[0]
 
-    assert dataset.SeriesDescription == "cardio axial (reformat)"
+    assert dataset.SeriesDescription == "cardio ul (reformat)"
 
 
 def rendered(tmp_path, **naming) -> pd.dataset.Dataset:
@@ -901,13 +901,11 @@ def test_a_name_that_was_given_is_the_whole_of_the_name():
 
 
 def test_two_viewports_written_as_one_number_are_reported():
-    assert repeated_numbers({"axial": 5, "coronal": 5, "vr": 6}) == {
-        5: ["axial", "coronal"]
-    }
+    assert repeated_numbers({"ul": 5, "ll": 5, "vr": 6}) == {5: ["ll", "ul"]}
 
 
 def test_numbers_that_differ_are_not_reported():
-    assert repeated_numbers({"axial": 5, "coronal": 6}) == {}
+    assert repeated_numbers({"ul": 5, "ll": 6}) == {}
 
 
 def test_a_description_longer_than_dicom_carries_is_refused():
@@ -935,25 +933,23 @@ def test_only_the_dicom_formats_have_a_series_to_name():
     }
 
 
-def captured_series(tmp_path, viewport="axial") -> pd.dataset.Dataset:
+def captured_series(tmp_path, viewport="ul") -> pd.dataset.Dataset:
     """The first instance of the one series a capture just wrote."""
     folder = max((tmp_path / "out" / "screenshots").iterdir())
     return written(folder / viewport)[0]
 
 
 def exporting(tmp_path, **overrides):
-    """An app set up to write one DICOM series, off the axial view."""
-    server, _, logic = built(
-        tmp_path, "axial", capture_format="dicom-data", **overrides
-    )
-    tick(server, "axial")
+    """An app set up to write one DICOM series, off the upper-left view."""
+    server, _, logic = built(tmp_path, "ul", capture_format="dicom-data", **overrides)
+    tick(server, "ul")
     return server, logic
 
 
 def test_a_capture_is_written_as_the_series_the_scene_named(tmp_path):
     _, logic = exporting(
         tmp_path,
-        capture_series={"axial": {"number": 407, "description": "Cine SAX"}},
+        capture_series={"ul": {"number": 407, "description": "Cine SAX"}},
     )
 
     capture(logic)
@@ -966,11 +962,11 @@ def test_a_capture_is_written_as_the_series_the_scene_named(tmp_path):
 def test_the_configured_naming_reaches_the_drawer(tmp_path):
     server, _, _ = built(
         tmp_path,
-        capture_series={"axial": {"number": 400, "description": "Cine SAX"}},
+        capture_series={"ul": {"number": 400, "description": "Cine SAX"}},
     )
 
-    assert server.state.capture_series_number_axial == 400
-    assert server.state.capture_series_description_axial == "Cine SAX"
+    assert server.state.capture_series_number_ul == 400
+    assert server.state.capture_series_description_ul == "Cine SAX"
 
 
 def test_what_the_drawer_holds_is_what_the_capture_is_written_as(tmp_path):
@@ -981,8 +977,8 @@ def test_what_the_drawer_holds_is_what_the_capture_is_written_as(tmp_path):
     """
     server, logic = exporting(tmp_path)
     with server.state:
-        server.state.capture_series_number_axial = "512"
-        server.state.capture_series_description_axial = "Retyped"
+        server.state.capture_series_number_ul = "512"
+        server.state.capture_series_description_ul = "Retyped"
 
     capture(logic)
 
@@ -1069,7 +1065,7 @@ def cine_app(tmp_path, frames: int = 3, **overrides):
         active_volume_label="vol",
         **overrides,
     )
-    return running(scene, "axial")
+    return running(scene, "ul")
 
 
 def test_a_cine_reads_only_cuts_that_have_been_posed(tmp_path, monkeypatch):
@@ -1082,7 +1078,7 @@ def test_a_cine_reads_only_cuts_that_have_been_posed(tmp_path, monkeypatch):
     axis-aligned cut through the middle instead of the one the user posed.
     """
     server, scene, logic = cine_app(tmp_path, capture_format="dicom-data")
-    tick(server, "axial")
+    tick(server, "ul")
     with server.state:
         server.state.incrementing = True
 
@@ -1198,10 +1194,10 @@ REQUIRED = (
 )
 
 
-@pytest.mark.parametrize("viewport", ["axial", "vr"])
+@pytest.mark.parametrize("viewport", ["ul", "vr"])
 def test_every_required_element_is_present_even_where_it_is_empty(tmp_path, viewport):
     """Type 2 means present and possibly empty; absent is a different thing."""
-    if viewport == "axial":
+    if viewport == "ul":
         dataset = write_slices(tmp_path, frames=1)[0]
     else:
         dataset = _rendered_instance(tmp_path / "rendered")
@@ -1237,7 +1233,7 @@ def test_a_reformat_cites_the_images_it_was_made_from(tmp_path):
     writer.add(0, Frame(image=rgb_frame().image, plane=slice_plane()))
     writer.close()
 
-    dataset = written(pl.Path(tmp_path) / "axial")[0]
+    dataset = written(pl.Path(tmp_path) / "ul")[0]
 
     assert [item.ReferencedSOPInstanceUID for item in dataset.SourceImageSequence] == [
         source.SOPInstanceUID
@@ -1269,7 +1265,7 @@ def test_a_capture_without_a_dicom_source_stands_alone_whole(tmp_path):
     writer.add(0, Frame(image=rgb_frame().image, plane=slice_plane()))
     writer.close()
 
-    dataset = written(pl.Path(tmp_path) / "axial")[0]
+    dataset = written(pl.Path(tmp_path) / "ul")[0]
 
     assert dataset.StudyInstanceUID == "1.2.3"
     assert str(dataset.PatientName) == "Anonymous^"
@@ -1293,7 +1289,7 @@ def dicom_cine_app(tmp_path, **overrides):
         capture_format="dicom-data",
         **overrides,
     )
-    return running(scene, "axial")
+    return running(scene, "ul")
 
 
 def captured(logic) -> list[pd.dataset.Dataset]:
@@ -1410,7 +1406,7 @@ def test_the_file_says_which_implementation_wrote_it(tmp_path):
 
 def test_the_study_a_standalone_capture_opens_is_under_the_root_too(tmp_path):
     _server, _scene, logic = built(
-        tmp_path, "axial", capture_format="dicom-data", uid_root=REGISTERED_ROOT
+        tmp_path, "ul", capture_format="dicom-data", uid_root=REGISTERED_ROOT
     )
     capture(logic)
 
@@ -1584,7 +1580,7 @@ def test_a_refusal_says_both_of_its_causes_at_once():
 
 def test_a_research_capture_is_written_anyway_and_says_what_is_missing(tmp_path):
     """Whether a field is needed depends on where it is going, which is not ours."""
-    _server, _scene, logic = built(tmp_path, "axial", capture_format="dicom-data")
+    _server, _scene, logic = built(tmp_path, "ul", capture_format="dicom-data")
 
     capture(logic)
 
@@ -1598,7 +1594,7 @@ def test_a_research_capture_is_written_anyway_and_says_what_is_missing(tmp_path)
 def test_a_capture_under_a_borrowed_root_is_refused_by_default(tmp_path):
     """The point of the default: nobody had to remember to ask for this."""
     _server, _scene, logic = built(
-        tmp_path, "axial", capture_format="dicom-data", research=False
+        tmp_path, "ul", capture_format="dicom-data", research=False
     )
 
     capture(logic)
@@ -1614,7 +1610,7 @@ def test_an_identified_capture_under_a_registered_root_is_written(tmp_path):
     _server, _scene, logic = dicom_cine_app(
         tmp_path, research=False, uid_root=REGISTERED_ROOT
     )
-    tick(_server, "axial")
+    tick(_server, "ul")
 
     capture(logic)
 
@@ -1626,7 +1622,7 @@ def test_a_volume_read_from_a_file_is_refused_by_default(tmp_path):
     """Its patient and study would be ones this app made up."""
     _server, _scene, logic = built(
         tmp_path,
-        "axial",
+        "ul",
         capture_format="dicom-data",
         research=False,
         uid_root=REGISTERED_ROOT,
@@ -1642,7 +1638,7 @@ def test_a_volume_read_from_a_file_is_refused_by_default(tmp_path):
 
 def test_research_writes_what_would_otherwise_be_refused(tmp_path):
     _server, _scene, logic = built(
-        tmp_path, "axial", capture_format="dicom-data", research=True
+        tmp_path, "ul", capture_format="dicom-data", research=True
     )
 
     capture(logic)
@@ -1654,7 +1650,7 @@ def test_research_writes_what_would_otherwise_be_refused(tmp_path):
 def test_a_refusal_says_what_is_missing_before_it_refuses(tmp_path, caplog):
     """The message names the way out; the log names why it was in the way."""
     _server, _scene, logic = built(
-        tmp_path, "axial", capture_format="dicom-data", research=False
+        tmp_path, "ul", capture_format="dicom-data", research=False
     )
 
     with caplog.at_level(logging.INFO):
@@ -1666,9 +1662,7 @@ def test_a_refusal_says_what_is_missing_before_it_refuses(tmp_path, caplog):
 
 def test_a_picture_capture_is_not_pre_flighted(tmp_path):
     """The checks are about what a receiver wants; a PNG has no receiver."""
-    _server, _scene, logic = built(
-        tmp_path, "axial", capture_format="png", research=False
-    )
+    _server, _scene, logic = built(tmp_path, "ul", capture_format="png", research=False)
 
     capture(logic)
 
@@ -1682,12 +1676,12 @@ def write_cine(tmp_path, frames: int = 3, fmt="dicom-cine-data", **naming) -> li
     reslice = posed_reslice(phantom())
     plane = plane_from_reslice(reslice)
 
-    writer = writer_for(fmt, context(tmp_path, "axial", **naming))
+    writer = writer_for(fmt, context(tmp_path, "ul", **naming))
     for index in range(frames):
         writer.add(index, Frame(image=rgb_frame().image, plane=plane))
     writer.close()
 
-    return written(pl.Path(tmp_path) / "axial")
+    return written(pl.Path(tmp_path) / "ul")
 
 
 def test_a_cine_is_written_as_one_instance_of_many_frames(tmp_path):
@@ -1725,7 +1719,7 @@ def test_a_cine_of_a_fixed_plane_says_where_it_is(tmp_path):
 
 def test_a_cine_whose_plane_moves_is_written_without_a_position(tmp_path, caplog):
     """One multi-frame instance carries one pose, which a moving cut has not got."""
-    writer = writer_for("dicom-cine-data", context(tmp_path, "axial"))
+    writer = writer_for("dicom-cine-data", context(tmp_path, "ul"))
     for index in range(3):
         reslice = posed_reslice(phantom(), origin=[5.0 + index, 27.0, 17.0])
         writer.add(
@@ -1734,7 +1728,7 @@ def test_a_cine_whose_plane_moves_is_written_without_a_position(tmp_path, caplog
     with caplog.at_level(logging.WARNING):
         writer.close()
 
-    dataset = written(pl.Path(tmp_path) / "axial")[0]
+    dataset = written(pl.Path(tmp_path) / "ul")[0]
 
     assert "ImagePositionPatient" not in dataset
     assert "moves over the cycle" in caplog.text
@@ -1766,7 +1760,7 @@ def test_a_cine_reads_back_as_the_frames_it_was_written_from(tmp_path):
     scalars = plane_from_reslice(posed_reslice(phantom())).scalars
     write_cine(tmp_path, frames=3)
 
-    frames = dicom.read_series(pl.Path(tmp_path) / "axial")
+    frames = dicom.read_series(pl.Path(tmp_path) / "ul")
 
     assert len(frames) == 3
     for frame in frames:
@@ -1779,7 +1773,7 @@ def test_a_cine_reads_back_with_the_geometry_it_was_written_with(tmp_path):
     plane = plane_from_reslice(posed_reslice(phantom()))
     write_cine(tmp_path, frames=2)
 
-    instances = dicom.select_instances(pl.Path(tmp_path) / "axial")
+    instances = dicom.select_instances(pl.Path(tmp_path) / "ul")
 
     assert [instance.frame for instance in instances] == [0, 1]
     assert np.allclose(instances[0].position, plane.location.position)
@@ -1790,10 +1784,10 @@ def test_an_enhanced_multiframe_is_still_refused(tmp_path):
     """Only the objects this app writes are unpacked; the rest are a different thing."""
     dataset = write_slices(tmp_path, frames=1)[0]
     dataset.NumberOfFrames = 4
-    dataset.save_as(next((pl.Path(tmp_path) / "axial").glob("*.dcm")))
+    dataset.save_as(next((pl.Path(tmp_path) / "ul").glob("*.dcm")))
 
     with pytest.raises(ValueError, match="enhanced multi-frame"):
-        dicom.read_series(pl.Path(tmp_path) / "axial")
+        dicom.read_series(pl.Path(tmp_path) / "ul")
 
 
 def test_an_instance_is_timed_by_the_phase_it_stands_at(tmp_path):
@@ -1809,7 +1803,7 @@ def test_an_instance_is_timed_by_the_phase_it_stands_at(tmp_path):
     writer.close()
 
     times = [
-        float(dataset.TriggerTime) for dataset in written(pl.Path(tmp_path) / "axial")
+        float(dataset.TriggerTime) for dataset in written(pl.Path(tmp_path) / "ul")
     ]
 
     assert times == [0.0, 50.0, 0.0, 50.0]
