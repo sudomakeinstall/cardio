@@ -240,7 +240,8 @@ single-frame instances it merely sorts, and whether it plays them is up to the
 viewer.  The trade is that one such instance carries one position, so a cine
 whose plane moves through the cycle -- a snap lock following a valve -- is
 written without one, and says so in the log.  Both read straight back into
-`cardio` the same way the single-frame series does.
+`cardio` the same way the single-frame series does -- but not every workstation
+stores them, so see *What a receiver reads* before sending one anywhere.
 
 When the active volume was read from DICOM, the capture inherits its patient and
 study whole, so a derived series lands in the study it came from, keeps its
@@ -302,6 +303,71 @@ object names the images it segments, and a report names the images it is
 evidence about, and a NIfTI volume gives neither anything to name.  The same
 refusal a capture gets applies here too, and for the same reason: a report says
 whose measurements these are.  The tables are written either way.
+
+### What a receiver reads
+
+Everything above is about what a file holds.  What a workstation does with it is
+a separate question, and the answer is not the same at every workstation, so it
+is worth saying which formats travel.  The two receivers this was checked
+against are **Sectra PACS / Workstation 28.1** and **TeraRecon iNtuition 4.9.0**,
+read off their published conformance statements rather than guessed at.
+
+| Written | SOP Class | Sectra IDS7 / UniView | TeraRecon iNtuition |
+| --- | --- | --- | --- |
+| `dicom-rendered` | `…1.1.7` | viewable | viewable |
+| `dicom-data` | `…1.1.7` | viewable | viewable |
+| `dicom-cine-rendered` | `…1.1.7.4` | viewable | not stored by default |
+| `dicom-cine-data` | `…1.1.7.3` | viewable | not stored by default |
+| `segmentation/<i>.dcm` | `…1.1.66.4` | stored, not viewable | viewable |
+| `measurements.dcm` | `…1.1.88.34` | stored, not viewable | not listed |
+
+| `capture_transfer_syntax` | Sectra | TeraRecon |
+| --- | --- | --- |
+| `jpeg-2000-lossless` | yes | yes |
+| `jpeg-ls-lossless` | not listed | not listed |
+| `uncompressed` | yes | yes |
+
+Three things follow.
+
+**Send the single-frame formats.**  `dicom-data` and `dicom-rendered` are the
+only ones both receivers read: iNtuition's default storage list has plain
+Secondary Capture and neither multi-frame class, and while its note says classes
+can be added to the service list at run time, whether it then draws one is not
+something the document says.  The `dicom-cine-*` formats are a better object --
+one instance, the Cine module, a loop a viewer plays rather than a stack it
+sorts -- and are the right choice for a Sectra-only workflow or for reading back
+into `cardio`.  They are not the right choice for an export that has to arrive
+at both.
+
+**Leave the transfer syntax alone.**  `jpeg-2000-lossless` is the default
+because it is the intersection: iNtuition lists it among the lossless syntaxes
+it accepts, and Sectra both accepts it and writes its own media exports in it.
+Neither document mentions JPEG-LS anywhere, so `jpeg-ls-lossless` is for a local
+workflow -- it is a little smaller and several times faster -- and not for
+anything being sent.  Both are lossless either way: the pixels that come back
+are the pixels that went in, and `LossyImageCompression` says `00` truthfully.
+
+**The overlay series is not redundant with the SEG.**  It looks like it ought to
+be -- the SEG is the segmentation as data, and the burned-in overlay is a
+picture of it -- but Sectra files a SEG without drawing it, so for a Sectra
+reader the overlay is the only place the segmentation appears at all.  iNtuition
+draws the SEG and is the reason to write one.  Between them, sending both is
+what gets the segmentation in front of either reader.  By the same arithmetic
+the Structured Report reaches neither: Sectra stores Comprehensive 3D SR without
+displaying it and iNtuition does not list SR at all, so the CSV tables remain
+how a person reads the numbers and the SR is there for whatever reads it next.
+
+Two deviations are kept deliberately, so that a validator's complaints are not a
+surprise.  A single-frame capture carries `TriggerTime`, which is a standard
+attribute but not one the Secondary Capture IOD lists, because it is how
+`cardio` puts the phases of a loop back in order on the way in; that makes the
+instances a standard extended SOP class, which is a thing the standard provides
+for.  And the `dicom-cine-*` objects carry their position and orientation at the
+root of the dataset, where those IODs define nothing, rather than in the
+functional groups that are the place the standard gives them -- `cardio` reads
+them back, and a third-party viewer is entitled to treat such a cine as
+unlocalizable.  Neither applies to the single-frame series,
+where the geometry sits in the Image Plane module the standard defines for it.
 
 ### Running a session again without a browser
 

@@ -8,11 +8,12 @@ rounded them would be worth less than the space it saved.
 
 Which of the two lossless encodings to ask for is a question about the
 receiver rather than about the pixels: they cost within a few percent of each
-other on a capture.  JPEG 2000 is the default because it is the one an
-advanced visualization workstation is likelier to have heard of -- TeraRecon
-iNtuition, for one, lists JPEG 2000 lossless and not JPEG-LS.  JPEG-LS is a
-little smaller and several times faster, and uncompressed is what a receiver
-that reads neither is sent.
+other on a capture.  JPEG 2000 is the default because it is the one the
+receivers accept.  TeraRecon iNtuition lists it in its lossless set; Sectra
+accepts it on the storage service and writes its own media exports in it;
+neither document mentions JPEG-LS at all.  So JPEG-LS is what a local workflow
+uses for being a little smaller and several times faster, and uncompressed is
+what a receiver that reads neither is sent.
 
 JPEG 2000 has a floor the others do not: openjpeg encodes at six resolution
 levels, which a frame smaller than 32 pixels either way cannot be halved into,

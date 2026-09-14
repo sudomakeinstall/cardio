@@ -54,9 +54,11 @@ def stamp(dataset, root: str):
     """Say which implementation wrote the file, rather than which library.
 
     highdicom names itself here, which is true of how the object was built and
-    not of what built it: a receiver asking who sent a file wants the product,
-    and the library already says its own piece in the Contributing Equipment
-    sequence.
+    not of what built it: a receiver asking who sent a file wants the product.
+    Where the library says its own piece in the Contributing Equipment sequence
+    -- which its Secondary Capture, Segmentation and SR constructors do, and
+    the bare ``SOPClass`` the multi-frame writers build on does not -- nothing
+    here disturbs it.
     """
     dataset.file_meta.ImplementationClassUID = implementation_class(root)
     dataset.file_meta.ImplementationVersionName = implementation_version()
