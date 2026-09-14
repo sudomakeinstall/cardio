@@ -582,6 +582,19 @@ def test_a_mosaic_is_written_without_a_position(tmp_path):
     assert dataset.PixelSpacing == [min(VOLUME_SPACING)] * 2
 
 
+def test_a_mosaic_says_nothing_about_a_plane_it_has_no_place_on(tmp_path):
+    """The thickness belongs to the module the position does, so it goes with
+    it: a slab thickness of a cut the instance never locates says nothing a
+    receiver can use, and leaves the module half stated."""
+    writer = SliceWriter(context(tmp_path, "tile"))
+    writer.add(0, Frame(image=rgb_frame().image, plane=mosaic_of(1, 2)))
+    writer.close()
+
+    dataset = written(pl.Path(tmp_path) / "tile")[0]
+
+    assert "SliceThickness" not in dataset
+
+
 def test_a_mosaic_series_is_skipped_rather_than_misread(tmp_path):
     """The omission is the point: nothing may place these pixels in a patient."""
     writer = SliceWriter(context(tmp_path, "tile"))
@@ -1109,6 +1122,15 @@ def test_a_description_longer_than_dicom_carries_is_refused():
         Series(description="x" * (DESCRIPTION_LIMIT + 1))
 
 
+def test_a_series_number_no_instance_can_carry_is_refused():
+    """DICOM numbers a series from one, and the instance constructor refuses a
+    zero -- which would otherwise stop a capture partway through it."""
+    Series(number=1)
+
+    with pytest.raises(pc.ValidationError):
+        Series(number=0)
+
+
 def test_a_viewport_that_does_not_exist_is_refused():
     """A misspelled one would otherwise quietly name nothing."""
     with pytest.raises(pc.ValidationError):
@@ -1396,6 +1418,31 @@ def test_every_required_element_is_present_even_where_it_is_empty(tmp_path, view
         dataset = _rendered_instance(tmp_path / "rendered")
 
     assert [name for name in REQUIRED if name not in dataset] == []
+
+
+def test_the_formats_a_capture_is_sent_in_are_plain_secondary_capture(tmp_path):
+    """The one class both receivers this was checked against read.  Sectra
+    stores the multi-frame classes too; TeraRecon iNtuition lists only this one
+    among the classes it stores without being configured to, so an export that
+    has to arrive at both is written single-frame."""
+    cut = write_slices(tmp_path / "cut", frames=1)[0]
+    picture = _rendered_instance(tmp_path / "picture")
+
+    assert cut.SOPClassUID == pd.uid.SecondaryCaptureImageStorage
+    assert picture.SOPClassUID == pd.uid.SecondaryCaptureImageStorage
+
+
+def test_a_rendered_cine_says_how_its_values_are_to_be_presented(tmp_path):
+    """Required of the multi-frame classes where it is merely allowed of the
+    single-frame one, so the cine the one receiver that reads it gets is whole.
+    """
+    writer = writer_for("dicom-cine-rendered", context(tmp_path, "vr"))
+    writer.add(0, rgb_frame(rows=7, columns=9))
+    writer.close()
+
+    dataset = written(pl.Path(tmp_path) / "vr")[0]
+
+    assert dataset.PresentationLUTShape == "IDENTITY"
 
 
 def test_a_reformat_keeps_the_frame_of_reference_it_was_cut_from(tmp_path):

@@ -36,7 +36,7 @@ class Series(pc.BaseModel):
 
     number: int = pc.Field(
         default=1,
-        ge=0,
+        ge=1,
         le=99999,
         description="SeriesNumber this viewport's capture is written with.",
     )

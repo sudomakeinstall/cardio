@@ -276,7 +276,10 @@ class SliceWriter(SeriesWriter):
         dataset.WindowWidth = values.decimal(max(float(self.context.window), 1.0))
         dataset.WindowCenter = values.decimal(self.context.level)
 
-        dataset.SliceThickness = values.decimal(plane.thickness)
+        # Only alongside the rest of the Image Plane module: on its own it is
+        # a thickness of a plane the instance never says the place of.
+        if localizable:
+            dataset.SliceThickness = values.decimal(plane.thickness)
         _locate(dataset, plane, self.context.identity.frame_of_reference)
 
         self.save(dataset, index)
@@ -304,6 +307,17 @@ class MultiFrameWriter(SeriesWriter):
     The pixels are encoded once over the whole stack rather than frame by
     frame, so every frame is on the same scale and one rescale describes all
     of them -- which a multi-frame object, carrying one, requires.
+
+    Written for a receiver that asks for it rather than by default.  Two things
+    make the single-frame series the one to send: Sectra reads both, but
+    TeraRecon iNtuition lists only plain Secondary Capture among the classes it
+    stores without being configured to; and these classes have no Image Plane
+    module, so the position and orientation ``locate`` writes sit at the root
+    of the dataset, where the standard puts nothing for them.  A viewer is
+    entitled to ignore them and will.  ``cardio`` reads them back, which is
+    what they are there for.  Saying it properly means functional groups --
+    Pixel Measures, Plane Position, Plane Orientation -- which nothing here
+    builds.
     """
 
     sop_class_uid: str = ""
@@ -448,6 +462,7 @@ class MultiFrameRenderedWriter(MultiFrameWriter):
         dataset.HighBit = 7
         dataset.PixelRepresentation = 0
         dataset.Rows, dataset.Columns = stack.shape[1:3]
+        dataset.PresentationLUTShape = "IDENTITY"
         dataset.PatientOrientation = []
         dataset.PixelData = _even(np.ascontiguousarray(stack).tobytes())
 
