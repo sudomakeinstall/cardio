@@ -342,6 +342,31 @@ def test_a_cropped_cut_says_where_its_own_first_pixel_is():
     assert np.allclose(plane.location.position, corner, atol=row_spacing)
 
 
+def test_a_cut_asked_for_on_a_grid_lands_on_that_grid():
+    """The rectangle cut into exactly the pixels it is drawn on, sampled at
+    their centres, which is where the screen's pixels are and where DICOM says
+    a pixel is."""
+    rectangle = ((-4.0, 6.0), (-3.0, 9.0))
+
+    square = square_pixels(posed_reslice(phantom()), rectangle, (50, 24))
+    image = square.GetOutput()
+
+    assert image.GetDimensions()[:2] == (50, 24)
+    assert image.GetSpacing()[0] == pytest.approx(10.0 / 50)
+    assert image.GetOrigin()[0] == pytest.approx(-4.0 + (10.0 / 50) / 2.0)
+    assert image.GetOrigin()[1] == pytest.approx(-3.0 + (10.0 / 50) / 2.0)
+
+
+def test_a_cut_on_a_grid_is_no_thinner_than_the_volume_it_is_cut_from():
+    """A finer grid asks for the cut at more places, not from a thinner study."""
+    rectangle = ((-4.0, 6.0), (-3.0, 9.0))
+
+    plane = plane_from_reslice(posed_reslice(phantom()), rectangle, (50, 24))
+
+    assert plane.pixel_spacing[0] < min(VOLUME_SPACING)
+    assert plane.thickness == min(VOLUME_SPACING)
+
+
 def test_a_capture_does_not_resample_the_view_it_was_taken_of():
     """The person posed the views; a capture is not a reason to redraw them."""
     reslice = posed_reslice(phantom())
@@ -530,6 +555,31 @@ def test_a_mosaic_tile_holds_what_a_tile_of_the_grid_was_showing():
     tile_columns = columns // 2
     assert 16.0 <= (tile_columns - 1) * spacing < 16.0 + spacing
     assert 10.0 <= (rows - 1) * spacing < 10.0 + spacing
+
+
+def test_a_mosaic_tile_is_sampled_on_the_pixels_the_grid_gives_it():
+    """Each tile filling the pixels the screen draws it on, so the mosaic is
+    the grid as shown and the band stamped under it reads the same way."""
+    rectangle = ((-8.0, 8.0), (-5.0, 5.0))
+
+    plane = compose(
+        phantom(), poses(2), VIEW_TRANSFORMS["ul"], 1, 2, rectangle, (64, 40)
+    )
+
+    assert plane.scalars.shape == (40, 2 * 64)
+    assert plane.pixel_spacing == (16.0 / 64, 16.0 / 64)
+
+
+def test_a_mosaic_says_how_thick_its_tiles_are_however_finely_it_samples_them():
+    """The tiles are asked for at more places, not cut from a thinner study."""
+    rectangle = ((-8.0, 8.0), (-5.0, 5.0))
+
+    plane = compose(
+        phantom(), poses(2), VIEW_TRANSFORMS["ul"], 1, 2, rectangle, (64, 40)
+    )
+
+    assert plane.pixel_spacing[0] < min(VOLUME_SPACING)
+    assert plane.thickness == min(VOLUME_SPACING)
 
 
 def test_a_grid_that_is_showing_nothing_yet_holds_its_cuts_whole():
@@ -814,23 +864,40 @@ def test_a_data_capture_is_framed_like_the_picture_beside_it(tmp_path):
     (low_x, high_x), (low_y, high_y) = visible_rectangle(views.renderer("ul"))
     rows, columns = plane.scalars.shape
     row_spacing, column_spacing = plane.pixel_spacing
-    assert (columns - 1) * column_spacing == pytest.approx(
-        high_x - low_x, abs=column_spacing
-    )
-    assert (rows - 1) * row_spacing == pytest.approx(high_y - low_y, abs=row_spacing)
+    assert columns * column_spacing == pytest.approx(high_x - low_x)
+    assert rows * row_spacing == pytest.approx(high_y - low_y)
 
 
-def test_zooming_a_view_crops_the_capture_taken_of_it(tmp_path):
+def test_a_data_capture_is_sampled_like_the_picture_beside_it(tmp_path):
+    """Pixel for pixel the same frame, which is what makes the banner readable.
+
+    A cut written at the volume's own sampling is a few hundred pixels across,
+    and a band stamped in proportion to it is a few pixels tall -- crisp in the
+    file, and unreadable once a viewer has magnified the image to fill a
+    screen.  On the view's own grid the band is the size it is in the picture.
+    """
+    _server, scene, logic = built(tmp_path, "ul")
+    views = sized_views(scene, size=192)
+
+    plane = logic.capture.plane_for("ul", 0)
+
+    assert plane.scalars.shape == (192, 192)
+
+
+def test_zooming_a_view_samples_the_capture_more_finely(tmp_path):
     """The zoom is how a person says what they want to see, and a capture of
-    the whole reformat is not what they asked for."""
+    the whole reformat is not what they asked for.  The view keeps its pixels
+    and spends them on less of the cut, which is what zooming in is."""
     _server, scene, logic = built(tmp_path, "ul")
     views = sized_views(scene)
-    before = logic.capture.plane_for("ul", 0).scalars.shape
+    before = logic.capture.plane_for("ul", 0)
 
     views.zoom(2.0)
-    after = logic.capture.plane_for("ul", 0).scalars.shape
+    after = logic.capture.plane_for("ul", 0)
 
-    assert after[0] < before[0] and after[1] < before[1]
+    assert after.scalars.shape == before.scalars.shape
+    assert after.pixel_spacing[0] == pytest.approx(before.pixel_spacing[0] / 2.0)
+    assert after.pixel_spacing[1] == pytest.approx(before.pixel_spacing[1] / 2.0)
 
 
 def test_a_view_that_has_never_been_sized_is_captured_whole(tmp_path):

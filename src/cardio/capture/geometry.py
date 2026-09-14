@@ -46,7 +46,7 @@ def _last_index(low: float, high: float, spacing: float) -> int:
     return max(0, math.ceil((high - low) / spacing))
 
 
-def square_pixels(reslice, rectangle=None) -> vtk.vtkImageReslice:
+def square_pixels(reslice, rectangle=None, shape=None) -> vtk.vtkImageReslice:
     """The same cut again, resampled onto square pixels, cropped to what is shown.
 
     An autocropped oblique cut comes out with a spacing of its own on each
@@ -54,36 +54,61 @@ def square_pixels(reslice, rectangle=None) -> vtk.vtkImageReslice:
     1.66mm pixels.  ``PixelSpacing`` says so, but a Secondary Capture carries
     no Image Plane module for a viewer to expect one in, and a viewer that
     draws the pixels square draws the anatomy squashed.  So the capture is
-    written square, at the finest spacing the volume itself holds, which is
-    what the mosaic already resamples its tiles onto.
+    written square.
 
     ``rectangle`` is the part of the cut to keep, in the cut's own coordinates
     -- what the view is showing, so that the data and the picture taken of the
     same view are framed alike.  Without one the cut is written whole, which is
     what the autocrop gives.
 
+    ``shape`` is how many pixels the view draws that rectangle on, and asks for
+    the cut on the view's own grid: the same rectangle cut into the same number
+    of pixels is the same frame as the picture, pixel for pixel.  What that
+    buys is a banner.  It is stamped in proportion to the image it is stamped
+    on, so a cut written at the volume's own sampling carries a band a few
+    pixels tall -- crisp in the file and unreadable on a screen, which magnifies
+    a small image to fill itself.  On the view's grid the band is the size it is
+    in the picture, and reads the same way.
+
+    The samples sit at pixel centres rather than on the rectangle's edges, which
+    is where DICOM says a pixel is and where the view's own pixels are.  The
+    slab stays as thick as the volume's finest sampling however fine the grid
+    gets: the cut is being asked for at more places, not from a thinner study.
+
+    Without a shape the cut is sampled at the volume's finest spacing, which is
+    what the mosaic already resamples its tiles onto.
+
     A pipeline of its own rather than a change to the one on screen: the views
     a person posed are not resampled because a capture was taken of them.
     """
     image_data = reslice.GetInput()
-    spacing = min(image_data.GetSpacing())
+    thickness = min(image_data.GetSpacing())
 
     square = configure_reslice(image_data, "linear", reslice.GetBackgroundLevel())
     square.SetResliceAxes(reslice.GetResliceAxes())
-    square.SetOutputSpacing(spacing, spacing, spacing)
 
-    if rectangle is not None:
-        (low_x, high_x), (low_y, high_y) = rectangle
-        square.AutoCropOutputOff()
-        square.SetOutputOrigin(low_x, low_y, 0.0)
-        square.SetOutputExtent(
-            0,
-            _last_index(low_x, high_x, spacing),
-            0,
-            _last_index(low_y, high_y, spacing),
-            0,
-            0,
-        )
+    if rectangle is None:
+        square.SetOutputSpacing(thickness, thickness, thickness)
+        square.Update()
+        return square
+
+    (low_x, high_x), (low_y, high_y) = rectangle
+    square.AutoCropOutputOff()
+
+    if shape is None:
+        spacing = thickness
+        last_column = _last_index(low_x, high_x, spacing)
+        last_row = _last_index(low_y, high_y, spacing)
+        origin = (low_x, low_y)
+    else:
+        columns, rows = shape
+        spacing = (high_x - low_x) / columns
+        last_column, last_row = columns - 1, rows - 1
+        origin = (low_x + spacing / 2.0, low_y + spacing / 2.0)
+
+    square.SetOutputSpacing(spacing, spacing, thickness)
+    square.SetOutputOrigin(origin[0], origin[1], 0.0)
+    square.SetOutputExtent(0, last_column, 0, last_row, 0, 0)
 
     square.Update()
     return square
@@ -109,7 +134,7 @@ def location_of(image, axes: np.ndarray) -> Location:
     )
 
 
-def plane_from_reslice(reslice, rectangle=None) -> Plane:
+def plane_from_reslice(reslice, rectangle=None, shape=None) -> Plane:
     """One reslice's output as pixels, plus where they sit in the patient.
 
     Flipped to put the top of the view first, which is the row a viewer draws
@@ -117,10 +142,11 @@ def plane_from_reslice(reslice, rectangle=None) -> Plane:
     beside the rendered capture of the same view.  What that costs is a column
     direction running the other way, which ``location_of`` says.
 
-    ``rectangle`` is passed on to ``square_pixels``, which is what crops the
-    cut to the part of it the view is showing.
+    ``rectangle`` and ``shape`` are passed on to ``square_pixels``, which is
+    what crops the cut to the part of it the view is showing and puts it on the
+    grid the view shows it on.
     """
-    square = square_pixels(reslice, rectangle)
+    square = square_pixels(reslice, rectangle, shape)
     image = square.GetOutput()
     spacing = image.GetSpacing()
 

@@ -10,7 +10,7 @@ from .. import registry
 
 # Internal
 from ..action import action, background
-from ..camera import visible_rectangle
+from ..camera import visible_pixels, visible_rectangle
 from ..capture import (
     CaptureFormat,
     Context,
@@ -236,22 +236,25 @@ class CaptureController(Controller):
     def _mpr_plane(self, viewport: str, volume, frame: int):
         """One MPR view's cut, as the view itself is posed and framed for it."""
         reslices = volume.get_mpr_actors_for_frame(frame)
-        return plane_from_reslice(
-            reslices[viewport]["reslice"], self._shown_rectangle(viewport)
-        )
+        rectangle, shape = self._shown_grid(viewport)
+        return plane_from_reslice(reslices[viewport]["reslice"], rectangle, shape)
 
-    def _shown_rectangle(self, viewport: str):
-        """The part of the cut ``viewport`` is showing, or None for all of it.
+    def _shown_grid(self, viewport: str):
+        """The pixels ``viewport`` is showing its cut on: the rectangle and the
+        shape, or a pair of Nones for a view that has shown nothing yet.
 
         A data capture is cropped to what the picture taken beside it shows, so
-        that a view zoomed onto the chambers does not export the whole reformat.
-        A view whose window has never been sized has shown nothing to match, and
-        is written whole.
+        that a view zoomed onto the chambers does not export the whole reformat,
+        and resampled onto the pixels it is shown on, so the two are the same
+        frame and anything stamped on them reads the same way.  A view whose
+        window has never been sized has shown nothing to match, and is written
+        whole at the volume's own sampling.
         """
         views = self.scene.mpr_views
         if views is None:
-            return None
-        return visible_rectangle(views.renderer(viewport))
+            return None, None
+        renderer = views.renderer(viewport)
+        return visible_rectangle(renderer), visible_pixels(renderer)
 
     def _mosaic_plane(self, viewport: str, volume, frame: int):
         """The tile grid's cuts, composed into one image."""
@@ -266,6 +269,7 @@ class CaptureController(Controller):
             views.rows,
             views.cols,
             views.shown_rectangle(),
+            views.shown_pixels(),
         )
 
     @property

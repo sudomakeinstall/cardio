@@ -71,27 +71,42 @@ def tile_shape(reslices, spacing: float) -> tuple[int, int]:
     return 2 * half_rows + 1, 2 * half_columns + 1
 
 
-def tile_grid(reslices, spacing: float, rectangle):
-    """The pixels one tile is drawn on: its shape, and where its corner sits.
+def tile_grid(reslices, spacing: float, rectangle, shape=None):
+    """A tile's own pixels: how many, how far apart, and where the first sits.
 
     ``rectangle`` is what a tile of the grid is showing of its own cut, which
     every tile shows of its own -- they share one scale and split the window
     evenly -- so the mosaic is framed like the grid it was taken of.  Without
     one, which is a grid whose window has never been sized, the tiles are cut
     to hold the largest of them whole.
+
+    ``shape`` is how many pixels a tile is drawn on, and puts each tile on the
+    pixels the screen gives it, so that the mosaic is the grid as shown rather
+    than a smaller picture of it -- and the banner stamped under it reads.  The
+    samples then sit at pixel centres, which is where the screen's are.
     """
     if rectangle is None:
         rows, columns = tile_shape(reslices, spacing)
-        return rows, columns, (-(columns // 2) * spacing, -(rows // 2) * spacing)
+        return (
+            rows,
+            columns,
+            spacing,
+            (-(columns // 2) * spacing, -(rows // 2) * spacing),
+        )
 
     (low_x, high_x), (low_y, high_y) = rectangle
-    columns = math.ceil((high_x - low_x) / spacing) + 1
-    rows = math.ceil((high_y - low_y) / spacing) + 1
-    return rows, columns, (low_x, low_y)
+    if shape is None:
+        columns = math.ceil((high_x - low_x) / spacing) + 1
+        rows = math.ceil((high_y - low_y) / spacing) + 1
+        return rows, columns, spacing, (low_x, low_y)
+
+    columns, rows = shape
+    spacing = (high_x - low_x) / columns
+    return rows, columns, spacing, (low_x + spacing / 2.0, low_y + spacing / 2.0)
 
 
 def compose(
-    image_data, poses, transform, rows: int, columns: int, rectangle=None
+    image_data, poses, transform, rows: int, columns: int, rectangle=None, shape=None
 ) -> Plane:
     """One frame's tiles, resampled onto a shared grid and laid out row-major.
 
@@ -100,17 +115,20 @@ def compose(
     the thing that was on screen.  Each tile is flipped to put its top row
     first, which is where a DICOM viewer draws row zero.
 
-    ``rectangle`` is how much of its cut a tile is showing, which is what each
-    tile of the mosaic is cut to; see ``tile_grid``.
+    ``rectangle`` is how much of its cut a tile is showing and ``shape`` how
+    many pixels it is shown on, which together are what each tile of the mosaic
+    is cut to; see ``tile_grid``.
     """
     reslices = [_posed(image_data, pose, transform) for pose in poses]
-    spacing = float(min(image_data.GetSpacing()))
-    tile_rows, tile_columns, (low_x, low_y) = tile_grid(reslices, spacing, rectangle)
+    thickness = float(min(image_data.GetSpacing()))
+    tile_rows, tile_columns, spacing, (low_x, low_y) = tile_grid(
+        reslices, thickness, rectangle, shape
+    )
 
     tiles = []
     for reslice in reslices:
         reslice.AutoCropOutputOff()
-        reslice.SetOutputSpacing(spacing, spacing, spacing)
+        reslice.SetOutputSpacing(spacing, spacing, thickness)
         reslice.SetOutputOrigin(low_x, low_y, 0.0)
         reslice.SetOutputExtent(0, tile_columns - 1, 0, tile_rows - 1, 0, 0)
         reslice.Update()
@@ -133,6 +151,6 @@ def compose(
     return Plane(
         scalars=array,
         pixel_spacing=(spacing, spacing),
-        thickness=spacing,
+        thickness=thickness,
         location=None,
     )

@@ -10,7 +10,12 @@ window means the shape is ours to change -- add renderers, recompute rectangles
 import vtk
 
 # Internal
-from .camera import fit_about_origin, visible_rectangle, world_per_pixel
+from .camera import (
+    fit_about_origin,
+    visible_pixels,
+    visible_rectangle,
+    world_per_pixel,
+)
 from .reslice import TileSet
 
 # Six each way is already 36 reslices per frame per object; past that the tiles
@@ -143,6 +148,17 @@ class TileViews:
         if not self._renderers:
             return None
         return visible_rectangle(self._renderers[0])
+
+    def shown_pixels(self):
+        """How many pixels one tile is drawn on, as ``(columns, rows)``.
+
+        One tile rather than the whole grid, because a tile is what a cut is
+        resampled to fill: the mosaic is that many pixels again in each
+        direction.  None before the window has been sized.
+        """
+        if not self._renderers:
+            return None
+        return visible_pixels(self._renderers[0])
 
     def reset_cameras(self):
         """Refit the tiles, then put them all on one scale.

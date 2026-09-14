@@ -169,6 +169,23 @@ def visible_rectangle(renderer):
     return (low[0], high[0]), (low[1], high[1])
 
 
+def visible_pixels(renderer):
+    """How many pixels the viewport draws that rectangle on.
+
+    ``(columns, rows)``, and None when the viewport has never been sized, so
+    that it is absent exactly when ``visible_rectangle`` is: the two describe
+    one grid, and a capture wants both or neither.
+
+    What it is for: a cut resampled onto this many pixels of that rectangle is
+    the same frame as the picture taken beside it, pixel for pixel, so anything
+    drawn at a readable size in the one is readable in the other.
+    """
+    width, height = renderer.GetSize()
+    if not (width and height):
+        return None
+    return int(width), int(height)
+
+
 def fit_factor(
     half_extent: tuple[float, float],
     size: tuple[int, int],

@@ -215,11 +215,27 @@ $ cardio --capture-format mp4 --screenshot-viewports '["vr"]'
 | `dicom-cine-data` | `<viewport>/0000.dcm` | The pixels behind it, as one multi-frame object |
 
 `dicom-data` is the one that keeps the measurements.  For the MPR views it
-writes the resliced plane itself: the original values, so a viewer reads the
-same numbers the volume holds, with the window and level as `WindowWidth` and
-`WindowCenter` tags rather than applied to the pixels, and the true
-`ImageOrientationPatient`, `ImagePositionPatient` and `PixelSpacing` of the cut.
-Such a series reads straight back into `cardio`.
+writes the resliced plane itself: the volume's own values, so a viewer reads
+the numbers the study holds rather than a picture of them, with the window and
+level as `WindowWidth` and `WindowCenter` tags rather than applied to the
+pixels, and the true `ImageOrientationPatient`, `ImagePositionPatient` and
+`PixelSpacing` of the cut.  Such a series reads straight back into `cardio`.
+
+Those values are sampled onto the grid the view draws the cut on, not onto the
+volume's own: the same rectangle cut into the same number of pixels the picture
+beside it has, so the two are one frame twice over.  They are linear
+interpolations of the volume, which the reslice behind the view already was --
+an oblique cut lands between samples whatever the sampling -- so what changes
+with the grid is how many places the cut is asked for, not what it is cut from.
+`SliceThickness` says so: it stays the volume's own sampling however fine the
+pixels get.
+
+Matching the picture is what makes the banner legible.  It is stamped in
+proportion to the image it is stamped on, so a cut written at the volume's
+sampling carries a band a few pixels tall -- crisp in the file, and unreadable
+once a viewer has magnified a few hundred pixels to fill a screen.  A view that
+has never been sized has no grid to match and is written whole at the volume's
+sampling, which is the only case left where the two differ.
 
 What it does not carry is anything drawn on top -- crosshairs, segmentation
 overlays, the transfer function -- because none of those are pixel values.
