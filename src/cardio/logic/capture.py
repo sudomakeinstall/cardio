@@ -313,22 +313,15 @@ class CaptureController(Controller):
     def refusal(self, identity) -> str:
         """Why this capture must not be written, or nothing.
 
-        Only what would be unsafe to send, and only where a deployment has
-        said it is sending: incompleteness is reported and written anyway,
-        because whether a field is needed depends on where it is going.
-
-        The patient and study can no longer disagree with each other -- an
-        identity is taken from a source whole or not at all -- so what is left
-        is the one claim a file makes that nobody downstream can check.
+        Only what would be unsafe to send; incompleteness is reported and
+        written anyway, because whether a field is needed depends on where it
+        is going.  What is left is what nobody downstream can check, and a
+        deployment says once that it is not sending anything rather than
+        saying every time that it is.
         """
-        if not self.scene.production:
+        if self.scene.research:
             return ""
-        if uid.is_registered(self.scene.uid_root):
-            return ""
-        return (
-            "Refused: production captures cannot be written under "
-            f"{self.scene.uid_root}, which is not this deployment's root"
-        )
+        return preflight.refused(identity.reference, self.scene.uid_root)
 
     def missing_fields(self, identity) -> list:
         """Say what the capture is going out without, and hand it back."""
@@ -383,6 +376,9 @@ class CaptureController(Controller):
         }
         absent = []
         if writes_series(fmt):
+            # What is missing is said before the capture is refused for it, so
+            # a refusal arrives with the reasons behind it already in the log.
+            absent = self.missing_fields(identity)
             refused = self.refusal(identity)
             if refused:
                 # Before any writer and any frame: a refused capture should not
@@ -390,7 +386,6 @@ class CaptureController(Controller):
                 self.report(refused, False)
                 return
             self.report_series(windows)
-            absent = self.missing_fields(identity)
 
         writers = {
             name: writer_for(fmt, self._context(directory, name, identity))

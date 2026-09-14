@@ -22,8 +22,9 @@ import logging
 import pydicom as pd
 
 # Internal
+from .. import dicom
 from ..action import action
-from ..capture import Context, WindowFrames, seg, sr, wants_alpha, writer_for
+from ..capture import Context, WindowFrames, preflight, seg, sr, wants_alpha, writer_for
 from ..volumetry import (
     STRUCTURES,
     Result,
@@ -411,6 +412,11 @@ class VolumetryController(Controller):
         the images it segments and a report names the images it is evidence
         about, and a volume read from a file gives neither anything to name --
         so a research session gets its tables and is told why that is all.
+
+        Refused on the same terms a capture is, and for the same reason: a
+        report says whose measurements these are, and one that says it under a
+        patient nobody checked is worse than no report.  The tables are written
+        either way; they are nobody's to mistake for an archive object.
         """
         volume = self._active_volume()
         source = volume.source if volume is not None else None
@@ -420,6 +426,14 @@ class VolumetryController(Controller):
                 "nothing for a segmentation or a report to name; tables only."
             )
             return 0
+
+        if not self.scene.research:
+            refused = preflight.refused(
+                dicom.read_dataset(source.instances[0]), self.scene.uid_root
+            )
+            if refused:
+                logger.warning(f"{refused}. The tables were written.")
+                return 0
 
         segmentation = self.segmentation()
         groups = [measurement.group for measurement in result.measurements]

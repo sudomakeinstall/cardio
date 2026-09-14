@@ -241,8 +241,13 @@ def test_a_research_save_writes_the_tables_and_says_why_that_is_all(tmp_path):
     assert "DICOM" not in logic.volumetry.server.state.volumetry_summary
 
 
-def dicom_backed_app(tmp_path, **volumetry_overrides):
-    """An app whose volume came from DICOM and whose labels are on its grid."""
+def dicom_backed_app(tmp_path, research: bool = True, **volumetry_overrides):
+    """An app whose volume came from DICOM and whose labels are on its grid.
+
+    A research session unless a test says otherwise: the phantom is written
+    under pydicom's root, which a deployment that has not said it is research
+    refuses to write a report under.
+    """
     from cardio.scene import Scene
     from cardio.volumetry import Volumetry
     from tests.test_app_smoke import build_app, connect
@@ -254,6 +259,7 @@ def dicom_backed_app(tmp_path, **volumetry_overrides):
         segmentations=[{"label": "seg", "directory": tmp_path / "labels"}],
         serialization_directory=tmp_path / "out",
         active_volume_label="vol",
+        research=research,
         volumetry=Volumetry(
             segmentation_label="seg", groups=groups(), **volumetry_overrides
         ),
@@ -276,6 +282,20 @@ def test_a_dicom_backed_save_writes_the_segmentation_and_the_report(tmp_path):
     assert len(instances) == PHASES
     assert (directory / "measurements.dcm").exists()
     assert "DICOM instance(s)" in logic.volumetry.server.state.volumetry_summary
+
+
+def test_a_save_under_a_borrowed_root_writes_the_tables_and_not_the_report(tmp_path):
+    """The tables are nobody's to mistake for an archive object; the report is."""
+    _server, scene, logic = dicom_backed_app(tmp_path, research=False)
+
+    logic.volumetry.save_volumetry()
+
+    directory = max(scene.volumetry_directory.iterdir())
+
+    assert (directory / "timeseries.csv").exists()
+    assert not (directory / "measurements.dcm").exists()
+    assert not (directory / "segmentation").exists()
+    assert "DICOM" not in logic.volumetry.server.state.volumetry_summary
 
 
 def test_the_written_report_points_at_the_written_segmentation(tmp_path):

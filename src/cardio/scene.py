@@ -236,22 +236,23 @@ class Scene(ps.BaseSettings):
             '--capture_series.axial.description "Cine SAX"'
         ),
     )
-    production: bool = pc.Field(
+    research: bool = pc.Field(
         default=False,
         description=(
-            "Whether captures are destined for a real archive. Set, a capture "
-            "is refused rather than written when something about it would be "
-            "unsafe to send -- today, a UID root the deployment has not "
-            "registered. CLI usage: --production"
+            "Whether this deployment is sending nothing anywhere. Set, a DICOM "
+            "capture is written with warnings even where something about it "
+            "would be unsafe to send -- an invented patient and study, or a "
+            "UID root the deployment has not registered. Unset, which is the "
+            "default, such a capture is refused. CLI usage: --research"
         ),
     )
     uid_root: str = pc.Field(
         default=DEFAULT_UID_ROOT,
         description=(
             "The registered root every UID a capture writes is generated "
-            "under. The default is pydicom's own, which is fine for research "
-            "files and must not be used for anything sent to an archive. "
-            "CLI usage: --uid-root 1.2.840.99999"
+            "under. The default is pydicom's own, which is nobody else's to "
+            "assert: a DICOM capture under it is refused unless research is "
+            "set. CLI usage: --uid-root 1.2.840.99999"
         ),
     )
     capture_equipment: Equipment = pc.Field(

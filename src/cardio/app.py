@@ -26,7 +26,7 @@ def scene_from_command_line(cli) -> Scene:
         config_file=getattr(args, "cfg_file", None), cli_source=cli_source
     )
     # Said once, where a session begins, rather than once per written file.
-    uid.warn_if_unregistered(scene.uid_root)
+    uid.warn_if_unregistered(scene.uid_root, scene.research)
     return scene
 
 

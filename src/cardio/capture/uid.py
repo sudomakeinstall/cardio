@@ -67,15 +67,26 @@ def is_registered(root: str) -> bool:
     return _prefix(root) != _prefix(DEFAULT_ROOT)
 
 
-def warn_if_unregistered(root: str) -> bool:
-    """Say so when instances are about to be written under a borrowed root."""
+def warn_if_unregistered(root: str, research: bool = False) -> bool:
+    """Say so at startup, rather than at the capture that gets refused for it.
+
+    A borrowed root stops a DICOM capture unless the session has said it is a
+    research one, so what the session is about to be able to do is worth
+    knowing before somebody spends a cardiac cycle finding out.
+    """
     if is_registered(root):
         return False
 
+    remedy = (
+        "set uid_root to the organisation's own"
+        if research
+        else "DICOM captures are refused until uid_root names the "
+        "organisation's own root, or research says this deployment sends "
+        "nothing anywhere"
+    )
     logger.warning(
-        f"DICOM is being written under {root}, which is pydicom's registered "
-        "root rather than this deployment's. Files written with it must not be "
-        "sent to a production archive; set uid_root to the organisation's own."
+        f"{root} is pydicom's registered root rather than this deployment's, "
+        f"and files written under it must not be sent to an archive: {remedy}."
     )
     return True
 

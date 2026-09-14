@@ -674,7 +674,13 @@ def running(scene, layout: str):
 
 
 def built(tmp_path, layout: str = "", **overrides):
-    """A whole app, the way the smoke tests build one, in a chosen layout."""
+    """A whole app, the way the smoke tests build one, in a chosen layout.
+
+    A research session unless a test says otherwise: the phantom is written
+    under pydicom's root, which is exactly what a deployment that has not said
+    it is research refuses to write DICOM under.
+    """
+    overrides.setdefault("research", True)
     return running(
         build_scene(
             tmp_path,
@@ -1045,6 +1051,7 @@ def test_what_the_drawer_holds_is_the_banner_that_is_written(tmp_path):
 
 def cine_app(tmp_path, frames: int = 3, **overrides):
     """An app whose volume has several frames, so the cine has somewhere to go."""
+    overrides.setdefault("research", True)
     for index in range(frames):
         array = np.zeros((8, 8, 8), dtype=np.float32)
         array[index : index + 2, 1:4, 1:4] = 1.0
@@ -1275,6 +1282,7 @@ def test_a_capture_without_a_dicom_source_stands_alone_whole(tmp_path):
 
 def dicom_cine_app(tmp_path, **overrides):
     """An app whose volume was read from DICOM, so a capture has a study to join."""
+    overrides.setdefault("research", True)
     source = tmp_path / "source"
     write_cine_series(source, slices=3, phases=2)
 
@@ -1417,7 +1425,19 @@ def test_the_default_root_says_it_is_not_the_deployment_s(caplog):
     with caplog.at_level(logging.WARNING):
         assert uid.warn_if_unregistered(uid.DEFAULT_ROOT)
 
-    assert "must not be sent to a production archive" in caplog.text
+    assert "must not be sent to an archive" in caplog.text
+
+
+def test_the_startup_warning_says_what_it_costs_a_capture(caplog):
+    """A deployment learns its captures are refused before it makes one."""
+    with caplog.at_level(logging.WARNING):
+        uid.warn_if_unregistered(uid.DEFAULT_ROOT)
+    assert "DICOM captures are refused" in caplog.text
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        uid.warn_if_unregistered(uid.DEFAULT_ROOT, research=True)
+    assert "DICOM captures are refused" not in caplog.text
 
 
 def test_a_registered_root_is_not_warned_about(caplog):
@@ -1480,6 +1500,66 @@ def test_the_warning_names_the_fields_and_says_why(caplog):
     assert "routing rules key off it" in caplog.text
 
 
+def test_the_required_fields_are_the_ones_nobody_downstream_can_check():
+    """Everything else is a receiver's preference, so it warns rather than stops."""
+    required = {field.name for field in preflight.REQUIRED}
+
+    assert required == {"PatientID", "PatientName", "StudyInstanceUID"}
+    assert not required & {field.name for field in preflight.ADVISORY}
+
+
+def identified(**fields) -> pd.dataset.Dataset:
+    """A source carrying the identity a capture may not be written without."""
+    return sparse_source(
+        PatientID="X", PatientName="Y^Z", StudyInstanceUID="1.2.3", **fields
+    )
+
+
+def test_an_identified_source_under_a_registered_root_stops_nothing():
+    assert preflight.blocking(identified(), REGISTERED_ROOT) == []
+    assert preflight.refused(identified(), REGISTERED_ROOT) == ""
+
+
+def test_an_advisory_field_alone_stops_nothing():
+    """It is missing, and missing is the caller's to accept."""
+    source = identified()
+
+    assert preflight.missing(source, Equipment())
+    assert preflight.blocking(source, REGISTERED_ROOT) == []
+
+
+def test_a_borrowed_root_stops_a_capture_on_its_own():
+    stopping = preflight.blocking(identified(), uid.DEFAULT_ROOT)
+
+    assert stopping == [preflight.UNREGISTERED_ROOT]
+    assert "not this deployment's registered root" in preflight.refused(
+        identified(), uid.DEFAULT_ROOT
+    )
+
+
+def test_a_volume_read_from_a_file_stops_a_capture():
+    stopping = {field.name for field in preflight.blocking(None, REGISTERED_ROOT)}
+
+    assert stopping == {"PatientID", "PatientName", "StudyInstanceUID"}
+
+
+def test_the_refusal_names_the_fields_and_the_way_out():
+    message = preflight.refused(sparse_source(PatientID="X"), REGISTERED_ROOT)
+
+    assert "PatientName" in message
+    assert "StudyInstanceUID" in message
+    assert "PatientID" not in message
+    assert "set research to write it anyway" in message
+
+
+def test_a_refusal_says_both_of_its_causes_at_once():
+    """Fixing one and being refused again for the other is a bad afternoon."""
+    message = preflight.refused(None, uid.DEFAULT_ROOT)
+
+    assert "the source carries no" in message
+    assert "not this deployment's registered root" in message
+
+
 def test_a_research_capture_is_written_anyway_and_says_what_is_missing(tmp_path):
     """Whether a field is needed depends on where it is going, which is not ours."""
     _server, _scene, logic = built(tmp_path, "axial", capture_format="dicom-data")
@@ -1493,26 +1573,54 @@ def test_a_research_capture_is_written_anyway_and_says_what_is_missing(tmp_path)
     assert captured_series(tmp_path)
 
 
-def test_a_production_capture_under_a_borrowed_root_is_refused(tmp_path):
+def test_a_capture_under_a_borrowed_root_is_refused_by_default(tmp_path):
+    """The point of the default: nobody had to remember to ask for this."""
     _server, _scene, logic = built(
-        tmp_path, "axial", capture_format="dicom-data", production=True
+        tmp_path, "axial", capture_format="dicom-data", research=False
     )
 
     capture(logic)
 
     state = logic.capture.server.state
     assert not state.capture_ok
-    assert "not this deployment's root" in state.capture_summary
+    assert "not this deployment's registered root" in state.capture_summary
     assert not (tmp_path / "out" / "screenshots").exists()
 
 
-def test_a_production_capture_under_a_registered_root_is_written(tmp_path):
+def test_an_identified_capture_under_a_registered_root_is_written(tmp_path):
+    """Nothing is being taken on trust here, so nothing has to be waived."""
+    _server, _scene, logic = dicom_cine_app(
+        tmp_path, research=False, uid_root=REGISTERED_ROOT
+    )
+    tick(_server, "axial")
+
+    capture(logic)
+
+    assert logic.capture.server.state.capture_ok
+    assert captured(logic)
+
+
+def test_a_volume_read_from_a_file_is_refused_by_default(tmp_path):
+    """Its patient and study would be ones this app made up."""
     _server, _scene, logic = built(
         tmp_path,
         "axial",
         capture_format="dicom-data",
-        production=True,
+        research=False,
         uid_root=REGISTERED_ROOT,
+    )
+
+    capture(logic)
+
+    state = logic.capture.server.state
+    assert not state.capture_ok
+    assert "the source carries no" in state.capture_summary
+    assert not (tmp_path / "out" / "screenshots").exists()
+
+
+def test_research_writes_what_would_otherwise_be_refused(tmp_path):
+    _server, _scene, logic = built(
+        tmp_path, "axial", capture_format="dicom-data", research=True
     )
 
     capture(logic)
@@ -1521,10 +1629,23 @@ def test_a_production_capture_under_a_registered_root_is_written(tmp_path):
     assert captured_series(tmp_path)
 
 
+def test_a_refusal_says_what_is_missing_before_it_refuses(tmp_path, caplog):
+    """The message names the way out; the log names why it was in the way."""
+    _server, _scene, logic = built(
+        tmp_path, "axial", capture_format="dicom-data", research=False
+    )
+
+    with caplog.at_level(logging.INFO):
+        capture(logic)
+
+    assert "a receiving archive may want" in caplog.text
+    assert "Refused" in logic.capture.server.state.capture_summary
+
+
 def test_a_picture_capture_is_not_pre_flighted(tmp_path):
     """The checks are about what a receiver wants; a PNG has no receiver."""
     _server, _scene, logic = built(
-        tmp_path, "axial", capture_format="png", production=True
+        tmp_path, "axial", capture_format="png", research=False
     )
 
     capture(logic)

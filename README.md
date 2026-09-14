@@ -180,7 +180,7 @@ screenshot_viewports = ["axial", "coronal", "tile"]    # dicom-rendered, dicom-d
                                                        # dicom-cine-rendered,
                                                        # dicom-cine-data
 uid_root = "1.2.840.99999"                             # the deployment's own
-production = false                                     # refuse what is unsafe to send
+research = false                                       # waive what is unsafe to send
 
 [capture_equipment]
 institution_name = "St Elsewhere"
@@ -235,16 +235,24 @@ through.  A volume read from a file has none of that, and the capture stands
 alone under a study of its own rather than borrowing half an identity.
 
 Every UID is minted under `uid_root`.  The default is pydicom's own registered
-root, which is fine for research files and must not be used for anything sent to
-an archive -- a session opened on it says so at startup.  Setting `production`
-turns that from a warning into a refusal.
+root, which is nobody else's to assert -- a session opened on it says so at
+startup.
 
-Before a DICOM capture is written, the fields a receiving archive is likely to
-want -- accession number, study ID, frame of reference, patient size and weight,
-and the rest -- are checked against what the source series actually carried, and
-whatever is missing is named in the log and counted in what the drawer reports.
-The capture is written anyway: whether a given field is needed depends on where
-the file is going, which the app does not know.
+A DICOM capture is **refused** when something about it could not be checked by
+whoever received it: a patient, name or study UID this app would have to invent,
+or a UID root the deployment has not registered.  An instance filed under an
+invented identity is not an incomplete instance but a wrong one, and an archive
+that accepts it has no way to know.  Setting `research` waives those checks and
+writes the file with warnings, which is the right setting for a session whose
+output goes nowhere -- but it has to be set deliberately, so nothing reaches an
+archive because somebody forgot.
+
+Everything else is reported rather than refused.  The fields a receiving archive
+is likely to want -- accession number, study ID, frame of reference, patient size
+and weight, and the rest -- are checked against what the source series actually
+carried, and whatever is missing is named in the log and counted in what the
+drawer reports.  The capture is written anyway: whether a given field is needed
+depends on where the file is going, which the app does not know.
 
 ### Measurements and segmentations as DICOM
 
@@ -272,7 +280,9 @@ from that declaration rather than from the images.
 
 A volume read from a file gets the tables and nothing else -- a segmentation
 object names the images it segments, and a report names the images it is
-evidence about, and a NIfTI volume gives neither anything to name.
+evidence about, and a NIfTI volume gives neither anything to name.  The same
+refusal a capture gets applies here too, and for the same reason: a report says
+whose measurements these are.  The tables are written either way.
 
 ### Running a session again without a browser
 
