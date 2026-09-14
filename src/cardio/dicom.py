@@ -208,12 +208,31 @@ def scan(directory: pl.Path) -> list[Instance]:
 
     Files pydicom cannot read are skipped rather than raised on, so a DICOMDIR
     or a stray note alongside the images is not fatal.
+
+    An image this module cannot unpack is skipped too, but only while there is
+    something else to open.  A media export holds the whole study -- the cine
+    beside the localizer beside whatever else the scanner filed -- and one
+    object of a shape this module does not read should not take the series next
+    to it down with it.  When it is the only thing there, the same fact is the
+    answer to why the directory will not open, so it is raised instead of
+    logged: "no DICOM images found" would be true and useless.
     """
     instances = []
+    unusable = []
     for path in sorted(directory.glob("**/*")):
         if not path.is_file():
             continue
-        instances.extend(_read_header(path))
+        try:
+            instances.extend(_read_header(path))
+        except ValueError as unreadable:
+            unusable.append(str(unreadable))
+
+    if not instances and unusable:
+        raise ValueError("; ".join(unusable))
+
+    for reason in unusable:
+        logger.warning(f"Skipped: {reason}")
+
     return instances
 
 

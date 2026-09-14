@@ -5,6 +5,8 @@ can state which image should have landed where rather than compare pictures.
 """
 
 # System
+import logging
+import pathlib as pl
 
 # Third Party
 import itk
@@ -268,15 +270,52 @@ def test_the_header_leaves_out_tags_the_file_does_not_carry(tmp_path):
     assert all(value for value in fields.values())
 
 
-def test_enhanced_multiframe_is_refused_clearly(tmp_path):
-    write_cine_series(tmp_path, slices=1, phases=1)
-    path = next(tmp_path.glob("*.dcm"))
+def unreadable_multiframe(directory):
+    """One file of a multi-frame shape this module does not unpack."""
+    write_cine_series(directory, slices=1, phases=1)
+    path = next(pl.Path(directory).glob("*.dcm"))
     dataset = pd.dcmread(path)
     dataset.NumberOfFrames = 8
     dataset.save_as(path)
+    return path
+
+
+def test_enhanced_multiframe_is_refused_clearly(tmp_path):
+    """Nothing else to open, so the shape is the answer rather than an aside."""
+    unreadable_multiframe(tmp_path)
 
     with pytest.raises(ValueError, match="enhanced multi-frame"):
         dicom.read_series(tmp_path)
+
+
+def test_an_unreadable_image_does_not_take_the_series_beside_it_down(tmp_path):
+    """A media export holds the whole study; one odd object is not the study."""
+    write_cine_series(tmp_path, slices=2, phases=2)
+    unreadable_multiframe(tmp_path / "extra")
+
+    frames = dicom.read_series(tmp_path)
+
+    assert len(frames) == 2
+
+
+def test_a_skipped_image_is_named_rather_than_silently_dropped(tmp_path, caplog):
+    write_cine_series(tmp_path, slices=2, phases=2)
+    skipped = unreadable_multiframe(tmp_path / "extra")
+
+    with caplog.at_level(logging.WARNING):
+        dicom.read_series(tmp_path)
+
+    assert "Skipped" in caplog.text
+    assert skipped.name in caplog.text
+    assert "enhanced multi-frame" in caplog.text
+
+
+def test_an_unreadable_image_is_not_counted_as_a_series_to_choose_between(tmp_path):
+    """It contributes no instances, so it must not make the directory ambiguous."""
+    write_cine_series(tmp_path, slices=2, phases=2)
+    unreadable_multiframe(tmp_path / "extra")
+
+    assert len(dicom.by_series(dicom.scan(tmp_path))) == 1
 
 
 # --- living alongside other files ---------------------------------------------

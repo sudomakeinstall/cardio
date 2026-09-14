@@ -53,6 +53,14 @@ directory = "./data/study"
 series_uid = "1.2.840.113619.2.55.3.12345"
 ```
 
+This is what makes a media export -- a study burned to CD or exported from a
+PACS -- readable as it arrives.  Such a directory holds the whole study in a
+nested `DICOM/PA…/ST…/SE…` tree: every series, a `DICOMDIR`, and whatever else
+the exporter filed beside them.  Files that are not DICOM images are skipped,
+and so is an image of a shape `cardio` does not unpack, which is named in the
+log rather than dropped silently.  Only when there is nothing else to open does
+that become the error, because then it is the answer.
+
 Obliquely acquired data needs nothing special -- the acquisition axes are
 carried through to the views, and the MPR cuts are taken in patient (LPS)
 coordinates whatever the slices were angled to.
