@@ -230,6 +230,17 @@ with the grid is how many places the cut is asked for, not what it is cut from.
 `SliceThickness` says so: it stays the volume's own sampling however fine the
 pixels get.
 
+The values are stored on the step the volume was measured on rather than
+stretched across the stored range.  A CT read from NIfTI arrives as floats
+holding whole Hounsfield units, and reslicing it interpolates between them, but
+the finest difference the study ever held is still one unit -- so `RescaleSlope`
+is 1 and a viewer's measurement reads in Hounsfield units directly.  Spreading
+the same cut over all 65535 levels would keep it to a thirty-second of a unit it
+never had, and a lossless encoder is obliged to preserve every one of those
+invented levels: on the source's own step a capture is a little over a third the
+size and holds the same numbers.  A volume whose values do fall between whole
+numbers has no step to name, and is mapped onto the stored range as before.
+
 Matching the picture is what makes the banner legible.  It is stamped in
 proportion to the image it is stamped on, so a cut written at the volume's
 sampling carries a band a few pixels tall -- crisp in the file, and unreadable

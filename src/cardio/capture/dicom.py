@@ -28,6 +28,7 @@ from.
 
 # System
 import logging
+import math
 import pathlib as pl
 
 # Third Party
@@ -61,7 +62,9 @@ DERIVATION_CODE = codes.DCM.MultiplanarReformatting
 DERIVATION_DESCRIPTION = "Reformatted from the source series by cardio"
 
 
-def encode(scalars: np.ndarray) -> tuple[np.ndarray, float, float]:
+def encode(
+    scalars: np.ndarray, quantum: float = 0.0
+) -> tuple[np.ndarray, float, float]:
     """16-bit pixels, and the rescale that turns them back into the values.
 
     Unsigned throughout, because that is the only thing Secondary Capture
@@ -71,9 +74,20 @@ def encode(scalars: np.ndarray) -> tuple[np.ndarray, float, float]:
 
     Integers spanning less than the 16-bit range are shifted rather than
     scaled, so a CT keeps its Hounsfield numbers exactly and a viewer's
-    measurements read the same as the app's.  Anything wider is mapped onto the
-    range with the slope and intercept that invert the mapping, which is as
-    much of the original as a DICOM image can carry.
+    measurements read the same as the app's.
+
+    ``quantum`` does the same for values that arrived as floats but were never
+    finer than a step -- the usual case, a CT read from NIfTI and resliced --
+    by storing them on that step instead of on the whole 16-bit range.  A cut
+    of a study spanning 2000 Hounsfield units stretched over 65535 levels is
+    being kept to a thirty-second of a unit it never had, and every one of
+    those levels is interpolation noise a lossless encoder is then obliged to
+    preserve: on the source's own step the same capture is a little over a
+    third the size, and holds the same numbers.
+
+    What does not fit on that step, and anything whose step is unknown, is
+    mapped onto the range with the slope and intercept that invert the
+    mapping, which is as much of the original as a DICOM image can carry.
     """
     if np.issubdtype(scalars.dtype, np.integer):
         low, high = int(scalars.min()), int(scalars.max())
@@ -83,6 +97,15 @@ def encode(scalars: np.ndarray) -> tuple[np.ndarray, float, float]:
             return (scalars - low).astype(np.uint16), 1.0, float(low)
 
     low, high = float(scalars.min()), float(scalars.max())
+
+    if quantum > 0.0:
+        # Onto the step's own grid rather than to the lowest value present, so
+        # that what comes back out lands on the values the volume held.
+        base = math.floor(low / quantum) * quantum
+        if (high - base) / quantum <= 65535:
+            stored = np.rint((scalars - base) / quantum).astype(np.uint16)
+            return stored, quantum, base
+
     slope = (high - low) / 65535 or 1.0
     return np.rint((scalars - low) / slope).astype(np.uint16), slope, low
 
@@ -247,7 +270,7 @@ class SliceWriter(SeriesWriter):
 
         plane = frame.plane
         stored, slope, intercept = encode(
-            stamp_scalars(plane.scalars, self.context.banner)
+            stamp_scalars(plane.scalars, self.context.banner), plane.quantum
         )
 
         localizable = plane.location is not None
@@ -480,8 +503,8 @@ class MultiFrameSliceWriter(MultiFrameWriter):
         return stamp_scalars(frame.plane.scalars, self.context.banner)
 
     def write(self, stack: np.ndarray):
-        stored, slope, intercept = encode(stack)
         plane = next((p for p in self._planes if p is not None), None)
+        stored, slope, intercept = encode(stack, plane.quantum if plane else 0.0)
         localizable = plane is not None and plane.location is not None
 
         dataset = self.shell(_kind(localizable))

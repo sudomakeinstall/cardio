@@ -54,6 +54,7 @@ from cardio.capture.geometry import (
     reslice_axes,
     scalars_2d,
     square_pixels,
+    value_quantum,
 )
 from cardio.capture.images import GifWriter, JpegWriter, Mp4Writer, PngWriter
 from cardio.capture.mosaic import compose
@@ -421,6 +422,81 @@ def test_wide_integers_fall_back_to_a_rescale():
 
     assert slope != 1.0
     assert np.allclose(stored * slope + intercept, scalars, atol=slope)
+
+
+# --- the step the values were measured on -------------------------------------
+
+
+def float_phantom(integral: bool = True) -> vtk.vtkImageData:
+    """The phantom again, as the floats a volume read from NIfTI arrives as."""
+    image = vtk.vtkImageData()
+    image.SetDimensions(*VOLUME_SIZE)
+    image.SetSpacing(*VOLUME_SPACING)
+    image.SetOrigin(*VOLUME_ORIGIN)
+    image.AllocateScalars(vtk.VTK_FLOAT, 1)
+
+    columns, rows, slices = VOLUME_SIZE
+    values = np.arange(slices * rows * columns, dtype=np.float32) % 2000 - 1000
+    if not integral:
+        values = values / 3.0
+    vtknp.vtk_to_numpy(image.GetPointData().GetScalars())[:] = values
+    return image
+
+
+def test_a_volume_of_whole_numbers_steps_by_one_however_it_is_stored():
+    assert value_quantum(float_phantom()) == 1.0
+    assert value_quantum(phantom()) == 1.0
+
+
+def test_a_volume_that_lands_between_whole_numbers_has_no_step_to_name():
+    assert value_quantum(float_phantom(integral=False)) == 0.0
+
+
+def test_a_cut_is_stored_on_the_step_the_volume_was_measured_on():
+    """The interpolation invents levels between the samples; they are not kept."""
+    scalars = np.array([[-1000.0, -999.3, 0.25, 3000.0]], dtype=np.float32)
+
+    stored, slope, intercept = encode(scalars, quantum=1.0)
+
+    assert (slope, intercept) == (1.0, -1000.0)
+    assert np.array_equal(stored * slope + intercept, [[-1000.0, -999.0, 0.0, 3000.0]])
+
+
+def test_storing_on_that_step_costs_the_capture_none_of_its_range():
+    """A rescale of the same cut keeps the ends; only what is between them goes."""
+    scalars = np.linspace(-1024.0, 3050.0, 4096, dtype=np.float32).reshape(64, 64)
+
+    on_step, slope, intercept = encode(scalars, quantum=1.0)
+    stretched, _, _ = encode(scalars)
+
+    assert slope == 1.0
+    assert on_step.max() < stretched.max()
+    assert np.allclose(on_step * slope + intercept, scalars, atol=0.5)
+
+
+def test_a_step_the_stored_range_cannot_hold_falls_back_to_a_rescale():
+    scalars = np.array([[0.0, 200000.0]], dtype=np.float32)
+
+    stored, slope, intercept = encode(scalars, quantum=1.0)
+
+    assert slope != 1.0
+    assert np.allclose(stored * slope + intercept, scalars, atol=slope)
+
+
+def test_a_cut_of_a_volume_of_whole_numbers_is_written_in_those_numbers(tmp_path):
+    """End to end: the series a viewer measures off reads back in the source's units."""
+    plane = plane_from_reslice(posed_reslice(float_phantom()))
+
+    writer = SliceWriter(context(tmp_path, identity=identity("CT")))
+    writer.add(0, Frame(image=rgb_frame().image, plane=plane))
+    writer.close()
+
+    dataset = written(pl.Path(tmp_path) / "ul")[0]
+    assert float(dataset.RescaleSlope) == 1.0
+    assert dataset.RescaleType == "HU"
+
+    values = apply_modality_lut(dataset.pixel_array, dataset)
+    assert np.array_equal(values, np.rint(values))
 
 
 # --- a slice series -----------------------------------------------------------

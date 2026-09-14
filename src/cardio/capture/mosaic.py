@@ -23,7 +23,7 @@ import vtk
 from ..orientation import create_vtk_reslice_matrix
 from ..reslice import configure_reslice
 from .base import Plane
-from .geometry import scalars_2d
+from .geometry import scalars_2d, value_quantum
 
 # The value outside the volume, matching what the MPR views reslice with.
 BACKGROUND_LEVEL = -1000.0
@@ -153,4 +153,5 @@ def compose(
         pixel_spacing=(spacing, spacing),
         thickness=thickness,
         location=None,
+        quantum=value_quantum(image_data),
     )

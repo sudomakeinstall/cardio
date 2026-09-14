@@ -41,6 +41,26 @@ def scalars_2d(image) -> np.ndarray:
     return vtknp.vtk_to_numpy(image.GetPointData().GetScalars()).reshape(rows, columns)
 
 
+def value_quantum(image_data) -> float:
+    """The step the volume's own values take, 0 when they are continuous.
+
+    A volume of whole numbers has a step of one whatever type it is stored in:
+    a CT read from NIfTI arrives as float32 holding integer Hounsfield units,
+    and reslicing it interpolates between them, but the finest real difference
+    between two of its values is still one unit.  Saying so lets a capture be
+    written on the source's own scale rather than on a finer one the
+    interpolation invented -- which costs nothing true and, being that much
+    less to encode, a good deal of space.
+
+    Anything else is 0, meaning nothing is known about the step and the values
+    are to be kept as exactly as the stored range allows.
+    """
+    scalars = vtknp.vtk_to_numpy(image_data.GetPointData().GetScalars())
+    if np.issubdtype(scalars.dtype, np.integer):
+        return 1.0
+    return 1.0 if np.array_equal(scalars, np.rint(scalars)) else 0.0
+
+
 def _last_index(low: float, high: float, spacing: float) -> int:
     """The last index of a grid at ``spacing`` that covers ``low`` to ``high``."""
     return max(0, math.ceil((high - low) / spacing))
@@ -156,6 +176,7 @@ def plane_from_reslice(reslice, rectangle=None, shape=None) -> Plane:
         pixel_spacing=(spacing[1], spacing[0]),
         thickness=spacing[2],
         location=location_of(image, reslice_axes(square)),
+        quantum=value_quantum(reslice.GetInput()),
     )
 
 

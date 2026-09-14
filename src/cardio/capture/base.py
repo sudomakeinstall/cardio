@@ -43,12 +43,18 @@ class Plane:
     ``location`` is None when the pixels have a scale but no place: the tile
     mosaic composes cuts taken at different poses, so it can be measured but
     not localized, and omitting the location is how that is said.
+
+    ``quantum`` is the step the volume behind the cut takes between values,
+    which a writer stores the pixels on rather than on the finer scale the
+    reslice interpolated them onto; 0 when nothing is known about it.  See
+    ``geometry.value_quantum``.
     """
 
     scalars: np.ndarray
     pixel_spacing: tuple[float, float]
     thickness: float
     location: Location | None
+    quantum: float = 0.0
 
 
 @dc.dataclass(frozen=True)
