@@ -7,7 +7,7 @@ import pydantic as pc
 import pydantic_settings as ps
 import vtk
 
-from .capture import CaptureFormat, Equipment, SeriesTags
+from .capture import CaptureFormat, Equipment, SeriesTags, TransferSyntax
 from .capture.uid import DEFAULT_ROOT as DEFAULT_UID_ROOT
 from .mesh import Mesh
 from .mpr_views import MPRViews
@@ -218,6 +218,18 @@ class Scene(ps.BaseSettings):
             "Format a capture is written in. Options: "
             + ", ".join(CaptureFormat)
             + ". CLI usage: --capture-format jpeg"
+        ),
+    )
+    capture_transfer_syntax: TransferSyntax = pc.Field(
+        default=TransferSyntax.JPEG_2000,
+        description=(
+            "How a DICOM capture's pixels are encoded. Both compressed "
+            "options are lossless and a fraction of the size; which of them a "
+            "receiver reads is what decides between them, and uncompressed is "
+            "for one that reads neither. The default is the one a workstation "
+            "is likeliest to have heard of. Options: "
+            + ", ".join(TransferSyntax)
+            + ". CLI usage: --capture-transfer-syntax jpeg-ls-lossless"
         ),
     )
     capture_banner: str = pc.Field(

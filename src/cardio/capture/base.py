@@ -17,6 +17,7 @@ import vtk
 from vtk.util import numpy_support as vtknp
 
 # Internal
+from .encoding import TransferSyntax
 from .equipment import Equipment
 from .uid import DEFAULT_ROOT
 
@@ -135,6 +136,7 @@ class Context:
     series_description: str = ""
     has_plane: bool = True
     banner: str = ""
+    transfer_syntax: TransferSyntax = TransferSyntax.JPEG_2000
 
 
 class CaptureWriter:

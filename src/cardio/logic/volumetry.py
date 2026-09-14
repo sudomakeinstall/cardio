@@ -499,6 +499,7 @@ class VolumetryController(Controller):
             # the picture instead -- as it does for the volume rendering.
             has_plane=False,
             banner=self.app.capture.banner,
+            transfer_syntax=self.scene.capture_transfer_syntax,
         )
 
         # Handed the measurement here rather than relying on the layout having

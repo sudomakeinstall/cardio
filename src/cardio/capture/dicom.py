@@ -37,7 +37,7 @@ import pydicom as pd
 from pydicom.sr.codedict import codes
 
 # Internal
-from . import uid, values
+from . import encoding, uid, values
 from .banner import stamp_scalars
 from .base import CaptureWriter, Context, Frame, Plane
 from .geometry import patient_orientation
@@ -145,6 +145,8 @@ class SeriesWriter(CaptureWriter):
             series_description=describe(
                 context.viewport, kind, context.series_description
             ),
+            # Built uncompressed whatever it is written as: the pixels are
+            # encoded once the instance is whole, by ``encoding.apply``.
             transfer_syntax_uid=pd.uid.ExplicitVRLittleEndian,
             specific_character_set=CHARACTER_SET,
             patient_orientation=orientation or PLACEHOLDER_ORIENTATION,
@@ -206,6 +208,7 @@ class SeriesWriter(CaptureWriter):
         _derive(dataset, context)
 
     def save(self, dataset, index: int):
+        encoding.apply(dataset, self.context.transfer_syntax)
         dataset.save_as(self.path_for(index), enforce_file_format=True)
 
 

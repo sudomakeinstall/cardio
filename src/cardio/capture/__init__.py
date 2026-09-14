@@ -9,6 +9,7 @@ from .base import (
     Plane,
     image_to_array,
 )
+from .encoding import TransferSyntax
 from .equipment import Equipment
 from .formats import (
     CaptureFormat,
@@ -31,6 +32,7 @@ __all__ = [
     "Plane",
     "Series",
     "SeriesTags",
+    "TransferSyntax",
     "WindowFrames",
     "describe",
     "image_to_array",

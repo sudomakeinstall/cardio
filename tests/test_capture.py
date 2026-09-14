@@ -29,6 +29,8 @@ from cardio.capture import (
     Frame,
     Identity,
     Plane,
+    TransferSyntax,
+    encoding,
     image_to_array,
     preflight,
     uid,
@@ -865,8 +867,13 @@ def built(tmp_path, layout: str = "", **overrides):
     A research session unless a test says otherwise: the phantom is written
     under pydicom's root, which is exactly what a deployment that has not said
     it is research refuses to write DICOM under.
+
+    JPEG-LS unless a test says otherwise, too: the phantom's cuts are a few
+    pixels across, which is under the 32 JPEG 2000 needs, and an app test
+    should exercise the encoding rather than the fallback from it.
     """
     overrides.setdefault("research", True)
+    overrides.setdefault("capture_transfer_syntax", TransferSyntax.JPEG_LS)
     return running(
         build_scene(
             tmp_path,
@@ -1061,9 +1068,9 @@ def test_an_unnamed_series_says_which_viewport_it_came_off(tmp_path):
     assert dataset.SeriesDescription == "cardio ul (reformat)"
 
 
-def rendered(tmp_path, **naming) -> pd.dataset.Dataset:
+def rendered(tmp_path, rows=6, columns=8, **naming) -> pd.dataset.Dataset:
     writer = SecondaryCaptureWriter(context(tmp_path, "vr", **naming))
-    writer.add(0, rgb_frame())
+    writer.add(0, rgb_frame(rows=rows, columns=columns))
     writer.close()
     return written(pl.Path(tmp_path) / "vr")[0]
 
@@ -1560,6 +1567,155 @@ def test_the_configured_equipment_is_what_the_instance_names(tmp_path):
 def test_a_long_equipment_name_is_refused_rather_than_truncated(tmp_path):
     with pytest.raises(pc.ValidationError):
         Equipment(station_name="X" * 17)
+
+
+# --- how the pixels are encoded ------------------------------------------------
+
+
+# The two lossless encodings, which differ in what a receiver has heard of
+# rather than in what comes back out of them.
+COMPRESSED = (TransferSyntax.JPEG_LS, TransferSyntax.JPEG_2000)
+
+
+def test_a_capture_is_compressed_unless_it_is_asked_not_to_be(tmp_path):
+    """A cine of a rendered view is tens of megabytes of pixels nobody has to
+    send, and the compression is lossless, so it is what a capture opens on.
+
+    JPEG 2000 rather than the smaller JPEG-LS: the workstations these captures
+    are read on are likelier to have heard of it.
+    """
+    compressed = write_slices(tmp_path / "default", frames=1)[0]
+    plain = write_slices(
+        tmp_path / "plain", frames=1, transfer_syntax=TransferSyntax.UNCOMPRESSED
+    )[0]
+
+    assert compressed.file_meta.TransferSyntaxUID == pd.uid.JPEG2000Lossless
+    assert plain.file_meta.TransferSyntaxUID == pd.uid.ExplicitVRLittleEndian
+
+
+@pytest.mark.parametrize("syntax", COMPRESSED)
+def test_every_syntax_is_written_as_the_one_it_names(tmp_path, syntax):
+    dataset = write_slices(tmp_path, frames=1, transfer_syntax=syntax)[0]
+
+    assert dataset.file_meta.TransferSyntaxUID == encoding.uid_for(syntax)
+
+
+@pytest.mark.parametrize("syntax", COMPRESSED)
+def test_compression_keeps_every_value(tmp_path, syntax):
+    """Lossless, and checked as such: a capture is what the measurements were
+    taken off, and one that had quietly rounded them would read the same."""
+    compressed = write_slices(tmp_path / str(syntax), frames=1, transfer_syntax=syntax)[
+        0
+    ]
+    plain = write_slices(
+        tmp_path / "plain", frames=1, transfer_syntax=TransferSyntax.UNCOMPRESSED
+    )[0]
+
+    assert np.array_equal(compressed.pixel_array, plain.pixel_array)
+    assert compressed.RescaleSlope == plain.RescaleSlope
+    assert compressed.RescaleIntercept == plain.RescaleIntercept
+
+
+@pytest.mark.parametrize("syntax", COMPRESSED)
+def test_a_colour_capture_says_what_its_components_really_are(tmp_path, syntax):
+    """JPEG 2000 may transform the components on the way in, which DICOM has
+    its own photometric interpretation for.  What the instance says has to be
+    what the encoder did, or a viewer draws the colours it did not record.
+    """
+    # Above JPEG 2000's floor, so what is checked is the encoding and not the
+    # fallback from it.
+    frame = {"rows": 32, "columns": 40}
+    dataset = rendered(tmp_path / str(syntax), transfer_syntax=syntax, **frame)
+
+    assert dataset.file_meta.TransferSyntaxUID == encoding.uid_for(syntax)
+    assert dataset.PhotometricInterpretation == "RGB"
+    assert np.array_equal(dataset.pixel_array, image_to_array(rgb_frame(**frame).image))
+
+
+@pytest.mark.parametrize("syntax", COMPRESSED)
+def test_a_cine_is_compressed_as_one_instance(tmp_path, syntax):
+    """Every frame of it, and it reads back as the frames it was written from."""
+    dataset = write_cine(tmp_path / str(syntax), frames=3, transfer_syntax=syntax)[0]
+    plain = write_cine(
+        tmp_path / "plain", frames=3, transfer_syntax=TransferSyntax.UNCOMPRESSED
+    )[0]
+
+    assert dataset.file_meta.TransferSyntaxUID == encoding.uid_for(syntax)
+    assert dataset.pixel_array.shape == (3, *plain.pixel_array.shape[1:])
+    assert np.array_equal(dataset.pixel_array, plain.pixel_array)
+
+
+def test_a_compressed_capture_is_the_instance_that_was_built(tmp_path):
+    """pydicom renumbers what it compresses unless told not to, and a capture
+    minted under the configured root must not be handed one under another."""
+    plain = write_slices(
+        tmp_path / "plain",
+        frames=1,
+        uid_root=REGISTERED_ROOT,
+        transfer_syntax=TransferSyntax.UNCOMPRESSED,
+    )[0]
+    compressed = write_slices(tmp_path / "default", frames=1, uid_root=REGISTERED_ROOT)[
+        0
+    ]
+
+    for dataset in (plain, compressed):
+        assert dataset.SOPInstanceUID.startswith(f"{REGISTERED_ROOT}.")
+        assert dataset.file_meta.MediaStorageSOPInstanceUID == dataset.SOPInstanceUID
+
+
+@pytest.mark.parametrize(
+    "syntax", [TransferSyntax.JPEG_LS, TransferSyntax.UNCOMPRESSED]
+)
+def test_the_configured_syntax_is_what_a_capture_is_written_as(tmp_path, syntax):
+    """The scene field reaching the writers, which is where it does its work.
+
+    JPEG 2000 is left out here rather than tested through the fallback: the
+    phantom's cuts are under its floor, which ``built`` says more about.
+    """
+    _server, logic = exporting(tmp_path, capture_transfer_syntax=syntax)
+    capture(logic)
+
+    assert captured_series(tmp_path).file_meta.TransferSyntaxUID == encoding.uid_for(
+        syntax
+    )
+
+
+def test_a_frame_under_the_encoder_floor_is_written_uncompressed(tmp_path, caplog):
+    """JPEG 2000 is encoded at six resolution levels, which a frame under 32
+    pixels either way cannot be halved into, and openjpeg refuses it.
+
+    The real refusal rather than a patched one: a capture that cannot be
+    compressed is still a capture, and a view zoomed in that far is the way to
+    ask for one.
+    """
+    with caplog.at_level(logging.ERROR):
+        dataset = rendered(
+            tmp_path, transfer_syntax=TransferSyntax.JPEG_2000, rows=8, columns=8
+        )
+
+    assert dataset.file_meta.TransferSyntaxUID == pd.uid.ExplicitVRLittleEndian
+    assert np.array_equal(
+        dataset.pixel_array, image_to_array(rgb_frame(rows=8, columns=8).image)
+    )
+    assert "uncompressed" in caplog.text
+
+
+def test_an_encoder_that_cannot_write_leaves_the_capture_uncompressed(
+    tmp_path, monkeypatch, caplog
+):
+    """A capture nobody can compress is still a capture: the file is larger
+    than it was asked to be, and everything in it is still true."""
+
+    def refuse(*args, **kwargs):
+        raise RuntimeError("no encoding plugins are available")
+
+    monkeypatch.setattr(pd.dataset.Dataset, "compress", refuse)
+
+    with caplog.at_level(logging.ERROR):
+        dataset = write_slices(tmp_path, frames=1)[0]
+
+    assert dataset.file_meta.TransferSyntaxUID == pd.uid.ExplicitVRLittleEndian
+    assert "uncompressed" in caplog.text
 
 
 # --- whose UIDs a capture writes under -----------------------------------------

@@ -360,6 +360,7 @@ class CaptureController(Controller):
             series_description=description,
             has_plane=viewport in self.plane_sources,
             banner=self.banner,
+            transfer_syntax=self.scene.capture_transfer_syntax,
         )
 
     def report(self, summary: str, ok: bool):
