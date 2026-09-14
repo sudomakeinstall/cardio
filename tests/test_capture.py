@@ -1910,8 +1910,21 @@ def sparse_source(**fields) -> pd.dataset.Dataset:
     return dataset
 
 
+# A placeholder only has to be present, but it does have to be writable, and
+# "1" is not a date or a time.
+PLACEHOLDERS = {"DA": "20240101", "TM": "120000"}
+
+
+def placeholder(name: str) -> str:
+    """Something the VR of ``name`` accepts."""
+    vr = pd.datadict.dictionary_VR(pd.datadict.tag_for_keyword(name))
+    return PLACEHOLDERS.get(vr, "1")
+
+
 def test_a_complete_source_is_not_warned_about():
-    complete = sparse_source(**{field.name: "1" for field in preflight.SOURCE_FIELDS})
+    complete = sparse_source(
+        **{field.name: placeholder(field.name) for field in preflight.SOURCE_FIELDS}
+    )
     equipment = Equipment(institution_name="St Elsewhere")
 
     assert preflight.missing(complete, equipment) == []

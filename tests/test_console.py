@@ -7,6 +7,7 @@ coalesces, what is bounded, and what comes back out as something to re-run.
 """
 
 # System
+import asyncio
 import copy
 import datetime as dt
 import itertools
@@ -500,7 +501,25 @@ def test_the_script_does_not_share_its_arguments_with_the_log():
 
 @pytest.fixture
 def session(tmp_path):
-    return session_on(tmp_path)
+    session = session_on(tmp_path)
+    yield session
+    stop_playback(session)
+
+
+def stop_playback(session):
+    """Finish off a cine loop nothing ever ran.
+
+    Setting ``playing`` starts one on an event loop trame makes for itself,
+    which a test never runs, so the coroutine is left both un-awaited and
+    pending and says so at interpreter exit.  Cancelling alone does not reach
+    it: the cancellation is only delivered on a step the loop has to take.
+    """
+    task = session.logic.playback._playback_task
+    if task is None or task.done():
+        return
+
+    task.cancel()
+    task.get_loop().run_until_complete(asyncio.gather(task, return_exceptions=True))
 
 
 def log_of(session):

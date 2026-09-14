@@ -67,7 +67,7 @@ class MPRViews:
             if view not in crosshairs:
                 continue
             for line in crosshairs[view].values():
-                self.renderer(view).AddActor2D(line["actor"])
+                self.renderer(view).AddViewProp(line["actor"])
                 line["actor"].SetVisibility(visible)
 
     def show(
