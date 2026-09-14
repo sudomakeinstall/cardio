@@ -17,9 +17,11 @@ import csv
 import itertools as it
 
 # Third Party
+import pydicom as pd
 import pytest
 
 # Internal
+from cardio.capture import Equipment
 from cardio.document import scene_from_state
 from cardio.volumetry import STRUCTURES, StructureGroup, Volumetry, structure_rows
 from tests.test_app_smoke import build_app, build_scene, connect
@@ -508,6 +510,24 @@ def test_an_export_writes_its_pages_in_the_format_the_capture_is_set_to(app):
 
     pages = sorted((exported(logic, scene) / "pages").iterdir())
     assert [path.suffix for path in pages] == [".dcm", ".dcm"]
+
+
+def test_the_report_pages_are_written_under_the_configured_identity(tmp_path):
+    """The charts are a capture like any other, and every other capture path
+    hands the writer the root and the equipment the scene configures.  A page
+    written under a library's root says a library made it."""
+    server, scene, logic = built(tmp_path)
+    scene.uid_root = "1.2.826.0.1.3680043.10.888"
+    scene.capture_equipment = Equipment(institution_name="St Elsewhere")
+    with server.state:
+        server.state.capture_format = "dicom-rendered"
+
+    pages = sorted((exported(logic, scene) / "pages").glob("*.dcm"))
+    dataset = pd.dcmread(pages[0])
+
+    assert dataset.SeriesInstanceUID.startswith(scene.uid_root)
+    assert dataset.SOPInstanceUID.startswith(scene.uid_root)
+    assert dataset.InstitutionName == "St Elsewhere"
 
 
 def test_the_curves_are_written_one_row_per_frame(app):

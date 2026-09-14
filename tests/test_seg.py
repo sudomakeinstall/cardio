@@ -200,6 +200,27 @@ def test_the_configured_equipment_is_what_it_names(tmp_path):
     assert dataset.Manufacturer == "Acme"
 
 
+def test_it_says_where_it_was_produced(tmp_path):
+    """The two names highdicom's constructor does not take, and the one object
+    of these a viewer draws: a capture that says its site and a segmentation
+    that does not would be the same session filed two ways."""
+    dataset = write(
+        tmp_path,
+        equipment=Equipment(institution_name="St Elsewhere", station_name="READING-3"),
+    )[0]
+
+    assert dataset.InstitutionName == "St Elsewhere"
+    assert dataset.StationName == "READING-3"
+
+
+def test_a_site_that_was_never_named_is_left_out_rather_than_written_empty(tmp_path):
+    """Type 3: absent says not recorded, empty claims the value itself is."""
+    dataset = write(tmp_path, equipment=Equipment())[0]
+
+    assert "InstitutionName" not in dataset
+    assert "StationName" not in dataset
+
+
 # --- what it will not write ----------------------------------------------------
 
 

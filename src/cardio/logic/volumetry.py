@@ -499,6 +499,8 @@ class VolumetryController(Controller):
             # the picture instead -- as it does for the volume rendering.
             has_plane=False,
             banner=self.app.capture.banner,
+            equipment=self.scene.capture_equipment,
+            uid_root=self.scene.uid_root,
             transfer_syntax=self.scene.capture_transfer_syntax,
         )
 

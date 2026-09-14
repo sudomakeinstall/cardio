@@ -246,6 +246,16 @@ def write_segmentation(
             pixel_measures=measures,
             omit_empty_frames=False,
         )
+
+        # highdicom's constructor takes the four equipment names it requires
+        # and no more, so the two that say where the installation sits are set
+        # here.  Absent rather than empty when they are unset, as everywhere
+        # else: these are Type 3, and a blank one claims the value is blank.
+        if equipment.institution_name:
+            dataset.InstitutionName = equipment.institution_name
+        if equipment.station_name:
+            dataset.StationName = equipment.station_name
+
         uid.stamp(dataset, uid_root)
 
         path = directory / f"{number:04d}.dcm"
