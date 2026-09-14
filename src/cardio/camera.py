@@ -136,6 +136,39 @@ def world_per_pixel(renderer) -> float:
     return math.dist(start, end)
 
 
+def visible_rectangle(renderer):
+    """What the viewport shows, in world units at the focal plane.
+
+    ``((low x, high x), (low y, high y))``, from one edge of the viewport to
+    the other: the rectangle the capture of a view has to cover for the picture
+    and the data behind it to be framed alike.
+
+    Measured through the camera's own display mapping, like ``world_per_pixel``
+    and for the same reason: the MPR cameras are perspective, and a parallel
+    scale would only describe the tiles.  The cut lies at the focal plane, so
+    the depth a perspective camera opens out with is not in question here.
+
+    None when the viewport has never been sized, where every display point
+    projects onto the same spot.
+    """
+    width, height = renderer.GetSize()
+    if not (width and height):
+        return None
+
+    # Display coordinates are the window's, not the viewport's, so a renderer
+    # that holds one tile of a grid is measured from where its tile sits rather
+    # than from the corner of the window.  Corner to corner rather than centre
+    # of pixel to centre of pixel, so the rectangle is the area the view covers
+    # and stays centred on what the camera is looking at.
+    left, bottom = renderer.GetOrigin()
+    depth = _focal_display_point(renderer)[2]
+    low = _display_to_world(renderer, float(left), float(bottom), depth)
+    high = _display_to_world(
+        renderer, float(left + width), float(bottom + height), depth
+    )
+    return (low[0], high[0]), (low[1], high[1])
+
+
 def fit_factor(
     half_extent: tuple[float, float],
     size: tuple[int, int],

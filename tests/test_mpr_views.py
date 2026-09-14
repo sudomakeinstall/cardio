@@ -8,6 +8,7 @@ import pytest
 import vtk
 
 # Internal
+from cardio.camera import visible_rectangle
 from cardio.mpr_views import MPRViews
 from cardio.reslice import VIEWS, ResliceSet
 from tests.phantoms import make_image, rotation_about_z
@@ -168,6 +169,56 @@ def test_world_per_pixel_is_measured_per_view(views):
 
     assert all(scale > 0.0 for scale in scales.values())
     assert len(set(scales.values())) > 1
+
+
+# What the view is showing, which a data capture is cropped to
+
+
+def test_the_visible_rectangle_spans_the_whole_viewport(views):
+    """Edge to edge, in world units: what a capture has to cover for the
+    picture and the data behind it to be framed alike."""
+    framed(views)
+    renderer = views.renderer("ul")
+    width, height = renderer.GetSize()
+    scale = views.world_per_pixel("ul")
+
+    (low_x, high_x), (low_y, high_y) = visible_rectangle(renderer)
+
+    assert high_x - low_x == pytest.approx(scale * width, rel=1e-3)
+    assert high_y - low_y == pytest.approx(scale * height, rel=1e-3)
+
+
+def test_the_visible_rectangle_is_centred_on_what_the_view_looks_at(views):
+    """The cameras are never moved off the cut's origin, so the rectangle is
+    centred on it and a crop about it keeps the crosshair in the middle."""
+    framed(views)
+    renderer = views.renderer("ul")
+    focus = renderer.GetActiveCamera().GetFocalPoint()
+
+    (low_x, high_x), (low_y, high_y) = visible_rectangle(renderer)
+
+    assert (low_x + high_x) / 2 == pytest.approx(focus[0], abs=1e-6)
+    assert (low_y + high_y) / 2 == pytest.approx(focus[1], abs=1e-6)
+
+
+def test_zooming_in_narrows_the_visible_rectangle(views):
+    framed(views)
+    renderer = views.renderer("ul")
+    (low, high), _ = visible_rectangle(renderer)
+
+    views.zoom(2.0)
+
+    (zoomed_low, zoomed_high), _ = visible_rectangle(renderer)
+    assert zoomed_high - zoomed_low < high - low
+
+
+def test_there_is_no_visible_rectangle_before_the_window_is_sized(views):
+    """Every display point projects onto the same spot, so there is nothing to
+    crop to and the capture is written whole."""
+    views.show(slices())
+    views.reset_cameras()
+
+    assert visible_rectangle(views.renderer("ul")) is None
 
 
 def test_zoom_moves_every_view(views):

@@ -255,6 +255,48 @@ def fitted(views: TileViews) -> TileViews:
     return views
 
 
+def test_there_is_no_rectangle_before_the_window_is_sized(views):
+    """A tile is showing nothing to frame a capture like, so the mosaic is
+    written from the cuts themselves."""
+    views.show(tiles(len(views)), reset_cameras=True)
+
+    assert views.shown_rectangle() is None
+
+
+def test_the_shown_rectangle_covers_one_tile_of_the_window(views):
+    """One tile's viewport rather than the whole grid: each is its own
+    renderer, and it is a tile the mosaic is cut to."""
+    fitted(views)
+    width, height = views.renderers[0].GetSize()
+    scale = views.world_per_pixel()
+
+    (low_x, high_x), (low_y, high_y) = views.shown_rectangle()
+
+    assert high_x - low_x == pytest.approx(scale * width, rel=1e-3)
+    assert high_y - low_y == pytest.approx(scale * height, rel=1e-3)
+
+
+def test_the_shown_rectangle_is_centred_on_the_pose(views):
+    """The tiles are fitted about their own origin, which is where the pose
+    is, so a mosaic cut to the rectangle puts every pose in the same place."""
+    fitted(views)
+
+    (low_x, high_x), (low_y, high_y) = views.shown_rectangle()
+
+    assert low_x == pytest.approx(-high_x, abs=1e-6)
+    assert low_y == pytest.approx(-high_y, abs=1e-6)
+
+
+def test_zooming_the_grid_narrows_what_each_tile_shows(views):
+    fitted(views)
+    (low, high), _ = views.shown_rectangle()
+
+    views.zoom(2.0)
+
+    (zoomed_low, zoomed_high), _ = views.shown_rectangle()
+    assert zoomed_high - zoomed_low < high - low
+
+
 def test_zoom_scales_every_tile(views):
     fitted(views)
     before = scales(views)

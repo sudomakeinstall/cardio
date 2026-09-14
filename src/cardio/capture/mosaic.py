@@ -71,25 +71,47 @@ def tile_shape(reslices, spacing: float) -> tuple[int, int]:
     return 2 * half_rows + 1, 2 * half_columns + 1
 
 
-def compose(image_data, poses, transform, rows: int, columns: int) -> Plane:
+def tile_grid(reslices, spacing: float, rectangle):
+    """The pixels one tile is drawn on: its shape, and where its corner sits.
+
+    ``rectangle`` is what a tile of the grid is showing of its own cut, which
+    every tile shows of its own -- they share one scale and split the window
+    evenly -- so the mosaic is framed like the grid it was taken of.  Without
+    one, which is a grid whose window has never been sized, the tiles are cut
+    to hold the largest of them whole.
+    """
+    if rectangle is None:
+        rows, columns = tile_shape(reslices, spacing)
+        return rows, columns, (-(columns // 2) * spacing, -(rows // 2) * spacing)
+
+    (low_x, high_x), (low_y, high_y) = rectangle
+    columns = math.ceil((high_x - low_x) / spacing) + 1
+    rows = math.ceil((high_y - low_y) / spacing) + 1
+    return rows, columns, (low_x, low_y)
+
+
+def compose(
+    image_data, poses, transform, rows: int, columns: int, rectangle=None
+) -> Plane:
     """One frame's tiles, resampled onto a shared grid and laid out row-major.
 
     The layout matches what the grid draws -- tile 0 top left, as
     ``tile_views.tile_viewport`` places it -- so the mosaic is recognisable as
     the thing that was on screen.  Each tile is flipped to put its top row
     first, which is where a DICOM viewer draws row zero.
+
+    ``rectangle`` is how much of its cut a tile is showing, which is what each
+    tile of the mosaic is cut to; see ``tile_grid``.
     """
     reslices = [_posed(image_data, pose, transform) for pose in poses]
     spacing = float(min(image_data.GetSpacing()))
-    tile_rows, tile_columns = tile_shape(reslices, spacing)
+    tile_rows, tile_columns, (low_x, low_y) = tile_grid(reslices, spacing, rectangle)
 
     tiles = []
     for reslice in reslices:
         reslice.AutoCropOutputOff()
         reslice.SetOutputSpacing(spacing, spacing, spacing)
-        reslice.SetOutputOrigin(
-            -(tile_columns // 2) * spacing, -(tile_rows // 2) * spacing, 0.0
-        )
+        reslice.SetOutputOrigin(low_x, low_y, 0.0)
         reslice.SetOutputExtent(0, tile_columns - 1, 0, tile_rows - 1, 0, 0)
         reslice.Update()
         tiles.append(np.flipud(scalars_2d(reslice.GetOutput())))

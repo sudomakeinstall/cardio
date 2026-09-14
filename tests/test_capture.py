@@ -21,6 +21,7 @@ from vtk.util import numpy_support as vtknp
 
 # Internal
 from cardio import Scene, dicom
+from cardio.camera import visible_rectangle
 from cardio.capture import (
     CaptureFormat,
     Context,
@@ -46,7 +47,12 @@ from cardio.capture.dicom import (
     encode,
 )
 from cardio.capture.formats import WRITERS, writer_for, writes_series
-from cardio.capture.geometry import plane_from_reslice, reslice_axes
+from cardio.capture.geometry import (
+    plane_from_reslice,
+    reslice_axes,
+    scalars_2d,
+    square_pixels,
+)
 from cardio.capture.images import GifWriter, JpegWriter, Mp4Writer, PngWriter
 from cardio.capture.mosaic import compose
 from cardio.capture.series import (
@@ -178,6 +184,8 @@ def rgb_frame(rows=6, columns=8, value=140) -> Frame:
 
 
 def test_the_direction_cosines_are_the_plane_axes():
+    """The column direction runs against the cut's y, the rows being turned
+    over so that the top of the view is written first."""
     reslice = posed_reslice(phantom())
     axes = reslice_axes(reslice)
 
@@ -185,21 +193,63 @@ def test_the_direction_cosines_are_the_plane_axes():
     orientation = np.array(plane.location.orientation)
 
     assert np.allclose(orientation[:3], axes[:3, 0])
-    assert np.allclose(orientation[3:], axes[:3, 1])
+    assert np.allclose(orientation[3:], -axes[:3, 1])
     assert np.isclose(np.linalg.norm(orientation[:3]), 1.0)
     assert np.isclose(np.linalg.norm(orientation[3:]), 1.0)
 
 
-def test_the_position_is_where_the_first_pixel_actually_sits():
-    """Computed from the pose independently, not read back from the same call."""
-    reslice = posed_reslice(phantom())
-    axes = reslice_axes(reslice)
-    output_origin = np.array(reslice.GetOutput().GetOrigin())
+def test_the_cut_is_written_from_the_top_of_the_view_down():
+    """Which is the row a viewer draws first, and the row the geometry names.
 
-    expected = axes[:3, :3] @ output_origin + axes[:3, 3]
+    A reslice hands its output back from the low end of its y, which is the
+    bottom of the view: written in that order, the capture arrives upside down
+    beside the rendered capture of the same view.
+    """
+    reslice = posed_reslice(phantom())
 
     plane = plane_from_reslice(reslice)
-    assert np.allclose(plane.location.position, expected)
+
+    assert np.array_equal(
+        plane.scalars, np.flipud(scalars_2d(square_pixels(reslice).GetOutput()))
+    )
+
+
+def interpolated(image_data, point) -> float:
+    """What the volume holds at ``point``, read the way a reslice reads it."""
+    interpolator = vtk.vtkImageInterpolator()
+    interpolator.SetInterpolationModeToLinear()
+    interpolator.Initialize(image_data)
+    return interpolator.Interpolate(point[0], point[1], point[2], 0)
+
+
+def test_the_geometry_finds_the_pixels_the_capture_holds():
+    """Walk from the declared corner along the declared cosines, and the pixel
+    landed on holds what the volume holds there.
+
+    The whole of what the geometry claims, checked against the volume rather
+    than recomputed from the pose the way the writer computes it: a raster
+    turned over without its position and cosines being turned with it lands on
+    some other voxel and fails here.
+    """
+    image_data = phantom()
+    plane = plane_from_reslice(posed_reslice(image_data))
+
+    rows, columns = plane.scalars.shape
+    row_spacing, column_spacing = plane.pixel_spacing
+    orientation = np.array(plane.location.orientation)
+    corner = np.array(plane.location.position)
+
+    # Off both centres, so a flip about either cannot pass, and well inside the
+    # cut, where an autocropped oblique corner would be outside the volume.
+    for row, column in ((rows // 4, columns // 3), (rows // 3, columns // 2)):
+        point = (
+            corner
+            + column * column_spacing * orientation[:3]
+            + row * row_spacing * orientation[3:]
+        )
+        assert np.isclose(
+            interpolated(image_data, point), plane.scalars[row, column], atol=1.0
+        )
 
 
 def test_the_pose_lands_inside_the_cut_it_posed():
@@ -225,22 +275,82 @@ def test_the_pose_lands_inside_the_cut_it_posed():
     assert np.isclose(offset @ np.cross(orientation[:3], orientation[3:]), 0.0)
 
 
-def test_pixel_spacing_is_row_then_column():
+def test_a_cut_is_written_on_square_pixels():
+    """However the cut fell, and whether or not it was turned.
+
+    An autocropped cut comes out with a spacing of its own on each axis, which
+    ``PixelSpacing`` describes and a viewer reading a Secondary Capture may
+    never look at.  Square pixels are what such a viewer draws correctly.
+    """
+    finest = min(VOLUME_SPACING)
+
+    for rotation in (None, np.eye(3)):
+        plane = plane_from_reslice(posed_reslice(phantom(), rotation=rotation))
+
+        assert plane.pixel_spacing == (finest, finest)
+        assert plane.thickness == finest
+
+
+def test_resampling_a_cut_changes_its_sampling_and_not_its_reach():
+    """The capture is the view's own cut more finely sampled, not a wider one."""
     reslice = posed_reslice(phantom())
-    spacing = reslice.GetOutput().GetSpacing()
+    view = reslice.GetOutput()
+    columns, rows, _ = view.GetDimensions()
+    spacing = view.GetSpacing()
 
     plane = plane_from_reslice(reslice)
+    written_rows, written_columns = plane.scalars.shape
+    row_spacing, column_spacing = plane.pixel_spacing
 
-    assert plane.pixel_spacing == (spacing[1], spacing[0])
+    assert np.isclose(
+        (written_columns - 1) * column_spacing,
+        (columns - 1) * spacing[0],
+        atol=spacing[0],
+    )
+    assert np.isclose(
+        (written_rows - 1) * row_spacing, (rows - 1) * spacing[1], atol=spacing[1]
+    )
 
 
-def test_an_axis_aligned_cut_keeps_the_volume_spacing():
-    reslice = posed_reslice(phantom(), rotation=np.eye(3))
+def test_a_cut_is_cropped_to_the_rectangle_it_is_given():
+    """Which is what the view is showing, so a view zoomed onto the chambers
+    does not export the whole reformat."""
+    rectangle = ((-4.0, 6.0), (-3.0, 9.0))
 
-    plane = plane_from_reslice(reslice)
+    plane = plane_from_reslice(posed_reslice(phantom()), rectangle)
 
-    # The upper-left transform maps the volume's x and y onto the plane's.
-    assert np.allclose(plane.pixel_spacing, (VOLUME_SPACING[1], VOLUME_SPACING[0]))
+    rows, columns = plane.scalars.shape
+    row_spacing, column_spacing = plane.pixel_spacing
+    # Covering the rectangle, and not by more than the pixel it is covered in.
+    assert 10.0 <= (columns - 1) * column_spacing < 10.0 + column_spacing
+    assert 12.0 <= (rows - 1) * row_spacing < 12.0 + row_spacing
+
+
+def test_a_cropped_cut_says_where_its_own_first_pixel_is():
+    """The corner the geometry names moves with the crop, the first row written
+    being the top of the rectangle rather than the top of the whole cut."""
+    reslice = posed_reslice(phantom())
+    rectangle = ((-4.0, 6.0), (-3.0, 9.0))
+    axes = reslice_axes(reslice)
+
+    plane = plane_from_reslice(reslice, rectangle)
+
+    row_spacing, _ = plane.pixel_spacing
+    corner = axes[:3, :3] @ np.array([-4.0, 9.0, 0.0]) + axes[:3, 3]
+    assert np.allclose(plane.location.position, corner, atol=row_spacing)
+
+
+def test_a_capture_does_not_resample_the_view_it_was_taken_of():
+    """The person posed the views; a capture is not a reason to redraw them."""
+    reslice = posed_reslice(phantom())
+    before = reslice.GetOutput().GetSpacing(), reslice.GetOutput().GetDimensions()
+
+    plane_from_reslice(reslice)
+
+    assert (
+        reslice.GetOutput().GetSpacing(),
+        reslice.GetOutput().GetDimensions(),
+    ) == before
 
 
 # --- what the values do on the way out ----------------------------------------
@@ -404,6 +514,33 @@ def test_a_mosaic_is_the_grid_it_was_asked_for():
 
     tile_rows, tile_columns = wide.scalars.shape[0], wide.scalars.shape[1] // 6
     assert grid.scalars.shape == (2 * tile_rows, 3 * tile_columns)
+
+
+def test_a_mosaic_tile_holds_what_a_tile_of_the_grid_was_showing():
+    """Cut to the rectangle the grid shows of each cut, so the mosaic and the
+    picture of the grid are framed alike."""
+    rectangle = ((-8.0, 8.0), (-5.0, 5.0))
+
+    plane = compose(phantom(), poses(2), VIEW_TRANSFORMS["ul"], 1, 2, rectangle)
+
+    rows, columns = plane.scalars.shape
+    spacing = plane.pixel_spacing[0]
+    tile_columns = columns // 2
+    assert 16.0 <= (tile_columns - 1) * spacing < 16.0 + spacing
+    assert 10.0 <= (rows - 1) * spacing < 10.0 + spacing
+
+
+def test_a_grid_that_is_showing_nothing_yet_holds_its_cuts_whole():
+    """A window that has never been sized frames nothing, and a mosaic of the
+    cuts themselves is better than one cut to a rectangle nobody chose."""
+    rectangle = ((-8.0, 8.0), (-5.0, 5.0))
+
+    framed = compose(phantom(), poses(2), VIEW_TRANSFORMS["ul"], 1, 2, rectangle)
+    whole = mosaic_of(1, 2)
+
+    # The phantom's cuts run well past the rectangle above on both axes.
+    assert whole.scalars.shape[0] > framed.scalars.shape[0]
+    assert whole.scalars.shape[1] > framed.scalars.shape[1]
 
 
 def test_a_mosaic_keeps_the_volume_values():
@@ -639,6 +776,55 @@ def test_a_data_capture_of_a_cut_records_the_values(tmp_path):
     writer = writer_for(CaptureFormat.DICOM_DATA, context(tmp_path, "ul"))
 
     assert isinstance(writer, SliceWriter)
+
+
+def sized_views(scene, size: int = 256):
+    """The MPR windows given a size, as a headless session gives them one.
+
+    A renderer learns its viewport from the window, and until it has one it is
+    showing nothing to crop a capture to.
+    """
+    for view in scene.mpr_views:
+        scene.mpr_views[view].SetSize(size, size)
+    return scene.mpr_views
+
+
+def test_a_data_capture_is_framed_like_the_picture_beside_it(tmp_path):
+    """Both captures of one view show the same part of the cut."""
+    _server, scene, logic = built(tmp_path, "ul")
+    views = sized_views(scene)
+
+    plane = logic.capture.plane_for("ul", 0)
+
+    (low_x, high_x), (low_y, high_y) = visible_rectangle(views.renderer("ul"))
+    rows, columns = plane.scalars.shape
+    row_spacing, column_spacing = plane.pixel_spacing
+    assert (columns - 1) * column_spacing == pytest.approx(
+        high_x - low_x, abs=column_spacing
+    )
+    assert (rows - 1) * row_spacing == pytest.approx(high_y - low_y, abs=row_spacing)
+
+
+def test_zooming_a_view_crops_the_capture_taken_of_it(tmp_path):
+    """The zoom is how a person says what they want to see, and a capture of
+    the whole reformat is not what they asked for."""
+    _server, scene, logic = built(tmp_path, "ul")
+    views = sized_views(scene)
+    before = logic.capture.plane_for("ul", 0).scalars.shape
+
+    views.zoom(2.0)
+    after = logic.capture.plane_for("ul", 0).scalars.shape
+
+    assert after[0] < before[0] and after[1] < before[1]
+
+
+def test_a_view_that_has_never_been_sized_is_captured_whole(tmp_path):
+    """It is showing nothing to be framed like, and a capture of nothing at all
+    would be worse than one framed differently."""
+    _server, scene, logic = built(tmp_path, "ul")
+
+    assert visible_rectangle(scene.mpr_views.renderer("ul")) is None
+    assert logic.capture.plane_for("ul", 0).scalars.size > 0
 
 
 def test_the_charts_have_no_cut_behind_them_to_capture(tmp_path):

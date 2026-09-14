@@ -10,6 +10,7 @@ from .. import registry
 
 # Internal
 from ..action import action, background
+from ..camera import visible_rectangle
 from ..capture import (
     CaptureFormat,
     Context,
@@ -233,9 +234,24 @@ class CaptureController(Controller):
         )
 
     def _mpr_plane(self, viewport: str, volume, frame: int):
-        """One MPR view's cut, as the view itself is posed for that frame."""
+        """One MPR view's cut, as the view itself is posed and framed for it."""
         reslices = volume.get_mpr_actors_for_frame(frame)
-        return plane_from_reslice(reslices[viewport]["reslice"])
+        return plane_from_reslice(
+            reslices[viewport]["reslice"], self._shown_rectangle(viewport)
+        )
+
+    def _shown_rectangle(self, viewport: str):
+        """The part of the cut ``viewport`` is showing, or None for all of it.
+
+        A data capture is cropped to what the picture taken beside it shows, so
+        that a view zoomed onto the chambers does not export the whole reformat.
+        A view whose window has never been sized has shown nothing to match, and
+        is written whole.
+        """
+        views = self.scene.mpr_views
+        if views is None:
+            return None
+        return visible_rectangle(views.renderer(viewport))
 
     def _mosaic_plane(self, viewport: str, volume, frame: int):
         """The tile grid's cuts, composed into one image."""
@@ -249,6 +265,7 @@ class CaptureController(Controller):
             VIEW_TRANSFORMS["ul"],
             views.rows,
             views.cols,
+            views.shown_rectangle(),
         )
 
     @property
