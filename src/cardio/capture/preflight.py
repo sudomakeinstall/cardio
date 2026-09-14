@@ -42,9 +42,19 @@ class Requirement:
     reason: str
 
 
-# The fields a capture cannot be honestly written without.  Each of them is
-# something the receiver takes on trust, so a stand-in for one is indetectable
-# once the file has left: an archive files what it is given.
+# The fields a capture is refused for.  Two different rules put a field here,
+# and it is worth knowing which one before moving another.
+#
+# The first three are what this app would otherwise have to invent.  A receiver
+# takes them on trust -- an archive files what it is given -- so a stand-in for
+# one is indetectable once the file has left.
+#
+# The last two are honestly empty when they are absent: both are Type 2, and a
+# zero-length element is what gets written.  They are here because an instance
+# nobody can reconcile with an order is a stray in the archive even though
+# nothing about it is untrue.  That is a claim about where files are going
+# rather than about the file, so a site that files differently moves them back
+# down and gets warnings instead.
 REQUIRED = (
     Requirement("PatientID", "an archive files every instance under it"),
     Requirement("PatientName", "an archive has no other way to name the patient"),
@@ -52,6 +62,12 @@ REQUIRED = (
         "StudyInstanceUID",
         "without one the capture opens a study of its own rather than joining "
         "the study it was derived from",
+    ),
+    Requirement("AccessionNumber", "nothing links the capture back to the order"),
+    Requirement(
+        "StudyDate",
+        "worklist reconciliation and sorting need it, and an acquisition that "
+        "really happened has one",
     ),
 )
 
@@ -64,9 +80,7 @@ ADVISORY = (
         "without one a reformat cannot be spatially correlated with the series "
         "it was cut from",
     ),
-    Requirement("AccessionNumber", "nothing links the capture back to the order"),
     Requirement("StudyID", "nothing links the capture back to the order"),
-    Requirement("StudyDate", "worklist reconciliation and sorting need it"),
     Requirement("StudyTime", "worklist reconciliation and sorting need it"),
     Requirement("Modality", "routing rules key off it"),
     Requirement("PatientBirthDate", "Type 2, and an archive may reconcile on it"),

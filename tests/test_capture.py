@@ -1500,18 +1500,40 @@ def test_the_warning_names_the_fields_and_says_why(caplog):
     assert "routing rules key off it" in caplog.text
 
 
-def test_the_required_fields_are_the_ones_nobody_downstream_can_check():
-    """Everything else is a receiver's preference, so it warns rather than stops."""
+def test_a_field_is_required_or_advisory_and_never_both():
+    """The two are read separately, so an entry in both would refuse and warn."""
     required = {field.name for field in preflight.REQUIRED}
 
-    assert required == {"PatientID", "PatientName", "StudyInstanceUID"}
+    assert required == {
+        "PatientID",
+        "PatientName",
+        "StudyInstanceUID",
+        "AccessionNumber",
+        "StudyDate",
+    }
     assert not required & {field.name for field in preflight.ADVISORY}
+
+
+def test_an_instance_nobody_can_reconcile_with_an_order_is_refused():
+    """Honestly empty and still a stray, which is the site's call to make."""
+    source = identified(AccessionNumber="")
+
+    assert [field.name for field in preflight.blocking(source, REGISTERED_ROOT)] == [
+        "AccessionNumber"
+    ]
 
 
 def identified(**fields) -> pd.dataset.Dataset:
     """A source carrying the identity a capture may not be written without."""
     return sparse_source(
-        PatientID="X", PatientName="Y^Z", StudyInstanceUID="1.2.3", **fields
+        **{
+            "PatientID": "X",
+            "PatientName": "Y^Z",
+            "StudyInstanceUID": "1.2.3",
+            "AccessionNumber": "ACC-1",
+            "StudyDate": "20260101",
+            **fields,
+        }
     )
 
 
@@ -1540,7 +1562,7 @@ def test_a_borrowed_root_stops_a_capture_on_its_own():
 def test_a_volume_read_from_a_file_stops_a_capture():
     stopping = {field.name for field in preflight.blocking(None, REGISTERED_ROOT)}
 
-    assert stopping == {"PatientID", "PatientName", "StudyInstanceUID"}
+    assert stopping == {field.name for field in preflight.REQUIRED}
 
 
 def test_the_refusal_names_the_fields_and_the_way_out():

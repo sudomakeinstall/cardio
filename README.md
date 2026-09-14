@@ -238,21 +238,26 @@ Every UID is minted under `uid_root`.  The default is pydicom's own registered
 root, which is nobody else's to assert -- a session opened on it says so at
 startup.
 
-A DICOM capture is **refused** when something about it could not be checked by
-whoever received it: a patient, name or study UID this app would have to invent,
-or a UID root the deployment has not registered.  An instance filed under an
-invented identity is not an incomplete instance but a wrong one, and an archive
-that accepts it has no way to know.  Setting `research` waives those checks and
-writes the file with warnings, which is the right setting for a session whose
-output goes nowhere -- but it has to be set deliberately, so nothing reaches an
-archive because somebody forgot.
+A DICOM capture is **refused** when the source series lacks `PatientID`,
+`PatientName`, `StudyInstanceUID`, `AccessionNumber` or `StudyDate`, or when
+`uid_root` is one the deployment has not registered.  The first three are what
+the app would otherwise have to invent, and an instance filed under an invented
+identity is not an incomplete instance but a wrong one -- an archive that
+accepts it has no way to know.  The last two are honestly empty when they are
+absent, and refused anyway: an instance nobody can reconcile with an order is a
+stray in the archive.  Setting `research` waives all of it and writes the file
+with warnings, which is the right setting for a session whose output goes
+nowhere -- but it has to be set deliberately, so nothing reaches an archive
+because somebody forgot.
 
 Everything else is reported rather than refused.  The fields a receiving archive
-is likely to want -- accession number, study ID, frame of reference, patient size
-and weight, and the rest -- are checked against what the source series actually
-carried, and whatever is missing is named in the log and counted in what the
-drawer reports.  The capture is written anyway: whether a given field is needed
-depends on where the file is going, which the app does not know.
+may want -- study ID, frame of reference, patient size and weight, and the rest
+-- are checked against what the source series actually carried, and whatever is
+missing is named in the log and counted in what the drawer reports.  The capture
+is written anyway: whether a given field is needed depends on where the file is
+going, which the app does not know.  Which fields sit on which side of that line
+is `REQUIRED` and `ADVISORY` in `cardio/capture/preflight.py`, and a site that
+files differently moves an entry between them.
 
 ### Measurements and segmentations as DICOM
 

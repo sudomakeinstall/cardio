@@ -292,7 +292,7 @@ def write_cine_series(
         dataset.StudyDate = "20260101"
         dataset.StudyTime = ""
         dataset.StudyID = ""
-        dataset.AccessionNumber = ""
+        dataset.AccessionNumber = "ACC-1"
         dataset.ReferringPhysicianName = ""
         dataset.StudyInstanceUID = study_uid
         dataset.SeriesInstanceUID = uid
