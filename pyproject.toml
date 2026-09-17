@@ -78,7 +78,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-q --tb=short"
 
 [tool.ruff.lint]
 extend-select = ["I"]

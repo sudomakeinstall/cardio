@@ -528,7 +528,7 @@ Pre-commit checklist:
 ```bash
 $ ruff check --fix
 $ ruff format
-$ pytest -v
+$ ./scripts/pytest-with-memory-cap.sh
 ```
 
 Uploading:
