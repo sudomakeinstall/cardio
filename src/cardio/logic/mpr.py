@@ -173,6 +173,11 @@ class MPRController(Controller):
         # Add segmentation overlays
         self._add_segmentation_overlays_to_mpr(frame)
 
+        # The views were just cleared and rebuilt, which drops the traced
+        # regions with everything else; they go back on here rather than off a
+        # listener, because a cine reaches this without one.
+        self.app.measurements.draw()
+
         # Apply current window/level settings to the MPR actors
         window = self.server.state.mpr_window
         level = self.server.state.mpr_level
@@ -232,6 +237,7 @@ class MPRController(Controller):
 
         # Add segmentation overlays
         self._add_segmentation_overlays_to_mpr(current_frame)
+        self.app.measurements.draw()
 
         # Apply current window/level settings to the MPR actors
         window = self.server.state.mpr_window
@@ -258,10 +264,14 @@ class MPRController(Controller):
 
         # Every cut already built, not just the current frame's, so that
         # stepping between frames lands on the same origin.
-        pose = self._current_pose()
+        pose = self.current_pose()
         for obj in [active_volume, *self._overlaid_segmentations()]:
             for reslices in obj._mpr_actors.values():
                 reslices.set_pose(*pose)
+
+        # The props are still on the renderers; what changed is the plane they
+        # are being asked about, which decides which of them belong on it.
+        self.app.measurements.draw()
 
         self.server.controller.view_update()
 
@@ -346,6 +356,7 @@ class MPRController(Controller):
         for obj in [active_volume, *self._overlaid_segmentations()]:
             self._reslices(obj, current_frame)
 
+        self.app.measurements.draw()
         self._sync_vr_camera_to_mpr()
         self.server.controller.view_update()
 
@@ -465,8 +476,12 @@ class MPRController(Controller):
         self.app.camera.install_configured()
         self.app.zoom.refit()
 
-    def _current_pose(self):
-        """The origin and rotation the cuts are aimed by, both in ITK."""
+    def current_pose(self):
+        """The origin and rotation the cuts are aimed by, both in ITK.
+
+        Public because it is what a sibling has to know to say where a cut
+        sits: a traced region is filed against the plane this composes.
+        """
         return (
             self.convention.point_to_itk(self.server.state.mpr_origin),
             self.app.rotations.rotation_matrix(),
@@ -480,7 +495,7 @@ class MPRController(Controller):
         unrotated, which is what it would draw.
         """
         reslices = obj.get_mpr_actors_for_frame(frame)
-        reslices.set_pose(*self._current_pose())
+        reslices.set_pose(*self.current_pose())
         return reslices
 
     def _add_segmentation_overlays_to_mpr(self, frame: int):
@@ -517,6 +532,7 @@ class MPRController(Controller):
 
         # Poses the overlays as it adds them, so no second pass is needed here
         self._add_segmentation_overlays_to_mpr(current_frame)
+        self.app.measurements.draw()
 
         self.server.controller.view_update()
 

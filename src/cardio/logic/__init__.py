@@ -16,6 +16,7 @@ from .camera import CameraController
 from .capture import CaptureController
 from .clipping import ClippingController
 from .console import ConsoleController
+from .measurement import MeasurementController
 from .mpr import MPRController
 from .playback import PlaybackController
 from .rotations import RotationController
@@ -35,6 +36,7 @@ __all__ = [
     "Controller",
     "Logic",
     "MPRController",
+    "MeasurementController",
     "PlaybackController",
     "RotationController",
     "SnapController",
@@ -81,6 +83,7 @@ class Logic:
         self.volumetry = VolumetryController(self)
         self.capture = CaptureController(self)
         self.zoom = ZoomController(self)
+        self.measurements = MeasurementController(self)
         self.camera = CameraController(self)
 
         self.journal = Journal(
@@ -139,6 +142,10 @@ class Logic:
         ``volumetry`` is below ``playback``, whose frame it marks, and above
         ``snap`` and ``zoom``, since it neither moves the origin nor reads a
         fit -- it measures the labels themselves, which no pose changes.
+
+        ``measurements`` is below both of those because whether a traced region
+        is on its own plane is decided by the pose the cuts have settled at,
+        and they are the last two to move it.
         """
         return [
             self.console,
@@ -153,5 +160,6 @@ class Logic:
             self.capture,
             self.snap,
             self.zoom,
+            self.measurements,
             self.camera,
         ]

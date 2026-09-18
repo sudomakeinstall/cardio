@@ -11,6 +11,7 @@ import math
 import time
 
 # Internal
+from ..planimetry import CLICK_SLOP, is_click
 from ..window_level import presets
 
 HANDLED_EVENTS = [
@@ -35,9 +36,21 @@ TRACKBALL_VIEW = "volume"
 # slice scroll, which has no single slice to move.
 DRAG_VIEWS = MPR_VIEWS | {"tile"}
 
+# Views a click means something in, which is every view showing a cut: a click
+# places a point of a region, and a region is traced on a cut.
+CUT_VIEWS = MPR_VIEWS | {"tile"}
+
 # The console's key. A backtick because every letter that reads as "console"
 # already names a view, and because it is where a console usually is.
 CONSOLE_KEY = "`"
+
+# The measuring keys. All three are printable letters, and have to be: the
+# views forward the DOM ``keypress`` event, which does not fire for Escape or
+# Backspace. The buttons in the drawer are the path that does not have to be
+# remembered; these are for a hand already on the mouse.
+MEASURE_KEY = "m"
+UNDO_POINT_KEY = "u"
+CANCEL_TRACE_KEY = "x"
 
 # Keys that maximize a view, and the view each one names. The cut views kept
 # their anatomical letters when they were renamed for where they sit, since
@@ -62,6 +75,10 @@ class Interaction:
         self.right_dragging = False
         self.middle_dragging = False
         self.last_mouse_pos = {}
+        # Where each button went down, per view, so a release can say whether
+        # it was a click. Keyed by view so a press in one pane and a release in
+        # another cannot be read as a click in either.
+        self.press_pos = {}
 
         self.window_sensitivity = 5.0
         self.level_sensitivity = 2.0
@@ -96,18 +113,29 @@ class Interaction:
             case "LeftButtonPress":
                 self.left_dragging = True
                 self._store_mouse_position(view_name, event)
+                self._note_press("left", view_name, event)
 
             case "LeftButtonRelease":
                 self.left_dragging = False
                 self._note_camera(view_name)
+                if self._measuring and self._was_click("left", view_name, event):
+                    self.logic.dispatch(
+                        "place_measurement_point",
+                        view_name=view_name,
+                        x=event["position"]["x"],
+                        y=event["position"]["y"],
+                    )
 
             case "RightButtonPress":
                 self.right_dragging = True
                 self._store_mouse_position(view_name, event)
+                self._note_press("right", view_name, event)
 
             case "RightButtonRelease":
                 self.right_dragging = False
                 self._note_camera(view_name)
+                if self._measuring and self._was_click("right", view_name, event):
+                    self.logic.dispatch("close_measurement")
 
             case "MiddleButtonPress":
                 self.middle_dragging = True
@@ -203,8 +231,51 @@ class Interaction:
             self.logic.dispatch("toggle_metadata")
         elif key == CONSOLE_KEY:
             self.logic.dispatch("toggle_console")
+        elif key == MEASURE_KEY:
+            self.logic.dispatch("toggle_measuring")
+        elif key == UNDO_POINT_KEY:
+            self.logic.dispatch("undo_measurement_point")
+        elif key == CANCEL_TRACE_KEY:
+            self.logic.dispatch("cancel_measurement")
         elif key in MAXIMIZE_KEYS:
             self.logic.dispatch("toggle_maximized", view=MAXIMIZE_KEYS[key])
+
+    @property
+    def _measuring(self) -> bool:
+        """Whether a click is placing a point rather than merely being a click.
+
+        The one thing this module reads rather than reports, and it earns the
+        exception: every action goes into the log the console shows and the
+        script it exports, so dispatching one on every click of a gesture
+        nobody meant as tracing would fill both with lines nobody asked for.
+        What the mode *means* is still the controller's alone.
+        """
+        return bool(getattr(self.logic.server.state, "measuring", False))
+
+    def _note_press(self, button: str, view_name, event):
+        """Remember where a button went down, so its release can be judged."""
+        if view_name in CUT_VIEWS and "position" in event:
+            self.press_pos[(button, view_name)] = [
+                event["position"]["x"],
+                event["position"]["y"],
+            ]
+
+    def _was_click(self, button: str, view_name, event) -> bool:
+        """Whether a release ends a click rather than a drag.
+
+        Every gesture that uses a button travels -- window/level, the zoom, the
+        slice scroll -- so a press and release in the same place is the one
+        thing none of them is, and can be given to the tracing without taking
+        anything away from the rest. The slop is for a hand that is not quite
+        still, not for a short drag.
+        """
+        press = self.press_pos.pop((button, view_name), None)
+        if press is None or view_name not in CUT_VIEWS or "position" not in event:
+            return False
+
+        return is_click(
+            press, [event["position"]["x"], event["position"]["y"]], CLICK_SLOP
+        )
 
     def _store_mouse_position(self, view_name, event):
         """Remember where a drag started, so the next move has a delta."""

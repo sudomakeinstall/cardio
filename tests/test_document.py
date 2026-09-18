@@ -10,13 +10,15 @@ import itertools
 import pathlib as pl
 
 # Third Party
+import numpy as np
 import pytest
 import tomlkit as tk
 
-import tests.test_app_smoke as smoke
-
 # Internal
+import cardio.planimetry as planimetry
+import tests.test_app_smoke as smoke
 from cardio.document import scene_from_state, to_toml
+from cardio.measurement import Measurement, MeasurementSet
 from cardio.rotation import RotationMetadata, RotationSequence, RotationStep
 from cardio.scene import Scene
 from cardio.session import Session
@@ -288,3 +290,80 @@ def test_a_rotation_file_says_which_volume_it_is_for(tmp_path):
     )
 
     assert session.scene.active_volume_label == "vol"
+
+
+# ---------------------------------------- where the measurements come from ----
+#
+# The same rule as the rotations, for the same reason: a measurement file is
+# read over whatever the config spelled, so a config carrying both would show a
+# set that opening it would throw away.  What differs is that the file does not
+# move anything -- a rotation file says where to look, and a measurement file
+# says where somebody looked.
+
+
+def measurement_file(directory: pl.Path, name: str = "AVA") -> pl.Path:
+    """A measurement file holding one region, traced on an unrotated cut."""
+    path = directory / "regions.toml"
+    MeasurementSet(
+        measurements=[
+            Measurement(
+                name=name,
+                view="ul",
+                points=[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)],
+                cut=planimetry.cut_from([0.0, 0.0, 0.0], np.eye(3), "ul"),
+            )
+        ]
+    ).to_file(path)
+    return path
+
+
+@pytest.fixture
+def measured(tmp_path) -> Session:
+    """A session opened on a config that names a measurement file."""
+    return session_on(tmp_path, measurement_file=measurement_file(tmp_path))
+
+
+def test_a_config_naming_a_measurement_file_does_not_also_spell_the_regions(
+    measured, tmp_path
+):
+    body = tk.parse(measured.save(tmp_path / "saved.toml").read_text())
+
+    assert "measurement_file" in body
+    assert "measurements" not in body
+
+
+def test_a_saved_session_reopens_on_the_regions_the_file_holds(measured, tmp_path):
+    reopen = reopened(measured.save(tmp_path / "saved.toml"))
+
+    assert [m.name for m in reopen.scene.measurements.measurements] == ["AVA"]
+    assert reopen.scene.measurements.measurements[0].area == pytest.approx(16.0)
+
+
+def test_a_session_with_no_measurement_file_still_saves_its_regions(driven, tmp_path):
+    """The other half of the rule: with no file named, the set is the answer."""
+    body = tk.parse(driven.save(tmp_path / "saved.toml").read_text())
+
+    assert "measurement_file" not in body
+    assert "measurements" in body
+
+
+def test_a_measurement_file_that_is_not_there_is_refused(tmp_path):
+    """A mistyped path says so, rather than opening on no regions at all."""
+    with pytest.raises(ValueError, match="measurement_file"):
+        session_on(tmp_path, measurement_file=tmp_path / "absent.toml")
+
+
+def test_a_measurement_file_leaves_the_cuts_where_the_config_put_them(tmp_path):
+    """A set of past regions says where somebody looked, not where to look.
+
+    The contrast with a rotation file is the point: that one is applied on the
+    way in, and this one is not.
+    """
+    session = session_on(
+        tmp_path,
+        measurement_file=measurement_file(tmp_path),
+        mpr_origin=[5.0, 6.0, 7.0],
+    )
+
+    assert session.scene.mpr_origin == [5.0, 6.0, 7.0]
+    assert session.scene.mpr_rotation_sequence.angles_list == []

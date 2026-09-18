@@ -66,6 +66,7 @@ COMPUTED_KEYS = {
     "f'mpr_rotation_data.angles_list[{i}].axis'": "a step within the sequence",
     "f'mpr_rotation_data.angles_list[{i}].name'": "a step within the sequence",
     "f'mpr_rotation_data.angles_list[{i}].visible'": "a step within the sequence",
+    "f'{REGIONS}[{i}].name'": "a measurement within the set",
     "f'volumetry_groups.{STRUCTURES}[{i}].chamber'": "a structure within the list",
     "f'volumetry_groups.{STRUCTURES}[{i}].density'": "a structure within the list",
     "f'volumetry_groups.{STRUCTURES}[{i}].labels'": "a structure within the list",

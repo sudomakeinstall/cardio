@@ -16,6 +16,7 @@ from .metadata import metadata_dialog
 from .panels import (
     capture_panel,
     console_panel,
+    measurements_panel,
     playback_panel,
     rotations_panel,
     slice_views_panel,
@@ -99,6 +100,11 @@ class UI:
                 with section("orientation", "Orientation", "mdi-axis-arrow"):
                     snap_panel(self.server, self.scene)
                     rotations_panel(self.server, self.scene)
+
+                # Below Orientation: a region is traced on the pose those
+                # controls set, and means nothing apart from it.
+                with section("measure", "Measurements", "mdi-vector-polyline"):
+                    measurements_panel(self.server, self.scene)
 
                 if self.scene.segmentations:
                     with section("zoom", "Zoom", "mdi-fit-to-screen-outline"):

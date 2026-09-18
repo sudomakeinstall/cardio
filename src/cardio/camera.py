@@ -136,6 +136,27 @@ def world_per_pixel(renderer) -> float:
     return math.dist(start, end)
 
 
+def cut_point(renderer, x: float, y: float) -> tuple[float, float]:
+    """A display point as the cut's own millimetres.
+
+    A reslice is two-dimensional with an identity output direction, so the
+    renderer's world coordinates *are* the cut's own: the point the cut was
+    posed at is world (0, 0, 0), and x and y are millimetres along the
+    directions the reslice axes name.  That is what makes a click on a view
+    something the patient's geometry can be recovered from with nothing but the
+    pose the view was given.
+
+    Taken at the focal plane's depth, which is the plane the cut lies in --
+    every camera here looks straight at the origin the cut was posed at.
+
+    Here rather than on ``MPRViews`` because a tile renderer is read the same
+    way, and display coordinates are the window's rather than a tile's.
+    """
+    depth = _focal_display_point(renderer)[2]
+    point = _display_to_world(renderer, x, y, depth)
+    return point[0], point[1]
+
+
 def visible_rectangle(renderer):
     """What the viewport shows, in world units at the focal plane.
 

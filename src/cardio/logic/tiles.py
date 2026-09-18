@@ -364,6 +364,7 @@ class TileController(Controller):
             self._fitted = False
             if traversing:
                 state.snap_no_interface = True
+            self.app.measurements.draw()
             self.server.controller.view_update()
             return
 
@@ -386,6 +387,12 @@ class TileController(Controller):
             overlay.set_poses(poses, plane)
             set_label_opacity(overlay.values(), state.mpr_segmentation_opacity)
             views.add_overlay(overlay)
+
+        # The tiles were just cleared and rebuilt, which drops the traced
+        # regions with everything else. Here rather than off a listener,
+        # because the grid is reposed by the frame path as well as by its own
+        # controls, and that does not go through one.
+        self.app.measurements.draw()
 
         # A refit frames the whole cut. Where a fit is being held, that is not
         # what is on screen and the held one gets the last word -- the same

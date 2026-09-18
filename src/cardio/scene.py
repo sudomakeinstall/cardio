@@ -9,8 +9,10 @@ import vtk
 
 from .capture import CaptureFormat, Equipment, SeriesTags, TransferSyntax
 from .capture.uid import DEFAULT_ROOT as DEFAULT_UID_ROOT
+from .measurement import MeasurementSet
 from .mesh import Mesh
 from .mpr_views import MPRViews
+from .planimetry import ContourStyle
 from .playback import Playback
 from .rotation import RotationSequence
 from .segmentation import Segmentation
@@ -173,6 +175,27 @@ class Scene(ps.BaseSettings):
     max_mpr_rotations: int = pc.Field(
         default=20,
         description="Maximum number of MPR rotations supported",
+    )
+    measurements: MeasurementSet = pc.Field(
+        default_factory=MeasurementSet,
+        description="Regions traced on the cuts, and the pose each was traced at",
+    )
+    measurement_file: pl.Path | None = pc.Field(
+        default=None,
+        description="Path to TOML file containing measurements to load",
+    )
+    measurement_contour: ContourStyle = pc.Field(
+        default=ContourStyle.POLYGON,
+        description=(
+            "How a traced region is closed: straight between the points, or a "
+            "closed spline through them. Options: "
+            + ", ".join(ContourStyle)
+            + ". CLI usage: --measurement-contour spline"
+        ),
+    )
+    max_measurements: int = pc.Field(
+        default=20,
+        description="Maximum number of measurements the drawer lists",
     )
     mpr_crosshairs_enabled: bool = pc.Field(
         default=True, description="Show crosshair lines indicating slice intersections"
@@ -365,6 +388,29 @@ class Scene(ps.BaseSettings):
         return self
 
     @pc.model_validator(mode="after")
+    def load_measurement_file(self):
+        """Read the measurements from the file the config names.
+
+        Read *over* whatever the config spelled, and refused when it is not
+        there, for the reasons ``load_rotation_file`` is both.
+
+        Unlike that one it moves nothing.  A rotation file says where to look
+        and is applied on the way in; a measurement file says where somebody
+        looked, and opening a study already turned to the last region anybody
+        traced would be a surprise.  Recall is how a measurement moves the
+        views, and it is asked for.
+        """
+        if self.measurement_file is not None:
+            if not self.measurement_file.exists():
+                raise ValueError(
+                    f"measurement_file: {str(self.measurement_file)!r} does not exist"
+                )
+
+            self.measurements = MeasurementSet.from_file(self.measurement_file)
+
+        return self
+
+    @pc.model_validator(mode="after")
     def resolve_window_level(self):
         """Reconcile the window and level with the preset that also names one.
 
@@ -534,6 +580,11 @@ class Scene(ps.BaseSettings):
     def rotations_directory(self) -> pl.Path:
         """Computed property that returns the rotations subdirectory."""
         return self.serialization_directory / "rotations"
+
+    @property
+    def measurements_directory(self) -> pl.Path:
+        """Computed property that returns the measurements subdirectory."""
+        return self.serialization_directory / "measurements"
 
     @property
     def scripts_directory(self) -> pl.Path:

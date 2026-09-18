@@ -8,17 +8,20 @@ the same code the application does with only the state it cares about named.
 import numpy as np
 
 # Internal
+from cardio.logic.measurement import MeasurementController
 from cardio.logic.mpr import MPRController
 from cardio.logic.rotations import RotationController
 from cardio.logic.snap import SnapController
 from cardio.logic.tiles import TileController
 from cardio.logic.zoom import ZoomController
+from cardio.measurement import MeasurementSet
 from cardio.orientation import (
     AngleUnits,
     IndexOrder,
     axcode_transform_matrix,
     cumulative_rotation_matrix,
 )
+from cardio.planimetry import ContourStyle
 from cardio.rotation import RotationMetadata, RotationSequence
 from cardio.snap import Snap
 from cardio.tile import Tile
@@ -84,6 +87,11 @@ class FakeScene:
         self.current_frame = current_frame
         self.volumes = list(volumes or [])
         self.tile = tile or Tile()
+        # The tile grid puts the traced regions back after every rebuild, so a
+        # scene the tile path runs against has to have some to put back.
+        self.measurements = MeasurementSet()
+        self.measurement_contour = ContourStyle.POLYGON
+        self.max_measurements = 20
         self.tile_views = None
         self.volumetry_views = None
         self.mpr_views = mpr_views
@@ -120,6 +128,7 @@ class FakeApp:
         self.snap = SnapController(self)
         self.tiles = TileController(self)
         self.zoom = ZoomController(self)
+        self.measurements = MeasurementController(self)
 
 
 def snap_state(**overrides) -> dict:
@@ -143,6 +152,8 @@ def snap_state(**overrides) -> dict:
         "mpr_origin": [0.0, 0.0, 0.0],
         "mpr_rotation_data": {"angles_list": []},
         "label_percentile": 100.0,
+        "measurement_data": {"measurements": []},
+        "measurement_selected": None,
     }
     state.update(overrides)
     return state

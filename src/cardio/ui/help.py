@@ -49,6 +49,15 @@ def help_dialog():
                 with html.Tr():
                     html.Td("l")
                     html.Td("Toggle crosshairs")
+                with html.Tr():
+                    html.Td("m")
+                    html.Td("Trace a region on a cut")
+                with html.Tr():
+                    html.Td("u")
+                    html.Td("Take back the last point placed")
+                with html.Tr():
+                    html.Td("x")
+                    html.Td("Give up on the region being traced")
 
         html.H3("Window/Level Presets", classes="text-h6 mb-3")
         with vuetify.VTable(density="compact", classes="mb-4"):
@@ -94,6 +103,22 @@ def help_dialog():
                 with html.Tr():
                     html.Td("Right + Middle Drag ↑/↓")
                     html.Td("Zoom every view in/out together")
+                with html.Tr():
+                    html.Td("Left Click (tracing)")
+                    html.Td("Place a point of the region")
+                with html.Tr():
+                    html.Td("Right Click (tracing)")
+                    html.Td("Close the region and measure it")
+
+        html.P(
+            "A region is drawn only while the cuts are on the plane it was "
+            "traced in, and at the frame it was traced at; move off either and "
+            "it is hidden rather than drawn somewhere it does not belong. "
+            "Recall puts the cuts back where it was measured. Tracing takes "
+            "over the click alone, so every drag above goes on working while a "
+            "region is being traced.",
+            classes="text-caption mt-3",
+        )
 
         html.P(
             "A snap lock holds what it owns: locking the position "

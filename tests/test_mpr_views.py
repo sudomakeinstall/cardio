@@ -8,7 +8,7 @@ import pytest
 import vtk
 
 # Internal
-from cardio.camera import visible_rectangle
+from cardio.camera import cut_point, visible_rectangle
 from cardio.mpr_views import MPRViews
 from cardio.reslice import VIEWS, ResliceSet
 from tests.phantoms import make_image, rotation_about_z
@@ -339,3 +339,82 @@ def test_reset_cameras_still_shows_the_whole_cut(views):
     for view in VIEWS:
         renderer = views.renderer(view)
         assert half_height(renderer) >= half_span(renderer) - 1e-9
+
+
+# --- a click on a cut ---------------------------------------------------------
+
+# ``cut_point`` is the one place a click becomes a measurement.  What is checked
+# here is the claim it rests on: a cut renderer's world coordinates are the
+# cut's own millimetres, so the centre of the viewport is the point the cut was
+# posed at and one pixel is worth ``world_per_pixel`` of them.
+
+
+def test_the_centre_of_the_view_is_the_point_the_cut_was_posed_at(views):
+    framed(views)
+    renderer = views.renderer("ul")
+    width, height = renderer.GetSize()
+
+    assert cut_point(renderer, width / 2.0, height / 2.0) == pytest.approx(
+        (0.0, 0.0), abs=1e-6
+    )
+
+
+def test_a_pixel_of_the_view_is_worth_one_world_unit_of_the_cut(views):
+    framed(views)
+    renderer = views.renderer("ul")
+    scale = views.world_per_pixel("ul")
+
+    here = cut_point(renderer, 200.0, 150.0)
+    right = cut_point(renderer, 201.0, 150.0)
+    up = cut_point(renderer, 200.0, 151.0)
+
+    assert right[0] - here[0] == pytest.approx(scale, rel=1e-3)
+    assert right[1] == pytest.approx(here[1], abs=1e-6)
+    assert up[1] - here[1] == pytest.approx(scale, rel=1e-3)
+    assert up[0] == pytest.approx(here[0], abs=1e-6)
+
+
+def test_the_cut_reads_right_and_up_the_way_the_display_does(views):
+    """A click further right and further up is further along both axes.
+
+    Display coordinates arrive with y running up, which is VTK's own
+    convention, so nothing flips one on the way in -- and a contour traced from
+    clicks that had been quietly mirrored would enclose the right area in the
+    wrong place.
+    """
+    framed(views)
+    renderer = views.renderer("ul")
+
+    low = cut_point(renderer, 120.0, 90.0)
+    high = cut_point(renderer, 280.0, 210.0)
+
+    assert high[0] > low[0]
+    assert high[1] > low[1]
+
+
+def test_the_corners_of_the_view_are_the_rectangle_it_shows(views):
+    """The same two corners ``visible_rectangle`` reports, reached one click at
+    a time -- so a region traced to the edge of a view is a region a capture of
+    that view covers."""
+    framed(views)
+    renderer = views.renderer("ul")
+    width, height = renderer.GetSize()
+    (low_x, high_x), (low_y, high_y) = visible_rectangle(renderer)
+
+    assert cut_point(renderer, 0.0, 0.0) == pytest.approx((low_x, low_y), abs=1e-6)
+    assert cut_point(renderer, float(width), float(height)) == pytest.approx(
+        (high_x, high_y), abs=1e-6
+    )
+
+
+def test_a_click_on_a_zoomed_view_is_measured_at_the_zoomed_scale(views):
+    """The scale is read through the camera, so a zoom needs nothing told to it."""
+    framed(views)
+    renderer = views.renderer("ul")
+    before = cut_point(renderer, 250.0, 150.0)
+
+    views.zoom(2.0)
+
+    assert cut_point(renderer, 250.0, 150.0)[0] == pytest.approx(
+        before[0] / 2.0, rel=1e-2
+    )

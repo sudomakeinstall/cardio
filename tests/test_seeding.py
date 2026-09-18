@@ -49,6 +49,23 @@ MOVED = {
     "capture_series.volumetry.description": "volumetry series",
     "screenshot_viewports": ["ul", "tile"],
     "current_frame": 2,
+    "measurement_contour": "spline",
+    "measurements": {
+        "metadata": {"volume_label": "vol"},
+        "measurements": [
+            {
+                "name": "traced",
+                "view": "ll",
+                "frame": 1,
+                "points": [[0.0, 0.0], [3.0, 0.0], [3.0, 3.0]],
+                "cut": {
+                    "origin": [1.0, 1.0, 1.0],
+                    "right": [1.0, 0.0, 0.0],
+                    "up": [0.0, 0.0, 1.0],
+                },
+            }
+        ],
+    },
     "mpr_level": 111.0,
     "mpr_origin": [1.0, 2.0, 3.0],
     "mpr_rotation_sequence": {

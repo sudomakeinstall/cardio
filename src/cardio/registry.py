@@ -156,6 +156,11 @@ DOCUMENT = _declare(
     label_percentile="label_percentile",
     index_order="mpr_rotation_sequence.metadata.index_order",
     maximized_view="view.layout",
+    # One key for the whole set, as mpr_rotation_data is one key for the
+    # whole rotation sequence: a measurement is written whole by the action
+    # that closes it, so there is no half-filled row for a config to spell.
+    measurement_contour="measurement_contour",
+    measurement_data="measurements",
     metadata_overlay_visible="view.metadata_visible",
     mpr_crosshairs_enabled="mpr_crosshairs_enabled",
     mpr_level="mpr_level",
@@ -224,6 +229,12 @@ SESSION = _declare(
     console_entries="the log of what was done starts empty every session",
     console_input="what is half-typed at the prompt is not a thing to save",
     interface_flatness="measured from the interface the current selection fits",
+    measurement_pending="how many points the region being traced has so far",
+    measurement_selected="which measurement's row is highlighted is browsing state",
+    measurement_view="which cut the region being traced belongs to",
+    measurements_saved_at="written when a save happens",
+    measurements_stale="derived from edits since the last save",
+    measuring=("a mode the hand is in while tracing, not one the app is opened in"),
     metadata_object="which object's metadata sheet is showing is browsing state",
     playing="starting playback on launch is a behaviour, not view state",
     rotations_saved_at="written when a save happens",
@@ -247,6 +258,10 @@ ITEMS = _declare(
     capture_formats="the CaptureFormat members, spelled for the picker",
     event_types="the interactor events the views forward, fixed at build time",
     index_order_items="the two index orders, spelled for the picker",
+    measurement_contour_items="the two closure styles, spelled for the picker",
+    measurement_on_plane=(
+        "whether each measurement's plane is the one the cuts are showing"
+    ),
     metadata_pages="one page per object in the scene",
     mpr_presets="the window/level presets, spelled for the picker",
     segmentation_items="one entry per segmentation in the scene",

@@ -111,6 +111,23 @@ class TileViews:
         if reset_cameras:
             self.reset_cameras()
 
+    def tile_at(self, x: float, y: float) -> int | None:
+        """Which tile a display point landed in, or None outside the grid.
+
+        Display coordinates are the window's rather than a tile's -- the grid
+        is one window of viewports, not one window each -- so a tile is found
+        by the rectangle it was given rather than by asking it. None before the
+        window has been sized, when every tile is nothing by nothing.
+        """
+        for index, renderer in enumerate(self._renderers):
+            left, bottom = renderer.GetOrigin()
+            width, height = renderer.GetSize()
+            if not (width and height):
+                continue
+            if left <= x <= left + width and bottom <= y <= bottom + height:
+                return index
+        return None
+
     def zoom(self, factor: float):
         """Zoom every tile by the same factor, keeping their one shared scale.
 

@@ -15,9 +15,16 @@ import pytest
 import vtk.util.numpy_support as vtk_np
 
 # Internal
-from cardio.orientation import ensure_right_handed
+import cardio.planimetry as planimetry
+from cardio.orientation import (
+    AngleUnits,
+    EulerAxis,
+    ensure_right_handed,
+    euler_angle_to_rotation_matrix,
+)
 from cardio.reslice import VIEW_TRANSFORMS, VIEWS, ResliceSet
 from cardio.volume import Volume
+from tests.geometry import matrix_array
 
 CENTRE = np.array([4.0, -3.0, 12.0])
 SIZE = np.array([48, 48, 48])
@@ -251,3 +258,69 @@ def test_volume_actors_are_never_left_handed(tmp_path):
         [[matrix.GetElement(i, j) for j in range(3)] for i in range(3)]
     )
     assert np.linalg.det(direction) > 0
+
+
+# --- the cut a click is measured in -------------------------------------------
+
+# ``planimetry.cut_from`` composes a pose the way ``ResliceSet.set_pose`` does,
+# without a reslice to hand.  Everything a traced region stores rests on the two
+# agreeing: the millimetres a click is turned into are read off the renderer,
+# and the plane they are stored against is read off this.  If they ever parted,
+# a region would be filed under a plane it was not drawn on and nothing would
+# say so.
+
+POSES = {
+    "unrotated": np.eye(3),
+    "single turn": euler_angle_to_rotation_matrix(
+        EulerAxis.Z, 41.0, AngleUnits.DEGREES
+    ),
+    "stacked turns": (
+        euler_angle_to_rotation_matrix(EulerAxis.Z, 41.0, AngleUnits.DEGREES)
+        @ euler_angle_to_rotation_matrix(EulerAxis.X, -17.0, AngleUnits.DEGREES)
+        @ euler_angle_to_rotation_matrix(EulerAxis.Y, 63.0, AngleUnits.DEGREES)
+    ),
+    "oblique acquisition": oblique_direction(),
+}
+
+CUT_ORIGIN = [4.0, -3.0, 12.0]
+
+
+@pytest.mark.parametrize("pose", sorted(POSES))
+@pytest.mark.parametrize("view", VIEWS)
+def test_the_composed_cut_is_the_one_vtk_was_handed(view, pose):
+    rotation = POSES[pose]
+    reslice_set = ResliceSet(
+        sampled_image(np.eye(3)), interpolation="linear", background_level=0.0
+    )
+    reslice_set.set_pose(list(CUT_ORIGIN), rotation)
+
+    axes = matrix_array(reslice_set[view]["reslice"].GetResliceAxes())
+    cut = planimetry.cut_from(CUT_ORIGIN, rotation, view)
+
+    assert np.array(cut.right) == pytest.approx(axes[:3, 0])
+    assert np.array(cut.up) == pytest.approx(axes[:3, 1])
+    assert np.array(cut.origin) == pytest.approx(axes[:3, 3])
+    # Up to sign: two of the three view frames are left-handed, so a cross
+    # product of the in-plane axes is the reslice's third axis reversed.
+    assert cut.normal == pytest.approx(axes[:3, 2]) or cut.normal == pytest.approx(
+        -axes[:3, 2]
+    )
+
+
+@pytest.mark.parametrize("pose", sorted(POSES))
+@pytest.mark.parametrize("view", VIEWS)
+def test_a_point_of_the_cut_lands_where_vtk_would_put_it(view, pose):
+    """The mapping ``reslice_axes`` documents, taken through ``to_lps`` instead."""
+    rotation = POSES[pose]
+    reslice_set = ResliceSet(
+        sampled_image(np.eye(3)), interpolation="linear", background_level=0.0
+    )
+    reslice_set.set_pose(list(CUT_ORIGIN), rotation)
+    axes = matrix_array(reslice_set[view]["reslice"].GetResliceAxes())
+
+    points = np.array([(0.0, 0.0), (7.5, -2.0), (-13.0, 21.0)])
+    planar = np.column_stack([points, np.zeros(len(points))])
+    expected = planar @ axes[:3, :3].T + axes[:3, 3]
+
+    cut = planimetry.cut_from(CUT_ORIGIN, rotation, view)
+    assert planimetry.to_lps(cut, points) == pytest.approx(expected)

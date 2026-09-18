@@ -10,6 +10,7 @@ dispatches it.
 import math
 import pathlib as pl
 import re
+import types
 
 # Third Party
 import pytest
@@ -51,8 +52,20 @@ class RecordingTiles:
         self.zooms.append(factor)
 
 
+class FakeServer:
+    """The one thing Interaction reads rather than reports: the tracing mode.
+
+    A click means something different while a region is being traced, and
+    saying so on every click of a gesture that is not tracing would fill the
+    action log with it -- so this is read here rather than dispatched blind.
+    """
+
+    def __init__(self, **state):
+        self.state = types.SimpleNamespace(measuring=False, **state)
+
+
 class FakeLogic:
-    """Interaction's whole view of Logic: ``dispatch``, and nothing else.
+    """Interaction's whole view of Logic: ``dispatch``, the mode, and no more.
 
     Every call is recorded by name. A gesture is also played into the recorder
     that owns it, and the recorders keep the real methods' parameter names --
@@ -63,6 +76,7 @@ class FakeLogic:
     def __init__(self):
         self.mpr = RecordingMPR()
         self.tiles = RecordingTiles()
+        self.server = FakeServer()
         self.calls = []
 
     def dispatch(self, name, **arguments):
@@ -479,3 +493,128 @@ def test_releasing_the_middle_button_ends_the_pan(interaction):
     move(interaction, "ul", 150, 150)
 
     assert interaction.logic.mpr.pans == []
+
+
+# --- tracing a region ---------------------------------------------------------
+
+# A click is the one gesture none of the existing ones is: window/level, the
+# zoom, the slice scroll and the rotation all travel. So tracing takes the click
+# and leaves every drag alone, and this is where that is held to.
+
+
+def measuring(interaction) -> Interaction:
+    interaction.logic.server.state.measuring = True
+    return interaction
+
+
+def click(interaction, view, x, y, button="Left", travel=0):
+    interaction.on_event(
+        {"type": f"{button}ButtonPress", "position": {"x": x, "y": y}},
+        view_name=view,
+    )
+    interaction.on_event(
+        {"type": f"{button}ButtonRelease", "position": {"x": x + travel, "y": y}},
+        view_name=view,
+    )
+
+
+def placed(interaction) -> list:
+    return [
+        args
+        for name, args in interaction.logic.calls
+        if name == "place_measurement_point"
+    ]
+
+
+def test_a_click_on_a_cut_places_a_point(interaction):
+    click(measuring(interaction), "ul", 120, 90)
+
+    assert placed(interaction) == [{"view_name": "ul", "x": 120, "y": 90}]
+
+
+def test_a_click_outside_the_mode_places_nothing(interaction):
+    click(interaction, "ul", 120, 90)
+
+    assert placed(interaction) == []
+
+
+def test_a_click_on_the_volume_view_places_nothing(interaction):
+    """A region is traced on a cut, and the volume rendering is not one."""
+    click(measuring(interaction), "volume", 120, 90)
+
+    assert placed(interaction) == []
+
+
+def test_a_drag_is_not_a_click(interaction):
+    """Which is what leaves window/level alone while the mode is on."""
+    click(measuring(interaction), "ul", 120, 90, travel=40)
+
+    assert placed(interaction) == []
+
+
+def test_a_hand_that_is_not_quite_still_still_clicks(interaction):
+    click(measuring(interaction), "ul", 120, 90, travel=2)
+
+    assert len(placed(interaction)) == 1
+
+
+def test_window_level_still_works_while_measuring(interaction):
+    """The mode takes the click; the drags are untouched."""
+    measuring(interaction)
+    interaction.on_event(
+        {"type": "LeftButtonPress", "position": {"x": 100, "y": 100}}, view_name="ul"
+    )
+    move(interaction, "ul", 130, 100)
+
+    assert interaction.logic.mpr.window_level, "the drag went through"
+
+
+def test_a_right_click_closes_the_region(interaction):
+    click(measuring(interaction), "ul", 120, 90, button="Right")
+
+    assert ("close_measurement", {}) in interaction.logic.calls
+
+
+def test_a_right_click_outside_the_mode_closes_nothing(interaction):
+    """Right alone is otherwise an unused gesture, and stays one."""
+    click(interaction, "ul", 120, 90, button="Right")
+
+    assert interaction.logic.calls == []
+
+
+def test_a_press_in_one_view_and_a_release_in_another_is_not_a_click(interaction):
+    """The presses are kept per view, so a stray release cannot fabricate one."""
+    measuring(interaction)
+    interaction.on_event(
+        {"type": "LeftButtonPress", "position": {"x": 10, "y": 10}}, view_name="ul"
+    )
+    interaction.on_event(
+        {"type": "LeftButtonRelease", "position": {"x": 10, "y": 10}}, view_name="ll"
+    )
+
+    assert placed(interaction) == []
+
+
+@pytest.mark.parametrize(
+    "key, action",
+    [
+        ("m", "toggle_measuring"),
+        ("u", "undo_measurement_point"),
+        ("x", "cancel_measurement"),
+    ],
+)
+def test_the_measuring_keys_reach_their_actions(interaction, key, action):
+    interaction.on_event({"type": "KeyPress", "key": key})
+
+    assert (action, {}) in interaction.logic.calls
+
+
+def test_the_measuring_keys_are_printable(interaction):
+    """They have to be: the views forward the DOM ``keypress`` event, which
+    does not fire for Escape or Backspace."""
+    for key in (
+        interaction_module.MEASURE_KEY,
+        interaction_module.UNDO_POINT_KEY,
+        interaction_module.CANCEL_TRACE_KEY,
+    ):
+        assert len(key) == 1 and key.isprintable()

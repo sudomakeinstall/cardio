@@ -301,6 +301,77 @@ going, which the app does not know.  Which fields sit on which side of that line
 is `REQUIRED` and `ADVISORY` in `cardio/capture/preflight.py`, and a site that
 files differently moves an entry between them.
 
+### Measuring an area on a cut
+
+Press `m`, click round the thing you want the area of, and right-click to close
+it.  The region is drawn on the cut with the area it encloses beside it, and
+listed in the Measurements panel.
+
+An area measured on a cut means nothing without the cut, so each region carries
+the plane it was traced in and the pose that produced it.  It is drawn only
+while the cuts are on that plane and at that frame; move off either and it is
+hidden rather than drawn somewhere it does not belong.  *Recall* puts the cuts
+back where it was measured.  Panning, rolling or zooming within the plane keep
+it on screen, because none of those leaves the plane.
+
+| Key | Does |
+| --- | --- |
+| `m` | Start or stop tracing |
+| `u` | Take back the last point |
+| `x` | Give up on the region being traced |
+
+The tile grid takes a region like any of the three panes, on whichever tile the
+clicks land in.  A tile is a place a cut is shown rather than a thing a cut
+belongs to, so the region is drawn on whichever tile has come to rest on its
+plane -- reverse the stack and it walks to the other end of the grid with its
+slice.  What a tile region carries, and what *Recall* puts back, is the whole
+tile panel and the snap selection its path is taken from: a tile has no pose of
+its own, and a grid restored from half its settings would land the region on a
+different cut.
+
+Tracing takes the click alone, so window/level, scrolling, panning, rotating
+and zooming all go on working while a region is being traced.  Undo and cancel
+have buttons in the panel as well; the keys are for a hand already on the mouse.
+
+A region is closed either straight between the points or with a closed spline
+through them:
+
+```toml
+measurement_contour = "spline"   # polygon (default) or spline
+```
+
+That setting is the default for the *next* region.  A region already closed
+keeps the curve it was measured as -- a recorded area that changed because a
+picker moved would be a number nobody chose -- and is changed deliberately, by
+the Straight/Spline buttons on its own row.  Tracing the same points both ways
+is the cheapest paired comparison there is.
+
+*Save Measurements* writes the set out under
+`<serialization_directory>/measurements/<volume>/`, and a config opens on one:
+
+```toml
+measurement_file = "./measurements/CCTA/2026-09-17-12-43-47.toml"
+```
+
+The file holds each region's points in the cut's own millimetres, the cut they
+were measured on, the area they came to, and the rotation sequence that posed
+it -- so a reader gets the number without recomputing it and `cardio` gets the
+plane back.  It is written in LPS throughout, whatever index order the session
+is spelled in.
+
+As with rotations, a named file is read *over* whatever the config spelled, so
+**measurements traced in the app are not saved by saving the session** when a
+measurement file is named; *Save Measurements* is what writes them.  Unlike a
+rotation file it moves nothing on the way in: a rotation file says where to
+look, and a measurement file says where somebody looked, so opening a study
+already turned to the last region anybody traced would be a surprise.  Recall
+is how it moves the views, and it is asked for.
+
+A capture records what a viewport shows, so `png`, `jpeg` and the
+`dicom-rendered` formats carry the regions drawn on it and `dicom-data` does
+not -- the same line the crosshairs sit on, and for the same reason: an outline
+is not a pixel value.
+
 ### Measurements and segmentations as DICOM
 
 *Save Volumetry* writes the curves and the metrics as two CSV files and the

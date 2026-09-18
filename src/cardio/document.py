@@ -86,8 +86,13 @@ def to_toml(scene: Scene) -> str:
     is not in the saved config -- it is saved by Save Rotations, as a rotation
     file, which is the format that holds rotations and the one to point at
     next.
+
+    Measurements are carried the same way and for the same reason, by Save
+    Measurements into a measurement file.
     """
     data = scene.model_dump(mode="json", exclude_none=True)
     if scene.mpr_rotation_file is not None:
         data.pop("mpr_rotation_sequence", None)
+    if scene.measurement_file is not None:
+        data.pop("measurements", None)
     return toml.dumps(data)
