@@ -157,7 +157,7 @@ class Session:
         """Write the session out as a config file, and say where it went."""
         return toml.write(path, to_toml(self.scene_now()))
 
-    def do(self, name: str, **arguments):
+    def do(self, name: str, /, **arguments):
         """Ask for one action, and wait for whatever it started.
 
         Inside a state block, as a browser's call arrives: an action mostly

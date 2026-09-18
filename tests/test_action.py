@@ -44,6 +44,11 @@ class Recorder:
         """Changes a value in place, which the journal must not follow."""
         self.state[key].append(value)
 
+    @action("takes_a_name")
+    def takes_a_name(self, name: str = ""):
+        """An action whose own argument is spelled like the registry's."""
+        self.calls.append(name)
+
     def not_an_action(self):
         self.calls.append("no")
 
@@ -76,7 +81,13 @@ def test_only_marked_methods_are_registered():
     registry = Registry()
     registry.add(Recorder())
 
-    assert registry.names == ["append", "assign", "takes_none", "takes_two"]
+    assert registry.names == [
+        "append",
+        "assign",
+        "takes_a_name",
+        "takes_none",
+        "takes_two",
+    ]
 
 
 def test_actions_are_inherited():
@@ -160,6 +171,22 @@ def test_kwargs_are_not_parameters():
     registry.add(Recorder())
 
     assert list(registry["takes_none"].arguments.model_fields) == []
+
+
+def test_an_action_may_take_an_argument_called_name():
+    """The registry takes the action's name first, and so do Logic and Session.
+
+    Spelled positional-only in all three, or an action with a ``name`` of its
+    own -- a traced region is given one -- is unreachable by keyword: the call
+    binds both to the same parameter and raises before the action is found.
+    """
+    recorder = Recorder()
+    registry = Registry()
+    registry.add(recorder)
+
+    registry.run("takes_a_name", name="AVA")
+
+    assert recorder.calls == ["AVA"]
 
 
 def test_binding_publishes_a_call_that_goes_through_the_registry():

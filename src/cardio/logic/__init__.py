@@ -98,7 +98,7 @@ class Logic:
         """Every state key that says what the app is showing."""
         return registry.document_keys(self.scene)
 
-    def dispatch(self, name: str, *positional, **arguments):
+    def dispatch(self, name: str, /, *positional, **arguments):
         """Do the named thing.
 
         The one way an action is called, whichever asked for it -- a button, a
@@ -108,6 +108,9 @@ class Logic:
         Positional arguments are passed through rather than refused: the
         registry resolves them against the signature, so a hand-typed call may
         give its arguments the way the method spells them.
+
+        The action's name is positional-only, so an action of its own may take
+        an argument called ``name``.
         """
         return self.actions.run(name, *positional, **arguments)
 

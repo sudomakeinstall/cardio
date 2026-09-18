@@ -267,8 +267,13 @@ class Registry:
                 stack.enter_context(observer(name, arguments))
             yield
 
-    def run(self, name: str, *positional, **keyword):
-        """Do the named thing, with its arguments checked against its signature."""
+    def run(self, name: str, /, *positional, **keyword):
+        """Do the named thing, with its arguments checked against its signature.
+
+        The action's own name is positional-only, so that an action may have an
+        argument called ``name`` -- a traced region is given one -- without the
+        two colliding here.
+        """
         if name not in self._actions:
             raise KeyError(f"No such action: {name!r}. Known: {', '.join(self.names)}")
 
