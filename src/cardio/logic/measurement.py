@@ -55,6 +55,11 @@ class MeasurementController(Controller):
         self._tile: int | None = None
         self._at_frame: int = 0
         self._actors: dict[tuple[str, object], ContourActors] = {}
+        # Cuts a region was taken off between one redraw and the next, which
+        # the redraw itself cannot report: ``_forget`` drops the props from the
+        # dictionary it walks, so by the time it runs there is nothing left to
+        # say that the picture on that cut is out of date.
+        self._stripped: set[str] = set()
         # The region a hand is correcting, and the drag in flight over it, held
         # off state for the same reason the trace above is. A drag is a write
         # per frame of it, and only the last one is a thing the document should
@@ -331,7 +336,6 @@ class MeasurementController(Controller):
 
         self._abandon()
         self.publish(regions)
-        self.refresh()
 
     def _tile_cut(self) -> TileCut | None:
         """The grid a tile region was traced on, or None for an MPR pane.
@@ -369,7 +373,13 @@ class MeasurementController(Controller):
     # --- one region at a time ---------------------------------------------
 
     def _edit(self, index: int, change):
-        """Apply ``change`` to the region at ``index`` and publish the result."""
+        """Apply ``change`` to the region at ``index`` and publish the result.
+
+        The redraw is the listener's, not this function's. Publishing moves
+        ``measurement_data``, and ``_on_edited`` refreshes on the flush that
+        follows -- so refreshing here as well drew the set twice and pushed the
+        picture twice for every rename, restyle, insert, delete and drop.
+        """
         regions = self.regions
         if not 0 <= index < len(regions.measurements):
             logger.warning("There is no measurement %d to change.", index)
@@ -377,7 +387,6 @@ class MeasurementController(Controller):
 
         change(regions.measurements[index])
         self.publish(regions)
-        self.refresh()
 
     @action("rename_measurement")
     def rename_measurement(self, index: int, name: str):
@@ -646,7 +655,6 @@ class MeasurementController(Controller):
         self._leave_edit()
         self.server.state.measurement_selected = None
         self.publish(regions)
-        self.refresh()
 
     @action("clear_measurements")
     def clear_measurements(self):
@@ -655,7 +663,6 @@ class MeasurementController(Controller):
         self._leave_edit()
         self.server.state.measurement_selected = None
         self.publish(MeasurementSet(metadata=self.regions.metadata))
-        self.refresh()
 
     def _forget(self, first: int, count: int = 0):
         """Take the props of regions ``first`` and after off every cut.
@@ -668,6 +675,11 @@ class MeasurementController(Controller):
         Walks the props actually held rather than the views: a region may be
         drawn on any of the three panes and on any tile, and which of them it
         reached is what the keys say.
+
+        A cut something was actually taken off is noted for the next redraw to
+        push. Nothing else would: the props are gone from what ``draw`` walks,
+        so a deleted region's last cut would keep its outline until something
+        unrelated redrew it.
         """
         for key in list(self._actors):
             where, index = key
@@ -677,6 +689,10 @@ class MeasurementController(Controller):
             actors = self._actors.pop(key)
             renderer = self._renderer_of(where)
             if renderer is not None:
+                if actors.showing:
+                    self._stripped.add(
+                        TILE_VIEW if where.startswith(f"{TILE_VIEW}:") else where
+                    )
                 actors.remove_from(renderer)
 
     def _renderer_of(self, where: str):
@@ -771,9 +787,15 @@ class MeasurementController(Controller):
     # --- drawing ----------------------------------------------------------
 
     def refresh(self, **kwargs):
-        """Redraw, and push the picture to whatever is on screen."""
-        self.draw()
-        self.server.controller.view_update()
+        """Redraw, and push the picture to the cuts the redraw actually moved.
+
+        Not to every view, which is what pushing through ``view_update`` means.
+        A region lies on one plane, so at most one cut's pixels change and the
+        volume rendering's never do -- and each view pushed costs a still
+        render, a JPEG and a websocket frame, once per mouse move of a drag.
+        """
+        for view in self.draw():
+            getattr(self.server.controller, f"{view}_update")()
 
     def draw(self, **kwargs):
         """Put every region that is on a cut onto that cut, and hide the rest.
@@ -793,17 +815,26 @@ class MeasurementController(Controller):
         ``measurement_on_plane`` comes out of the same walk, so the dots in the
         drawer say what the renderers were actually told -- a region on a plane
         no layout is drawing reads as off, which is what the dot claims to mean.
+
+        What comes back is the cuts something moved on, which is what ``refresh``
+        pushes. A cut nothing was drawn on or taken off is a cut whose picture
+        is the one it already had.
         """
         regions = self.regions.measurements
         on_plane = [False] * len(regions)
+        touched, self._stripped = self._stripped, set()
 
         drawing = self.app.mpr.active
         views = self.scene.mpr_views
 
         for view in VIEWS if views is not None else ():
-            self._draw_cut(view, None, views.renderer(view), regions, on_plane, drawing)
+            if self._draw_cut(
+                view, None, views.renderer(view), regions, on_plane, drawing
+            ):
+                touched.add(view)
 
-        self._draw_tiles(regions, on_plane)
+        if self._draw_tiles(regions, on_plane):
+            touched.add(TILE_VIEW)
 
         self.server.state.measurement_on_plane = on_plane
 
@@ -817,6 +848,8 @@ class MeasurementController(Controller):
         ):
             self._leave_edit()
 
+        return touched
+
     def _draw_tiles(self, regions, on_plane):
         """The same again for every tile, each against its own pose.
 
@@ -825,21 +858,28 @@ class MeasurementController(Controller):
         plane. Which is the honest answer -- a tile is a place a cut is shown,
         not a thing a cut belongs to -- and it is what makes a region reappear
         after the grid is reshaped around it.
+
+        The grid is one window, so what comes back is whether *any* tile moved.
         """
         views = self.scene.tile_views
         if views is None:
-            return
+            return False
 
         drawing = self.app.tiles.active
         poses = self._tile_poses() if drawing else None
 
+        touched = False
         for index, renderer in enumerate(views.renderers):
             cut = (
                 planimetry.cut_from(*poses[index], self.app.tiles.cut_plane)
                 if poses is not None and index < len(poses)
                 else None
             )
-            self._draw_cut(TILE_VIEW, index, renderer, regions, on_plane, drawing, cut)
+            touched |= self._draw_cut(
+                TILE_VIEW, index, renderer, regions, on_plane, drawing, cut
+            )
+
+        return touched
 
     def _draw_cut(self, view, tile, renderer, regions, on_plane, drawing, cut=None):
         """Put every region that is on this one cut onto it, and hide the rest.
@@ -847,20 +887,27 @@ class MeasurementController(Controller):
         ``cut`` is passed in where the caller has already worked it out, which
         the tile loop has: the grid's poses come as a list, and asking for each
         tile's again would recompute the whole path once per tile.
+
+        Says whether anything was put on this cut or taken off it, which is
+        what decides that its picture is worth pushing again.
         """
         if renderer is None:
-            return
+            return False
 
         cut = self.cut_of(view, tile) if cut is None else cut
         drawing = drawing and cut is not None
 
         key = view if tile is None else f"{TILE_VIEW}:{tile}"
 
+        touched = False
         for index, region in enumerate(regions):
             shown = drawing and region.on(cut, self._frame)
             on_plane[index] = on_plane[index] or shown
-            points = self._shape_of(index, region)
-            self._show(
+            # Shaped and measured only where it is drawn. A region off this cut
+            # is about to have its props taken off it, and a grid of nine tiles
+            # would otherwise resample nine splines to label one.
+            points = self._shape_of(index, region) if shown else []
+            touched |= self._show(
                 renderer,
                 (key, index),
                 handles=(
@@ -872,7 +919,11 @@ class MeasurementController(Controller):
                 closed=True,
                 visible=shown,
                 color=self._color_of(index),
-                label=f"{planimetry.contour_area(points, region.contour):.1f} mm\u00b2",
+                label=(
+                    f"{planimetry.contour_area(points, region.contour):.1f} mm\u00b2"
+                    if shown
+                    else ""
+                ),
             )
 
         tracing = (
@@ -881,7 +932,7 @@ class MeasurementController(Controller):
             and self._cut is not None
             and planimetry.same_plane(self._cut, cut)
         )
-        self._show(
+        touched |= self._show(
             renderer,
             (key, "tracing"),
             handles=self._points if tracing else [],
@@ -891,6 +942,8 @@ class MeasurementController(Controller):
             color=TRACING_COLOR,
             label="",
         )
+
+        return touched
 
     def _shape_of(self, index: int, region):
         """The points a region is drawn from: the ones being dragged, or its own.
@@ -912,23 +965,30 @@ class MeasurementController(Controller):
         return TRACED_COLOR
 
     def _show(self, renderer, key, handles, style, closed, visible, color, label):
-        """Point one region's props at what it looks like now.
+        """Point one region's props at what it looks like now, and say if it moved.
 
         A region that is not being drawn has its props taken off the renderer
         rather than merely hidden: a layout that does not show the cuts should
         leave nothing behind on them, which is the same thing the reslicing
         itself is skipped for.
+
+        One already hidden here is left alone rather than hidden again, so that
+        a cut showing no region reports nothing and is not pushed for it. The
+        two are the same sentence: taking props off a renderer changes its
+        picture, and saying so a second time does not.
         """
         actors = self._actors.get(key)
         if actors is None:
             if not visible:
-                return
+                return False
             actors = self._actors[key] = ContourActors()
 
         if not visible:
+            if not actors.showing:
+                return False
             actors.set_visible(False)
             actors.remove_from(renderer)
-            return
+            return True
 
         curve = planimetry.contour_points(handles, style)
         actors.set_points(curve, handles, closed)
@@ -936,3 +996,4 @@ class MeasurementController(Controller):
         actors.set_color(color)
         actors.add_to(renderer)
         actors.set_visible(True)
+        return True

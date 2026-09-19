@@ -125,6 +125,16 @@ class ContourActors:
     def props(self) -> list:
         return [self.line, self.marks, self.label]
 
+    @property
+    def showing(self) -> bool:
+        """Whether these props are drawn, so that hiding them twice is one act.
+
+        Read off the actor rather than kept beside it: the visibility is what
+        the renderer is actually going by, and a flag alongside it would be one
+        more thing able to disagree.
+        """
+        return bool(self.line.GetVisibility())
+
     def set_points(self, curve, handles, closed: bool) -> None:
         """Point the props at the curve drawn and the points placed.
 

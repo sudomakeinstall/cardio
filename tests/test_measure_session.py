@@ -1305,3 +1305,120 @@ def test_a_region_traced_on_a_tile_can_be_corrected_there(gridded):
     assert after[0] == pytest.approx(
         cut_point(tile_renderer(gridded, 1), start[0] - 15.0, start[1] - 15.0), abs=1e-6
     )
+
+
+# --- what a redraw costs ------------------------------------------------------
+
+
+def redraws(session: Session, monkeypatch):
+    """Every set of cuts a redraw reported, in the order they were reported.
+
+    What ``refresh`` pushes is what ``draw`` says it moved, so watching the one
+    is watching the other without a render window having to be asked what it
+    was told.
+    """
+    measurements = session.logic.measurements
+    seen = []
+    drawn = measurements.draw
+
+    def watched(**kwargs):
+        touched = drawn(**kwargs)
+        seen.append(sorted(touched))
+        return touched
+
+    monkeypatch.setattr(measurements, "draw", watched)
+    return seen
+
+
+def test_a_correction_pushes_only_the_cut_it_moved(armed, monkeypatch):
+    """A region lies on one plane, so one pane's pixels change and no more.
+
+    Pushing the others costs a still render, a JPEG and a websocket frame
+    each, once per mouse move -- which is what a drag used to feel like.
+    """
+    trace(armed, box(armed, 40.0))
+    edit(armed)
+
+    seen = redraws(armed, monkeypatch)
+    start = corner(armed, 40.0, 0)
+    drag(armed, start, (start[0] - 15.0, start[1] - 15.0), moves=3)
+
+    assert seen
+    assert all(touched == ["ul"] for touched in seen)
+
+
+def test_a_cut_showing_no_region_is_not_pushed_for_one(armed, monkeypatch):
+    """Hiding what is already hidden is not a change to a picture.
+
+    Without this a pane that had once shown a region went on reporting itself
+    moved for the rest of the session, which is every pane after a rotation.
+    """
+    trace(armed, box(armed, 40.0))
+    armed.logic.measurements.draw()
+
+    seen = redraws(armed, monkeypatch)
+    armed.do("rename_measurement", index=0, name="Orifice")
+
+    assert seen == [["ul"]]
+
+
+def test_an_edit_redraws_once(armed, monkeypatch):
+    """Publishing is what redraws, so the action must not redraw as well.
+
+    Every rename, restyle, insert, delete and drop used to draw the set twice
+    and push the picture twice: once from the action and once from the listener
+    on the key the action moved.
+    """
+    trace(armed, box(armed, 40.0))
+
+    seen = redraws(armed, monkeypatch)
+    armed.do("restyle_measurement", index=0, contour="spline")
+
+    assert len(seen) == 1
+
+
+def test_a_region_is_not_measured_for_a_cut_it_is_not_on(armed, monkeypatch):
+    """The label is the one thing a hidden region was still paying for.
+
+    Its area was computed for every cut before anything asked whether it was
+    drawn on any of them -- three panes, or a tile grid's worth.
+    """
+    trace(armed, box(armed, 40.0))
+
+    measured = []
+    measure = planimetry.contour_area
+
+    def counted(points, style):
+        measured.append(style)
+        return measure(points, style)
+
+    monkeypatch.setattr(planimetry, "contour_area", counted)
+    armed.logic.measurements.draw()
+
+    assert len(measured) == 1
+
+
+def test_deleting_the_last_region_pushes_the_cut_it_left(armed, monkeypatch):
+    """A delete takes props off a renderer without going through the redraw.
+
+    So the redraw has nothing left to notice, and the cut would keep the
+    outline of a region that is gone until something unrelated drew over it.
+    """
+    trace(armed, box(armed, 40.0))
+
+    seen = redraws(armed, monkeypatch)
+    armed.do("delete_measurement", index=0)
+
+    assert regions(armed) == []
+    assert seen == [["ul"]]
+
+
+def test_clearing_pushes_the_cuts_the_regions_left(armed, monkeypatch):
+    trace(armed, box(armed, 40.0))
+    trace(armed, box(armed, 20.0))
+
+    seen = redraws(armed, monkeypatch)
+    armed.do("clear_measurements")
+
+    assert regions(armed) == []
+    assert seen == [["ul"]]
