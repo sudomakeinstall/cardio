@@ -36,7 +36,7 @@ def metadata_dialog(scene):
             )
 
         for entry in entries:
-            shown = f"metadata_object === '{entry.key}'" if several else True
+            shown = f"metadata_object === '{entry.key}'" if several else "true"
             with html.Div(v_if=shown):
                 for section in entry.sections:
                     html.H3(section.title, classes="text-h6 mb-3")
