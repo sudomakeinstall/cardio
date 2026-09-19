@@ -531,6 +531,339 @@ def test_an_index_that_is_not_there_is_refused(armed, action):
     assert len(regions(armed)) == 1
 
 
+# --- correcting a region already taken ----------------------------------------
+
+
+def edit(session: Session, index: int = 0):
+    """Open a region for correction, and say where its points are on screen."""
+    session.do("edit_measurement", index=index)
+    return session
+
+
+def corner(session: Session, half: float, which: int, view: str = "ul"):
+    """The display position of one corner of ``box``."""
+    return box(session, half, view)[which]
+
+
+def drag(session: Session, start, end, view: str = "ul", moves: int = 1):
+    """Press at ``start``, travel to ``end`` in ``moves`` steps, and let go."""
+    grabbed = session.logic.dispatch(
+        "grab_measurement_point", view_name=view, x=float(start[0]), y=float(start[1])
+    )
+    for step in range(1, moves + 1):
+        session.do(
+            "drag_measurement_point",
+            view_name=view,
+            x=float(start[0] + (end[0] - start[0]) * step / moves),
+            y=float(start[1] + (end[1] - start[1]) * step / moves),
+        )
+    session.do("drop_measurement_point")
+    return grabbed
+
+
+def test_a_region_on_the_cut_in_view_can_be_corrected(armed):
+    trace(armed, box(armed, 50.0))
+
+    edit(armed)
+
+    assert armed.server.state.measurement_editing == 0
+    assert armed.server.state.measurement_selected == 0
+
+
+def test_a_region_off_the_cut_in_view_cannot_be(armed):
+    """There is nothing to press on, so the refusal points at Recall instead."""
+    trace(armed, box(armed, 50.0))
+    armed.do("scroll_slice", view_name="ul", distance=5.0)
+
+    edit(armed)
+
+    assert armed.server.state.measurement_editing is None
+
+
+def test_a_press_on_a_point_takes_hold_of_it(armed):
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    assert armed.logic.dispatch(
+        "grab_measurement_point",
+        view_name="ul",
+        x=float(corner(armed, 50.0, 0)[0]),
+        y=float(corner(armed, 50.0, 0)[1]),
+    )
+
+
+def test_a_press_away_from_every_point_takes_hold_of_nothing(armed):
+    """Which is what leaves that drag to the window and level it always was."""
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    x, y = corner(armed, 50.0, 0)
+    assert not armed.logic.dispatch(
+        "grab_measurement_point", view_name="ul", x=float(x) + 40.0, y=float(y)
+    )
+
+
+def test_a_press_takes_hold_of_nothing_while_no_region_is_being_corrected(armed):
+    trace(armed, box(armed, 50.0))
+
+    x, y = corner(armed, 50.0, 0)
+    assert not armed.logic.dispatch(
+        "grab_measurement_point", view_name="ul", x=float(x), y=float(y)
+    )
+
+
+def test_dragging_a_point_moves_that_one_and_no_other(armed):
+    trace(armed, box(armed, 50.0))
+    before = list(regions(armed)[0].points)
+    edit(armed)
+
+    start = corner(armed, 50.0, 0)
+    drag(armed, start, (start[0] - 20.0, start[1] - 20.0))
+
+    after = regions(armed)[0].points
+    assert after[1:] == before[1:]
+    assert after[0] != before[0]
+
+
+def test_a_dragged_point_lands_where_the_cursor_let_go(armed):
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    start = corner(armed, 50.0, 0)
+    end = (start[0] - 20.0, start[1] - 25.0)
+    drag(armed, start, end)
+
+    assert regions(armed)[0].points[0] == pytest.approx(
+        cut_point(renderer(armed), *end), abs=1e-6
+    )
+
+
+def test_dragging_a_corner_measures_the_region_again(armed):
+    """A square a hundred pixels across, with one corner pulled out to a kite."""
+    scale = world_per_pixel(renderer(armed))
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    start = corner(armed, 50.0, 0)
+    drag(armed, start, (start[0] - 100.0, start[1]))
+
+    # The square plus the triangle the pulled corner sweeps out.
+    assert regions(armed)[0].area == pytest.approx(
+        (100.0 * scale) ** 2 + 100.0 * 100.0 * scale**2 / 2.0, rel=1e-3
+    )
+
+
+def test_one_drag_is_one_edit_however_many_frames_it_took(armed):
+    """Sixty writes a second is not sixty things to undo, or to read in a log."""
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    written = []
+    armed.server.state.change("measurement_data")(
+        lambda **kwargs: written.append(kwargs["measurement_data"])
+    )
+
+    start = corner(armed, 50.0, 0)
+    drag(armed, start, (start[0] - 30.0, start[1] - 30.0), moves=20)
+
+    assert len(written) == 1
+
+
+def test_the_picture_follows_the_cursor_before_the_drag_is_written_down(armed):
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+    placed = list(regions(armed)[0].points)
+
+    start = corner(armed, 50.0, 0)
+    armed.logic.dispatch(
+        "grab_measurement_point", view_name="ul", x=float(start[0]), y=float(start[1])
+    )
+    armed.do(
+        "drag_measurement_point", view_name="ul", x=start[0] - 30.0, y=start[1] - 30.0
+    )
+
+    drawn = armed.logic.measurements._shape_of(0, regions(armed)[0])
+    assert regions(armed)[0].points == placed, "not published until it is let go"
+    assert drawn[0] != placed[0], "but drawn where the cursor is"
+
+
+def test_reverting_puts_the_points_back_where_the_correction_found_them(armed):
+    trace(armed, box(armed, 50.0))
+    placed = list(regions(armed)[0].points)
+    area = regions(armed)[0].area
+    edit(armed)
+
+    start = corner(armed, 50.0, 0)
+    drag(armed, start, (start[0] - 30.0, start[1] - 30.0))
+    armed.do("revert_measurement_edit")
+
+    assert regions(armed)[0].points == placed
+    assert regions(armed)[0].area == pytest.approx(area)
+    assert armed.server.state.measurement_editing is None
+
+
+def test_finishing_keeps_what_the_correction_did(armed):
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    start = corner(armed, 50.0, 0)
+    drag(armed, start, (start[0] - 30.0, start[1] - 30.0))
+    moved = list(regions(armed)[0].points)
+    armed.do("finish_measurement_edit")
+
+    assert regions(armed)[0].points == moved
+    assert armed.server.state.measurement_editing is None
+
+
+def test_a_click_on_the_contour_adds_a_point_to_it(armed):
+    scale = world_per_pixel(renderer(armed))
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    first, second = box(armed, 50.0)[0], box(armed, 50.0)[1]
+    middle = ((first[0] + second[0]) / 2.0, (first[1] + second[1]) / 2.0)
+    armed.do("insert_measurement_point", view_name="ul", x=middle[0], y=middle[1])
+
+    points = regions(armed)[0].points
+    assert len(points) == 5
+    assert points[1] == pytest.approx(cut_point(renderer(armed), *middle), abs=1e-6)
+    # On the edge, so the region it encloses is the one it already was.
+    assert regions(armed)[0].area == pytest.approx((100.0 * scale) ** 2, rel=1e-3)
+
+
+def test_a_point_added_lands_on_the_contour_rather_than_under_the_cursor(armed):
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    first, second = box(armed, 50.0)[0], box(armed, 50.0)[1]
+    middle = ((first[0] + second[0]) / 2.0, (first[1] + second[1]) / 2.0)
+    armed.do("insert_measurement_point", view_name="ul", x=middle[0], y=middle[1] - 4.0)
+
+    added = regions(armed)[0].points[1]
+    assert added == pytest.approx(cut_point(renderer(armed), *middle), abs=1e-6)
+
+
+def test_a_click_far_from_the_contour_adds_nothing(armed):
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    x, y = box(armed, 50.0)[0]
+    armed.do("insert_measurement_point", view_name="ul", x=x, y=y - 60.0)
+
+    assert len(regions(armed)[0].points) == 4
+
+
+def test_a_click_on_a_point_takes_it_away(armed):
+    """Added and then taken away again, which is also the pair undoing itself."""
+    scale = world_per_pixel(renderer(armed))
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    first, second = box(armed, 50.0)[0], box(armed, 50.0)[1]
+    middle = ((first[0] + second[0]) / 2.0, (first[1] + second[1]) / 2.0)
+    armed.do("insert_measurement_point", view_name="ul", x=middle[0], y=middle[1])
+    assert len(regions(armed)[0].points) == 5
+
+    armed.do("delete_measurement_point", view_name="ul", x=middle[0], y=middle[1])
+
+    assert len(regions(armed)[0].points) == 4
+    assert regions(armed)[0].area == pytest.approx((100.0 * scale) ** 2, rel=1e-3)
+
+
+def test_the_last_three_points_of_a_region_cannot_be_taken_away(armed):
+    """Fewer than three enclose nothing, and a region that encloses nothing
+    is a region that should have been deleted rather than thinned."""
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    for which in (0, 1):
+        x, y = box(armed, 50.0)[which]
+        armed.do("delete_measurement_point", view_name="ul", x=x, y=y)
+
+    assert len(regions(armed)[0].points) == 3
+
+
+def test_a_click_away_from_every_point_takes_none_of_them(armed):
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    x, y = box(armed, 50.0)[0]
+    armed.do("delete_measurement_point", view_name="ul", x=x + 40.0, y=y)
+
+    assert len(regions(armed)[0].points) == 4
+
+
+def test_a_correction_marks_the_set_unsaved(armed):
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+    armed.server.state.measurements_saved_at = "12:00:00"
+    armed.server.state.measurements_stale = False
+
+    start = corner(armed, 50.0, 0)
+    drag(armed, start, (start[0] - 20.0, start[1]))
+
+    assert armed.server.state.measurements_stale
+
+
+def test_a_cut_moved_off_the_region_ends_the_correction(armed):
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    armed.do("scroll_slice", view_name="ul", distance=5.0)
+
+    assert armed.server.state.measurement_editing is None
+
+
+def test_tracing_is_suspended_while_a_region_is_being_corrected(armed):
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    armed.do("toggle_measuring")
+    for x, y in box(armed, 20.0):
+        armed.do("place_measurement_point", view_name="ul", x=float(x), y=float(y))
+
+    assert armed.server.state.measurement_pending == 0
+    assert len(regions(armed)) == 1
+
+
+def test_deleting_the_region_being_corrected_ends_the_correction(armed):
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    armed.do("delete_measurement", index=0)
+
+    assert armed.server.state.measurement_editing is None
+
+
+def test_the_key_corrects_whichever_region_is_highlighted(armed):
+    trace(armed, box(armed, 50.0))
+    trace(armed, box(armed, 30.0))
+    armed.server.state.measurement_selected = 1
+
+    armed.do("toggle_measurement_edit")
+    assert armed.server.state.measurement_editing == 1
+
+    armed.do("toggle_measurement_edit")
+    assert armed.server.state.measurement_editing is None
+
+
+def test_a_correction_survives_being_saved_and_read_back(armed, tmp_path):
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+
+    start = corner(armed, 50.0, 0)
+    drag(armed, start, (start[0] - 30.0, start[1] - 20.0))
+    armed.do("finish_measurement_edit")
+    armed.do("save_measurements")
+
+    written = next((armed.scene.measurements_directory / "vol").glob("*.toml"))
+    reopened = MeasurementSet.from_file(written).measurements[0]
+    assert np.array(reopened.points) == pytest.approx(
+        np.array(regions(armed)[0].points)
+    )
+    assert reopened.area == pytest.approx(regions(armed)[0].area)
+
+
 # --- recall -------------------------------------------------------------------
 
 
@@ -951,3 +1284,24 @@ def test_a_region_reads_as_off_plane_while_no_layout_draws_its_cut(armed):
 
     armed.do("toggle_maximized", view="volume")
     assert armed.server.state.measurement_on_plane == [True]
+
+
+def test_a_region_traced_on_a_tile_can_be_corrected_there(gridded):
+    """The grid is one window of viewports, so a press has to find its tile
+    before it can find a point -- which is the one thing correcting on a tile
+    does that correcting on a pane does not."""
+    corners = tile_box(gridded, 1, 30.0)
+    trace(gridded, corners, view="tile")
+    before = list(regions(gridded)[0].points)
+
+    gridded.do("edit_measurement", index=0)
+    assert gridded.server.state.measurement_editing == 0
+
+    start = corners[0]
+    drag(gridded, start, (start[0] - 15.0, start[1] - 15.0), view="tile")
+
+    after = regions(gridded)[0].points
+    assert after[1:] == before[1:]
+    assert after[0] == pytest.approx(
+        cut_point(tile_renderer(gridded, 1), start[0] - 15.0, start[1] - 15.0), abs=1e-6
+    )

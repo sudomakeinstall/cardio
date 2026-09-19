@@ -58,6 +58,9 @@ def help_dialog():
                 with html.Tr():
                     html.Td("x")
                     html.Td("Give up on the region being traced")
+                with html.Tr():
+                    html.Td("e")
+                    html.Td("Correct the region the drawer has highlighted")
 
         html.H3("Window/Level Presets", classes="text-h6 mb-3")
         with vuetify.VTable(density="compact", classes="mb-4"):
@@ -109,6 +112,15 @@ def help_dialog():
                 with html.Tr():
                     html.Td("Right Click (tracing)")
                     html.Td("Close the region and measure it")
+                with html.Tr():
+                    html.Td("Left Drag (correcting)")
+                    html.Td("Move the point the drag started on")
+                with html.Tr():
+                    html.Td("Left Click (correcting)")
+                    html.Td("Add a point where the contour was clicked")
+                with html.Tr():
+                    html.Td("Right Click (correcting)")
+                    html.Td("Take away the point that was clicked")
 
         html.P(
             "A region is drawn only while the cuts are on the plane it was "
@@ -117,6 +129,14 @@ def help_dialog():
             "Recall puts the cuts back where it was measured. Tracing takes "
             "over the click alone, so every drag above goes on working while a "
             "region is being traced.",
+            classes="text-caption mt-3",
+        )
+
+        html.P(
+            "A region already closed is corrected one at a time, from the "
+            "pencil on its row and only while its cut is showing. A left drag "
+            "then belongs to the region only if it began on one of its points; "
+            "every other drag is the window and level it always was.",
             classes="text-caption mt-3",
         )
 

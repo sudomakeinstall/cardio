@@ -14,6 +14,7 @@ import pytest
 # Internal
 from cardio.orientation import AngleUnits, EulerAxis, euler_angle_to_rotation_matrix
 from cardio.planimetry import (
+    SPLINE_SAMPLES,
     ContourStyle,
     Cut,
     closed_spline,
@@ -22,6 +23,8 @@ from cardio.planimetry import (
     cut_from,
     from_lps,
     is_click,
+    nearest_segment,
+    nearest_vertex,
     polygon_area,
     same_plane,
     to_lps,
@@ -237,3 +240,86 @@ def test_a_press_that_travelled_is_not_a_click():
 
 def test_a_shaky_hand_is_still_a_click():
     assert is_click((100.0, 50.0), (101.0, 51.0))
+
+
+# --- reaching for a point, and for the contour between two --------------------
+
+TRACED = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]
+
+
+def test_a_probe_on_a_point_is_that_point_at_no_distance():
+    index, distance = nearest_vertex(TRACED, (10.0, 10.0))
+    assert index == 2
+    assert distance == pytest.approx(0.0)
+
+
+def test_a_probe_between_two_points_takes_the_nearer():
+    index, distance = nearest_vertex(TRACED, (4.0, 0.0))
+    assert index == 0
+    assert distance == pytest.approx(4.0)
+
+
+def test_a_region_with_no_points_has_nothing_to_reach_for():
+    index, distance = nearest_vertex([], (0.0, 0.0))
+    assert index == -1
+    assert distance == float("inf")
+
+
+def test_a_probe_beside_an_edge_lands_on_that_edge():
+    after, distance, foot = nearest_segment(TRACED, ContourStyle.POLYGON, (4.0, -2.0))
+    assert after == 0
+    assert distance == pytest.approx(2.0)
+    assert foot == pytest.approx((4.0, 0.0))
+
+
+def test_the_last_edge_is_the_one_back_to_the_first_point():
+    after, _, foot = nearest_segment(TRACED, ContourStyle.POLYGON, (-2.0, 5.0))
+    assert after == 3
+    assert foot == pytest.approx((0.0, 5.0))
+
+
+def test_a_probe_past_an_edge_s_end_is_measured_from_the_corner():
+    _, distance, foot = nearest_segment(TRACED, ContourStyle.POLYGON, (14.0, -3.0))
+    assert foot == pytest.approx((10.0, 0.0))
+    assert distance == pytest.approx(5.0)
+
+
+def test_a_point_added_to_an_edge_leaves_a_polygon_s_area_alone():
+    after, _, foot = nearest_segment(TRACED, ContourStyle.POLYGON, (4.0, -2.0))
+    grown = TRACED[: after + 1] + [tuple(foot)] + TRACED[after + 1 :]
+    assert len(grown) == len(TRACED) + 1
+    assert polygon_area(grown) == pytest.approx(polygon_area(TRACED))
+
+
+def test_a_splined_region_is_measured_against_the_curve_it_is_drawn_as():
+    """The bulge is nearer the probe than the straight line between the points."""
+    probe = (5.0, -1.0)
+    _, splined, _ = nearest_segment(TRACED, ContourStyle.SPLINE, probe)
+    _, straight, _ = nearest_segment(TRACED, ContourStyle.POLYGON, probe)
+    assert splined < straight
+
+
+def test_a_sample_of_a_splined_curve_maps_back_to_the_span_it_was_drawn_for():
+    curve = closed_spline(TRACED)
+    for span in range(len(TRACED)):
+        middle = curve[span * SPLINE_SAMPLES + SPLINE_SAMPLES // 2]
+        after, distance, _ = nearest_segment(TRACED, ContourStyle.SPLINE, middle)
+        assert after == span
+        assert distance == pytest.approx(0.0)
+
+
+def test_a_probe_on_a_control_point_is_on_the_curve():
+    _, distance, foot = nearest_segment(TRACED, ContourStyle.SPLINE, (10.0, 0.0))
+    assert distance == pytest.approx(0.0)
+    assert foot == pytest.approx((10.0, 0.0))
+
+
+def test_two_points_have_a_contour_and_one_does_not():
+    after, _, _ = nearest_segment(
+        [(0.0, 0.0), (10.0, 0.0)], ContourStyle.POLYGON, (5.0, 1.0)
+    )
+    assert after == 0
+
+    after, distance, _ = nearest_segment([(0.0, 0.0)], ContourStyle.POLYGON, (5.0, 1.0))
+    assert after == -1
+    assert distance == float("inf")

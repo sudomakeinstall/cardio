@@ -17,13 +17,14 @@ import vtk
 # the cut itself is inside of.
 CONTOUR_DEPTH = 0.01
 
-# A region that has been closed, one still being traced, and the row the drawer
-# has highlighted.  Constants rather than configured: the crosshairs are
-# configurable because three of them have to be told apart, and these three are
-# three states of one thing.
+# A region that has been closed, one still being traced, the row the drawer has
+# highlighted, and the one a hand is correcting.  Constants rather than
+# configured: the crosshairs are configurable because three of them have to be
+# told apart, and these four are four states of one thing.
 TRACED_COLOR = (1.0, 0.85, 0.1)
 TRACING_COLOR = (0.3, 0.9, 1.0)
 SELECTED_COLOR = (1.0, 1.0, 1.0)
+EDITING_COLOR = (0.4, 1.0, 0.4)
 
 LINE_WIDTH = 2.0
 POINT_SIZE = 7.0

@@ -7,7 +7,13 @@ import logging
 # Internal
 from .. import camera, planimetry, registry
 from ..action import action, background
-from ..contour import SELECTED_COLOR, TRACED_COLOR, TRACING_COLOR, ContourActors
+from ..contour import (
+    EDITING_COLOR,
+    SELECTED_COLOR,
+    TRACED_COLOR,
+    TRACING_COLOR,
+    ContourActors,
+)
 from ..measurement import Measurement, MeasurementSet, TileCut
 from ..planimetry import ContourStyle
 from ..reslice import VIEWS
@@ -49,6 +55,14 @@ class MeasurementController(Controller):
         self._tile: int | None = None
         self._at_frame: int = 0
         self._actors: dict[tuple[str, object], ContourActors] = {}
+        # The region a hand is correcting, and the drag in flight over it, held
+        # off state for the same reason the trace above is. A drag is a write
+        # per frame of it, and only the last one is a thing the document should
+        # remember -- so it is redrawn from here and published once, on release.
+        self._editing: int | None = None
+        self._before: list[tuple[float, float]] | None = None
+        self._working: list[tuple[float, float]] | None = None
+        self._grabbed: int | None = None
 
     def register(self):
         state = self.server.state
@@ -74,6 +88,7 @@ class MeasurementController(Controller):
         # config can open the app showing regions, but not part way through
         # drawing one.
         self._abandon()
+        self._leave_edit()
         state.measuring = False
         state.measurement_selected = None
         state.measurements_saved_at = None
@@ -128,6 +143,14 @@ class MeasurementController(Controller):
         self._tile = None
         self.server.state.measurement_pending = 0
         self.server.state.measurement_view = ""
+
+    def _leave_edit(self):
+        """Close any edit, keeping whatever it has already published."""
+        self._editing = None
+        self._before = None
+        self._working = None
+        self._grabbed = None
+        self.server.state.measurement_editing = None
 
     # --- tracing ----------------------------------------------------------
 
@@ -213,7 +236,7 @@ class MeasurementController(Controller):
         which is not necessarily where they were placed by hand. The durable
         record of a region is the measurement file, not the script.
         """
-        if not self.server.state.measuring:
+        if not self.server.state.measuring or self._editing is not None:
             return
 
         # The tile grid is one window of viewports, so which cut was clicked is
@@ -385,6 +408,231 @@ class MeasurementController(Controller):
 
         self._edit(index, restyled)
 
+    # --- correcting one ---------------------------------------------------
+
+    def _edited_region(self):
+        """The region an edit is open on, or None when none is."""
+        regions = self.regions.measurements
+        if self._editing is None or not 0 <= self._editing < len(regions):
+            return None
+        return regions[self._editing]
+
+    def _probe(self, view_name: str, x: float, y: float):
+        """A press as the edited region's own millimetres, and how near is near.
+
+        Every correction is decided by where a press landed relative to the
+        region, so the whole conversion happens once here rather than four times
+        over: which tile was pressed, the cut showing under it, the press in
+        that cut's millimetres, the same point in the millimetres the region was
+        traced in, and what the grab radius is worth at this zoom.
+
+        Nothing at all when the region is not on the cut that was pressed, which
+        is the same question that decides whether it is drawn there: a press
+        cannot reach for a region it cannot see.
+        """
+        region = self._edited_region()
+        if region is None:
+            return None, 0.0
+
+        tile = None
+        if view_name == TILE_VIEW:
+            views = self.scene.tile_views
+            tile = None if views is None else views.tile_at(x, y)
+            if tile is None:
+                return None, 0.0
+
+        renderer = self._renderer(view_name, tile)
+        cut = self.cut_of(view_name, tile)
+        if renderer is None or cut is None or not region.on(cut, self._frame):
+            return None, 0.0
+
+        point = camera.cut_point(renderer, x, y)
+        probe = planimetry.from_lps(region.cut, planimetry.to_lps(cut, [point]))[0]
+        # In millimetres rather than pixels, so the reach is the same size on
+        # screen however far the cut has been zoomed in.
+        return probe, planimetry.GRAB_RADIUS * camera.world_per_pixel(renderer)
+
+    def _reshape(self, points):
+        """Give the edited region ``points``, and write the set back."""
+        if self._editing is None:
+            return
+
+        def reshaped(region):
+            region.points = points
+
+        self._edit(self._editing, reshaped)
+
+    @action("edit_measurement")
+    def edit_measurement(self, index: int):
+        """Open the region at ``index`` for correction.
+
+        Only while it is drawn: the points are moved by pressing on them, and a
+        region on a plane no cut is showing has nothing to press. Recall is how
+        it is brought back, and the refusal says so rather than opening an edit
+        that no gesture could reach.
+        """
+        regions = self.regions.measurements
+        if not 0 <= index < len(regions):
+            logger.warning("There is no measurement %d to correct.", index)
+            return
+
+        on_plane = list(self.server.state.measurement_on_plane or [])
+        if not (index < len(on_plane) and on_plane[index]):
+            logger.warning(
+                "Measurement %d is not on a cut now showing; recall it before "
+                "correcting it.",
+                index,
+            )
+            return
+
+        self._abandon()
+        self._editing = index
+        self._before = list(regions[index].points)
+        self._working = None
+        self._grabbed = None
+        self.server.state.measurement_editing = index
+        self.server.state.measurement_selected = index
+        self.refresh()
+
+    @action("finish_measurement_edit")
+    def finish_measurement_edit(self):
+        """Close the edit, keeping what it did."""
+        self._leave_edit()
+        self.refresh()
+
+    @action("revert_measurement_edit")
+    def revert_measurement_edit(self):
+        """Put the region back as the edit found it, and close the edit."""
+        index, before = self._editing, self._before
+        self._leave_edit()
+
+        if index is None or before is None:
+            self.refresh()
+            return
+
+        def reverted(region):
+            region.points = before
+
+        self._edit(index, reverted)
+
+    @action("toggle_measurement_edit")
+    def toggle_measurement_edit(self):
+        """Correct the region the drawer has highlighted, or stop correcting."""
+        if self._editing is not None:
+            self.finish_measurement_edit()
+            return
+
+        selected = self.server.state.measurement_selected
+        if selected is None:
+            logger.warning("Choose a region in the drawer before correcting one.")
+            return
+
+        self.edit_measurement(selected)
+
+    @action("grab_measurement_point")
+    def grab_measurement_point(self, view_name: str, x: float, y: float) -> bool:
+        """Take hold of the point of the edited region a press landed on.
+
+        Says whether it took hold of anything, and is the one action that does.
+        What a left drag means is either the region or the window and level it
+        would otherwise set, and which of the two cannot be decided without
+        knowing how near the press was to a point -- which is geometry, and so
+        is answered here and merely asked by the gesture.
+        """
+        self._grabbed = None
+        self._working = None
+
+        region = self._edited_region()
+        probe, radius = self._probe(view_name, x, y)
+        if region is None or probe is None:
+            return False
+
+        index, distance = planimetry.nearest_vertex(region.points, probe)
+        if distance > radius:
+            return False
+
+        self._grabbed = index
+        self._working = list(region.points)
+        return True
+
+    @action("drag_measurement_point")
+    def drag_measurement_point(self, view_name: str, x: float, y: float):
+        """Move the point being held to where the cursor is now.
+
+        Redrawn without being published. A drag is one correction however many
+        frames it took to make, so the document moves once, when the button
+        comes up -- which is what makes it one line in the console and one step
+        to undo rather than one of each per pixel travelled.
+        """
+        if self._grabbed is None or self._working is None:
+            return
+
+        probe, _ = self._probe(view_name, x, y)
+        if probe is None:
+            return
+
+        self._working[self._grabbed] = (float(probe[0]), float(probe[1]))
+        self.refresh()
+
+    @action("drop_measurement_point")
+    def drop_measurement_point(self):
+        """Let go of the point being held, and write down where it ended up."""
+        moved = self._working
+        self._working = None
+        self._grabbed = None
+
+        if moved is not None:
+            self._reshape(moved)
+
+    @action("insert_measurement_point")
+    def insert_measurement_point(self, view_name: str, x: float, y: float):
+        """Add a point to the edited region where a click landed on its contour.
+
+        On the contour rather than under the cursor. A point put where the hand
+        was would move the region by however far that was from the line, and
+        what the click asked for was a point on this edge, here.
+        """
+        region = self._edited_region()
+        probe, radius = self._probe(view_name, x, y)
+        if region is None or probe is None:
+            return
+
+        after, distance, foot = planimetry.nearest_segment(
+            region.points, region.contour, probe
+        )
+        if distance > radius:
+            return
+
+        points = list(region.points)
+        points.insert(after + 1, (float(foot[0]), float(foot[1])))
+        self._reshape(points)
+
+    @action("delete_measurement_point")
+    def delete_measurement_point(self, view_name: str, x: float, y: float):
+        """Take away the point of the edited region a click landed on."""
+        region = self._edited_region()
+        probe, radius = self._probe(view_name, x, y)
+        if region is None or probe is None:
+            return
+
+        index, distance = planimetry.nearest_vertex(region.points, probe)
+        if distance > radius:
+            return
+
+        if len(region.points) <= MINIMUM_POINTS:
+            logger.warning(
+                "A region needs at least %d points to enclose anything; this "
+                "one already has the fewest that do.",
+                MINIMUM_POINTS,
+            )
+            return
+
+        points = list(region.points)
+        points.pop(index)
+        self._reshape(points)
+
+    # --- dropping one -----------------------------------------------------
+
     @action("delete_measurement")
     def delete_measurement(self, index: int):
         """Drop the region at ``index``."""
@@ -395,6 +643,7 @@ class MeasurementController(Controller):
 
         regions.measurements.pop(index)
         self._forget(index)
+        self._leave_edit()
         self.server.state.measurement_selected = None
         self.publish(regions)
         self.refresh()
@@ -403,6 +652,7 @@ class MeasurementController(Controller):
     def clear_measurements(self):
         """Drop every region traced this session."""
         self._forget(0)
+        self._leave_edit()
         self.server.state.measurement_selected = None
         self.publish(MeasurementSet(metadata=self.regions.metadata))
         self.refresh()
@@ -454,6 +704,7 @@ class MeasurementController(Controller):
         state = self.server.state
 
         self._abandon()
+        self._leave_edit()
         state.frame = region.frame
         self.app.rotations.publish(region.pose)
         state.mpr_origin = list(region.pose.mpr_origin)
@@ -556,6 +807,16 @@ class MeasurementController(Controller):
 
         self.server.state.measurement_on_plane = on_plane
 
+        # An edit is a hand on a region, and there is nothing left to lay a hand
+        # on once the cuts have moved off its plane. Here rather than in a
+        # listener because this is where being on a plane is decided, and the
+        # two redraws that matter -- a cine frame, an overlay switched on --
+        # reach it without a state key having changed.
+        if self._editing is not None and not (
+            self._editing < len(on_plane) and on_plane[self._editing]
+        ):
+            self._leave_edit()
+
     def _draw_tiles(self, regions, on_plane):
         """The same again for every tile, each against its own pose.
 
@@ -593,21 +854,25 @@ class MeasurementController(Controller):
         cut = self.cut_of(view, tile) if cut is None else cut
         drawing = drawing and cut is not None
 
-        selected = self.server.state.measurement_selected
         key = view if tile is None else f"{TILE_VIEW}:{tile}"
 
         for index, region in enumerate(regions):
             shown = drawing and region.on(cut, self._frame)
             on_plane[index] = on_plane[index] or shown
+            points = self._shape_of(index, region)
             self._show(
                 renderer,
                 (key, index),
-                handles=planimetry.from_lps(cut, region.lps()) if shown else [],
+                handles=(
+                    planimetry.from_lps(cut, planimetry.to_lps(region.cut, points))
+                    if shown
+                    else []
+                ),
                 style=region.contour,
                 closed=True,
                 visible=shown,
-                color=SELECTED_COLOR if index == selected else TRACED_COLOR,
-                label=f"{region.area:.1f} mm\u00b2",
+                color=self._color_of(index),
+                label=f"{planimetry.contour_area(points, region.contour):.1f} mm\u00b2",
             )
 
         tracing = (
@@ -626,6 +891,25 @@ class MeasurementController(Controller):
             color=TRACING_COLOR,
             label="",
         )
+
+    def _shape_of(self, index: int, region):
+        """The points a region is drawn from: the ones being dragged, or its own.
+
+        A drag is not published until it ends, so for as long as one is in
+        flight the picture comes from here and not from the document. Which is
+        also what makes the area label follow the cursor.
+        """
+        if index == self._editing and self._working is not None:
+            return self._working
+        return region.points
+
+    def _color_of(self, index: int):
+        """What a region is drawn in: being corrected, highlighted, or neither."""
+        if index == self._editing:
+            return EDITING_COLOR
+        if index == self.server.state.measurement_selected:
+            return SELECTED_COLOR
+        return TRACED_COLOR
 
     def _show(self, renderer, key, handles, style, closed, visible, color, label):
         """Point one region's props at what it looks like now.

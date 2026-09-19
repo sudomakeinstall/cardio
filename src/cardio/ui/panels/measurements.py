@@ -21,6 +21,10 @@ def measurements_panel(server, scene):
         color=("measuring ? 'primary' : undefined",),
         variant=("measuring ? 'tonal' : 'text'",),
         prepend_icon="mdi-vector-polyline",
+        # Tracing is suspended while a region is being corrected, and this is
+        # where the panel says so: the two would otherwise both be claiming the
+        # same clicks.
+        disabled=("measurement_editing !== null",),
         title="Place the points of a region on a cut (m)",
         block=True,
         classes="mb-2",
@@ -187,6 +191,20 @@ def _traced_regions(server, scene):
                                 )
                     with vuetify.VCol(cols="auto"):
                         vuetify.VBtn(
+                            icon="mdi-pencil",
+                            click=ft.partial(server.controller.edit_measurement, i),
+                            title=(
+                                "Correct this region: move, add or remove a "
+                                "point (e). Only while its cut is showing"
+                            ),
+                            color=(
+                                f"measurement_editing === {i} ? 'success' : undefined",
+                            ),
+                            variant="text",
+                            density="comfortable",
+                        )
+                    with vuetify.VCol(cols="auto"):
+                        vuetify.VBtn(
                             icon="mdi-target",
                             click=ft.partial(server.controller.recall_measurement, i),
                             title="Put the cuts back where this was measured",
@@ -202,6 +220,8 @@ def _traced_regions(server, scene):
                             variant="text",
                             density="comfortable",
                         )
+
+                _correcting(server, i)
 
     vuetify.VBtn(
         "Save Measurements",
@@ -241,3 +261,42 @@ def _traced_regions(server, scene):
         variant="text",
         prepend_icon="mdi-delete-sweep",
     )
+
+
+def _correcting(server, i: int):
+    """The card the region at ``i`` is corrected from, while it is being.
+
+    Inside the row rather than beside the list, because a correction is about
+    one region and the row is where that region is: the points it is counting
+    are the ones drawn a few millimetres away on the cut.
+    """
+    with vuetify.VCard(
+        v_if=f"measurement_editing === {i}",
+        variant="tonal",
+        color="success",
+        classes="pa-2 mt-2",
+    ):
+        html.Span(
+            "{{ " + f"{REGIONS}[{i}].points.length" + " }} points \u00b7 drag one to "
+            "move it, click the edge to add one, right click one to remove it",
+            classes="text-caption",
+        )
+        with vuetify.VRow(no_gutters=True, classes="mt-2"):
+            with vuetify.VCol(cols="6", classes="pr-1"):
+                vuetify.VBtn(
+                    "Done",
+                    click=server.controller.finish_measurement_edit,
+                    color="success",
+                    size="small",
+                    block=True,
+                    title="Stop correcting this region, keeping the changes (e)",
+                )
+            with vuetify.VCol(cols="6", classes="pl-1"):
+                vuetify.VBtn(
+                    "Revert",
+                    click=server.controller.revert_measurement_edit,
+                    color="error",
+                    size="small",
+                    block=True,
+                    title="Put the points back where this correction found them",
+                )

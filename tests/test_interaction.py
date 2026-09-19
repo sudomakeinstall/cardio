@@ -61,7 +61,9 @@ class FakeServer:
     """
 
     def __init__(self, **state):
-        self.state = types.SimpleNamespace(measuring=False, **state)
+        self.state = types.SimpleNamespace(
+            measuring=False, measurement_editing=None, **state
+        )
 
 
 class FakeLogic:
@@ -78,6 +80,10 @@ class FakeLogic:
         self.tiles = RecordingTiles()
         self.server = FakeServer()
         self.calls = []
+        # What ``grab_measurement_point`` answers. It is the one action whose
+        # return the gesture layer reads, so it is the one a fake has to have
+        # an opinion about.
+        self.grabs = False
 
     def dispatch(self, name, **arguments):
         self.calls.append((name, arguments))
@@ -85,6 +91,7 @@ class FakeLogic:
             method = getattr(recorder, name, None)
             if method is not None:
                 method(**arguments)
+        return self.grabs if name == "grab_measurement_point" else None
 
     @property
     def names(self):
@@ -601,6 +608,7 @@ def test_a_press_in_one_view_and_a_release_in_another_is_not_a_click(interaction
         ("m", "toggle_measuring"),
         ("u", "undo_measurement_point"),
         ("x", "cancel_measurement"),
+        ("e", "toggle_measurement_edit"),
     ],
 )
 def test_the_measuring_keys_reach_their_actions(interaction, key, action):
@@ -616,5 +624,127 @@ def test_the_measuring_keys_are_printable(interaction):
         interaction_module.MEASURE_KEY,
         interaction_module.UNDO_POINT_KEY,
         interaction_module.CANCEL_TRACE_KEY,
+        interaction_module.EDIT_KEY,
     ):
         assert len(key) == 1 and key.isprintable()
+
+
+# --- correcting a region ------------------------------------------------------
+
+# The one gesture taken away from an existing one: a left drag that began on a
+# point of the region being corrected is that point's, and every other left drag
+# is the window and level it always was. Which of the two a press is cannot be
+# decided here -- it is how near the point was -- so it is asked of the action
+# and answered by it.
+
+
+def editing(interaction, grabs=True) -> Interaction:
+    interaction.logic.server.state.measurement_editing = 0
+    interaction.logic.grabs = grabs
+    return interaction
+
+
+def drag(interaction, view, x, y, dx=30, dy=20):
+    interaction.on_event(
+        {"type": "LeftButtonPress", "position": {"x": x, "y": y}}, view_name=view
+    )
+    interaction.on_event(
+        {"type": "MouseMove", "position": {"x": x + dx, "y": y + dy}}, view_name=view
+    )
+    interaction.on_event(
+        {"type": "LeftButtonRelease", "position": {"x": x + dx, "y": y + dy}},
+        view_name=view,
+    )
+
+
+def test_a_drag_from_a_point_moves_that_point(interaction):
+    drag(editing(interaction), "ul", 120, 90)
+
+    assert interaction.logic.names == [
+        "grab_measurement_point",
+        "drag_measurement_point",
+        "drop_measurement_point",
+    ]
+
+
+def test_a_drag_from_a_point_does_not_window_and_level(interaction):
+    drag(editing(interaction), "ul", 120, 90)
+
+    assert interaction.logic.mpr.window_level == []
+
+
+def test_a_drag_that_took_hold_of_nothing_windows_and_levels(interaction):
+    drag(editing(interaction, grabs=False), "ul", 120, 90)
+
+    assert interaction.logic.mpr.window_level != []
+    assert "drag_measurement_point" not in interaction.logic.names
+
+
+def test_a_drag_outside_a_correction_never_asks(interaction):
+    drag(interaction, "ul", 120, 90)
+
+    assert "grab_measurement_point" not in interaction.logic.names
+    assert interaction.logic.mpr.window_level != []
+
+
+def test_a_press_where_no_region_could_be_drawn_never_asks(interaction):
+    """A question put on every press of every view is a question in the log."""
+    drag(editing(interaction), "volume", 120, 90)
+
+    assert "grab_measurement_point" not in interaction.logic.names
+
+
+def test_the_point_travels_with_the_cursor(interaction):
+    drag(editing(interaction), "ul", 120, 90, dx=40, dy=0)
+
+    assert interaction.logic.arguments("drag_measurement_point") == [
+        {"view_name": "ul", "x": 160, "y": 90}
+    ]
+
+
+def test_a_click_on_the_contour_adds_a_point(interaction):
+    click(editing(interaction, grabs=False), "ul", 120, 90)
+
+    assert interaction.logic.arguments("insert_measurement_point") == [
+        {"view_name": "ul", "x": 120, "y": 90}
+    ]
+
+
+def test_a_click_while_correcting_does_not_also_trace(interaction):
+    """Tracing is suspended for the duration, and this is where that holds."""
+    editing(interaction, grabs=False)
+    measuring(interaction)
+
+    click(interaction, "ul", 120, 90)
+
+    assert placed(interaction) == []
+
+
+def test_letting_go_of_a_point_does_not_add_another(interaction):
+    click(editing(interaction), "ul", 120, 90)
+
+    assert "insert_measurement_point" not in interaction.logic.names
+    assert "drop_measurement_point" in interaction.logic.names
+
+
+def test_a_right_click_takes_a_point_away(interaction):
+    click(editing(interaction), "ul", 120, 90, button="Right")
+
+    assert interaction.logic.arguments("delete_measurement_point") == [
+        {"view_name": "ul", "x": 120, "y": 90}
+    ]
+
+
+def test_a_right_click_while_correcting_closes_no_region(interaction):
+    editing(interaction)
+    measuring(interaction)
+
+    click(interaction, "ul", 120, 90, button="Right")
+
+    assert "close_measurement" not in interaction.logic.names
+
+
+def test_a_right_drag_while_correcting_takes_no_point_away(interaction):
+    click(editing(interaction), "ul", 120, 90, button="Right", travel=40)
+
+    assert "delete_measurement_point" not in interaction.logic.names

@@ -51,6 +51,12 @@ NORMAL_TOLERANCE = 1e-4
 # How far a press may travel and still be a click rather than a drag.
 CLICK_SLOP = 3.0
 
+# How near a press has to land to be reaching for a point of a region, or for
+# the contour between two of them.  Wider than the click slop, and for the
+# opposite reason: that one is how still a hand has to be to mean one place,
+# this one is how near it has to be to mean one thing.
+GRAB_RADIUS = 8.0
+
 
 class Cut(pc.BaseModel):
     """Where a cut sits in the patient: its centre, and the two directions a
@@ -208,6 +214,64 @@ def contour_points(points, style: ContourStyle) -> np.ndarray:
 def contour_area(points, style: ContourStyle) -> float:
     """The area a region encloses, closed the way it is drawn."""
     return polygon_area(contour_points(points, style))
+
+
+def nearest_vertex(points, probe) -> tuple[int, float]:
+    """Which point of a region a probe is nearest, and how far away it is.
+
+    The index is into ``points`` as given, so it is the one an edit removes or
+    moves.  A region with no points has nothing to reach for, and says so with
+    an infinite distance rather than an index nobody should use.
+    """
+    points = np.asarray(points, dtype=float).reshape(-1, 2)
+    if not len(points):
+        return -1, math.inf
+
+    distances = np.linalg.norm(points - np.asarray(probe, dtype=float), axis=1)
+    index = int(np.argmin(distances))
+    return index, float(distances[index])
+
+
+def nearest_segment(
+    points, style: ContourStyle, probe
+) -> tuple[int, float, np.ndarray]:
+    """Where on a region's contour a probe lands: after which point, how far, and where.
+
+    Measured against the curve as it is *drawn* rather than against the polygon
+    through the points, so that a press on the outside of a splined region's
+    bulge is as near to it as it looks.  What comes back is the point it is
+    nearest *on the contour*, which is where a vertex added there belongs -- put
+    under the cursor instead, a new point would change the region's shape by
+    however far the hand was from the line.
+
+    The index is the control point the span begins at, so inserting after it is
+    inserting into the span that was pressed.  For a splined region that means
+    mapping a sample of the curve back to the span it was drawn for, which is a
+    division because ``closed_spline`` lays its samples out span by span in
+    order.
+    """
+    points = np.asarray(points, dtype=float).reshape(-1, 2)
+    probe = np.asarray(probe, dtype=float)
+    if len(points) < 2:
+        return -1, math.inf, probe
+
+    curve = contour_points(points, style)
+    starts = curve
+    spans = np.roll(curve, -1, axis=0) - starts
+
+    lengths = np.einsum("ij,ij->i", spans, spans)
+    along = np.divide(
+        np.einsum("ij,ij->i", probe - starts, spans),
+        lengths,
+        out=np.zeros(len(curve)),
+        where=lengths > 0.0,
+    )
+    feet = starts + np.clip(along, 0.0, 1.0)[:, None] * spans
+
+    distances = np.linalg.norm(feet - probe, axis=1)
+    nearest = int(np.argmin(distances))
+    per_span = len(curve) // len(points)
+    return nearest // per_span, float(distances[nearest]), feet[nearest]
 
 
 def is_click(start, end, slop: float = CLICK_SLOP) -> bool:

@@ -319,6 +319,7 @@ it on screen, because none of those leaves the plane.
 | `m` | Start or stop tracing |
 | `u` | Take back the last point |
 | `x` | Give up on the region being traced |
+| `e` | Correct the region the drawer has highlighted |
 
 The tile grid takes a region like any of the three panes, on whichever tile the
 clicks land in.  A tile is a place a cut is shown rather than a thing a cut
@@ -332,6 +333,34 @@ different cut.
 Tracing takes the click alone, so window/level, scrolling, panning, rotating
 and zooming all go on working while a region is being traced.  Undo and cancel
 have buttons in the panel as well; the keys are for a hand already on the mouse.
+
+### Correcting a region already closed
+
+A trace that came out nearly right does not have to be done again.  The pencil
+on a region's row opens it for correction, and while it is open:
+
+| Gesture | Does |
+| --- | --- |
+| Left drag, from a point | Moves that point |
+| Left click, on the contour | Adds a point there, on the line |
+| Right click, on a point | Takes that point away |
+
+*Done* closes the correction; *Revert* puts the points back where it found
+them.  The area follows every change, and the set is marked unsaved the way a
+rename marks it.
+
+One region is corrected at a time and only while its cut is showing, which is
+why the pencil refuses a region that is off plane and points at *Recall*
+instead: the points are moved by pressing on them, and there is nothing to press
+on.  Tracing is suspended for the duration -- deliberately, because tracing the
+same anatomy twice is how a repeat measurement is taken, and a scheme where a
+click near an existing contour edited it would make the second trace of a pair
+land inside the first.
+
+A left drag belongs to the region only if it began on one of its points; every
+other left drag is the window and level it always was.  A drag is one
+correction however many frames it took to make, so it is one line in the console
+and one step to undo rather than one of each per pixel travelled.
 
 A region is closed either straight between the points or with a closed spline
 through them:

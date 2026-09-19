@@ -154,6 +154,7 @@ def snap_state(**overrides) -> dict:
         "label_percentile": 100.0,
         "measurement_data": {"measurements": []},
         "measurement_selected": None,
+        "measurement_editing": None,
     }
     state.update(overrides)
     return state

@@ -52,6 +52,11 @@ MEASURE_KEY = "m"
 UNDO_POINT_KEY = "u"
 CANCEL_TRACE_KEY = "x"
 
+# Correcting a region already closed. Deliberately not given up to ``x``, which
+# means give up on the trace in progress: a correction discarded to a stray
+# keypress is worse than one that has to be given up through a button.
+EDIT_KEY = "e"
+
 # Keys that maximize a view, and the view each one names. The cut views kept
 # their anatomical letters when they were renamed for where they sit, since
 # the keys are what fingers know and no pane letter is free anyway.
@@ -79,6 +84,10 @@ class Interaction:
         # it was a click. Keyed by view so a press in one pane and a release in
         # another cannot be read as a click in either.
         self.press_pos = {}
+        # Whether the left press in flight took hold of a point of a region. A
+        # drag that did belongs to the region; every other drag is what it
+        # always was.
+        self.grabbed = False
 
         self.window_sensitivity = 5.0
         self.level_sensitivity = 2.0
@@ -114,17 +123,25 @@ class Interaction:
                 self.left_dragging = True
                 self._store_mouse_position(view_name, event)
                 self._note_press("left", view_name, event)
+                # Only where a region could be drawn, so that a press on the
+                # volume view is not a question worth putting in the log.
+                self.grabbed = bool(
+                    self._editing
+                    and view_name in CUT_VIEWS
+                    and self._at("grab_measurement_point", view_name, event)
+                )
 
             case "LeftButtonRelease":
                 self.left_dragging = False
                 self._note_camera(view_name)
-                if self._measuring and self._was_click("left", view_name, event):
-                    self.logic.dispatch(
-                        "place_measurement_point",
-                        view_name=view_name,
-                        x=event["position"]["x"],
-                        y=event["position"]["y"],
-                    )
+                clicked = self._was_click("left", view_name, event)
+                if self.grabbed:
+                    self.grabbed = False
+                    self.logic.dispatch("drop_measurement_point")
+                elif clicked and self._editing:
+                    self._at("insert_measurement_point", view_name, event)
+                elif clicked and self._measuring:
+                    self._at("place_measurement_point", view_name, event)
 
             case "RightButtonPress":
                 self.right_dragging = True
@@ -134,7 +151,10 @@ class Interaction:
             case "RightButtonRelease":
                 self.right_dragging = False
                 self._note_camera(view_name)
-                if self._measuring and self._was_click("right", view_name, event):
+                clicked = self._was_click("right", view_name, event)
+                if clicked and self._editing:
+                    self._at("delete_measurement_point", view_name, event)
+                elif clicked and self._measuring:
                     self.logic.dispatch("close_measurement")
 
             case "MiddleButtonPress":
@@ -144,6 +164,12 @@ class Interaction:
             case "MiddleButtonRelease":
                 self.middle_dragging = False
                 self._note_camera(view_name)
+
+            case "MouseMove" if self.left_dragging and self.grabbed:
+                # The one drag that is not a camera or a window/level gesture,
+                # and the only one taken away from them -- a press that did not
+                # land on a point never gets here.
+                self._at("drag_measurement_point", view_name, event)
 
             case "MouseMove" if (
                 self.left_dragging or self.right_dragging or self.middle_dragging
@@ -237,6 +263,8 @@ class Interaction:
             self.logic.dispatch("undo_measurement_point")
         elif key == CANCEL_TRACE_KEY:
             self.logic.dispatch("cancel_measurement")
+        elif key == EDIT_KEY:
+            self.logic.dispatch("toggle_measurement_edit")
         elif key in MAXIMIZE_KEYS:
             self.logic.dispatch("toggle_maximized", view=MAXIMIZE_KEYS[key])
 
@@ -244,13 +272,42 @@ class Interaction:
     def _measuring(self) -> bool:
         """Whether a click is placing a point rather than merely being a click.
 
-        The one thing this module reads rather than reports, and it earns the
-        exception: every action goes into the log the console shows and the
-        script it exports, so dispatching one on every click of a gesture
-        nobody meant as tracing would fill both with lines nobody asked for.
-        What the mode *means* is still the controller's alone.
+        One of the two things this module reads rather than reports, and they
+        earn the exception together: every action goes into the log the console
+        shows and the script it exports, so dispatching one on every click of a
+        gesture nobody meant for a region would fill both with lines nobody
+        asked for. What either mode *means* is still the controller's alone.
         """
         return bool(getattr(self.logic.server.state, "measuring", False))
+
+    @property
+    def _editing(self) -> bool:
+        """Whether the mouse is correcting a region rather than driving a view.
+
+        Read here for the reason above, and independent of ``_measuring``: a
+        region is corrected without entering the tracing mode, and the two are
+        never open at once because opening either closes the other.
+        """
+        return getattr(self.logic.server.state, "measurement_editing", None) is not None
+
+    def _at(self, name: str, view_name, event):
+        """Ask for a named action where the cursor is, and say what it answered.
+
+        Every action a press turns into takes the same three arguments, and the
+        one that decides whether a drag has been claimed answers rather than
+        merely acting -- which is the only thing this module ever learns from a
+        dispatch, and it learns it from the action it asked rather than from
+        state it went looking through.
+        """
+        if "position" not in event:
+            return None
+
+        return self.logic.dispatch(
+            name,
+            view_name=view_name,
+            x=event["position"]["x"],
+            y=event["position"]["y"],
+        )
 
     def _note_press(self, button: str, view_name, event):
         """Remember where a button went down, so its release can be judged."""

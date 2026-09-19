@@ -229,6 +229,10 @@ SESSION = _declare(
     console_entries="the log of what was done starts empty every session",
     console_input="what is half-typed at the prompt is not a thing to save",
     interface_flatness="measured from the interface the current selection fits",
+    measurement_editing=(
+        "which region is being corrected, which is a thing a hand is doing "
+        "rather than a thing a config opens the app in"
+    ),
     measurement_pending="how many points the region being traced has so far",
     measurement_selected="which measurement's row is highlighted is browsing state",
     measurement_view="which cut the region being traced belongs to",
