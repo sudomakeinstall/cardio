@@ -355,7 +355,7 @@ it on screen, because none of those leaves the plane.
 | Key | Does |
 | --- | --- |
 | `m` | Start or stop tracing |
-| Enter | Close the region and measure it |
+| Enter | Close the region, or finish a correction |
 | `u` | Take back the last point |
 | `x` | Give up on the region being traced |
 | `e` | Correct the region the drawer has highlighted |
@@ -384,9 +384,11 @@ on a region's row opens it for correction, and while it is open:
 | Left click, on the contour | Adds a point there, on the line |
 | Right click, on a point | Takes that point away |
 
-*Done* closes the correction; *Revert* puts the points back where it found
-them.  The area follows every change, and the set is marked unsaved the way a
-rename marks it.
+*Done* closes the correction -- as does Enter, or `e` again -- and *Revert*
+puts the points back where it found them.  Reverting stays on the button alone:
+a correction given up is every point that was dragged, and nothing in the app
+puts those back.  The area follows every change, and the set is marked unsaved
+the way a rename marks it.
 
 One region is corrected at a time and only while its cut is showing, which is
 why the pencil refuses a region that is off plane and points at *Recall*

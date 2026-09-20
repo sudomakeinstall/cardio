@@ -66,7 +66,7 @@ def help_dialog():
                     html.Td("Trace a region on a cut")
                 with html.Tr():
                     html.Td("Enter")
-                    html.Td("Close the region and measure it")
+                    html.Td("Close the region, or finish a correction")
                 with html.Tr():
                     html.Td("u")
                     html.Td("Take back the last point placed")

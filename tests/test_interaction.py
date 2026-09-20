@@ -670,7 +670,6 @@ def test_a_press_in_one_view_and_a_release_in_another_is_not_a_click(interaction
     "key, action",
     [
         ("m", "toggle_measuring"),
-        ("Enter", "close_measurement"),
         ("u", "undo_measurement_point"),
         ("x", "cancel_measurement"),
         ("e", "toggle_measurement_edit"),
@@ -680,6 +679,30 @@ def test_the_measuring_keys_reach_their_actions(interaction, key, action):
     interaction.on_event({"type": "KeyPress", "key": key})
 
     assert (action, {}) in interaction.logic.calls
+
+
+def test_the_finish_key_closes_the_region_being_traced(interaction):
+    press(interaction, interaction_module.FINISH_KEY)
+
+    assert ("close_measurement", {}) in interaction.logic.calls
+
+
+def test_the_finish_key_ends_a_correction_instead_while_one_is_open(interaction):
+    """The two are never open at once, so one key finishes whichever is."""
+    interaction.logic.server.state.measurement_editing = 1
+
+    press(interaction, interaction_module.FINISH_KEY)
+
+    assert interaction.logic.names == ["finish_measurement_edit"]
+
+
+def test_the_finish_key_never_reverts_a_correction(interaction):
+    """Giving up on a correction stays on a button: nothing puts it back."""
+    interaction.logic.server.state.measurement_editing = 1
+
+    press(interaction, interaction_module.FINISH_KEY)
+
+    assert "revert_measurement_edit" not in interaction.logic.names
 
 
 def test_the_measuring_keys_are_ones_a_keypress_fires_for(interaction):
@@ -695,7 +718,7 @@ def test_the_measuring_keys_are_ones_a_keypress_fires_for(interaction):
     ):
         assert len(key) == 1 and key.isprintable()
 
-    assert interaction_module.CLOSE_TRACE_KEY == "Enter"
+    assert interaction_module.FINISH_KEY == "Enter"
 
 
 # --- correcting a region ------------------------------------------------------

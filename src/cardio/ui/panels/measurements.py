@@ -307,7 +307,9 @@ def _correcting(server, i: int):
                     color="success",
                     size="small",
                     block=True,
-                    title="Stop correcting this region, keeping the changes (e)",
+                    title=(
+                        "Stop correcting this region, keeping the changes (e, or Enter)"
+                    ),
                 )
             with vuetify.VCol(cols="6", classes="pl-1"):
                 vuetify.VBtn(
