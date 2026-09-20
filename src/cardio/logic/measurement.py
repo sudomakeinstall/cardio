@@ -39,6 +39,16 @@ CONTOUR_TITLES = {
 }
 
 
+def _now() -> dt.datetime:
+    """Local wall-clock time, carrying the offset that makes it unambiguous.
+
+    Local rather than UTC because these stamps are read beside the clock the
+    reading was made under; aware so one written down says which local time it
+    meant.
+    """
+    return dt.datetime.now().astimezone()
+
+
 class MeasurementController(Controller):
     """Owns the traced regions, and what is on screen of them."""
 
@@ -54,6 +64,7 @@ class MeasurementController(Controller):
         self._view: str = ""
         self._tile: int | None = None
         self._at_frame: int = 0
+        self._trace_started: str = ""
         self._actors: dict[tuple[str, object], ContourActors] = {}
         # Cuts a region was taken off between one redraw and the next, which
         # the redraw itself cannot report: ``_forget`` drops the props from the
@@ -68,6 +79,9 @@ class MeasurementController(Controller):
         self._before: list[tuple[float, float]] | None = None
         self._working: list[tuple[float, float]] | None = None
         self._grabbed: int | None = None
+        # When the app finished coming up, which is where the time a reading
+        # took is measured from.
+        self._opened: str = ""
 
     def register(self):
         state = self.server.state
@@ -78,6 +92,15 @@ class MeasurementController(Controller):
         # when the new layout does not show the cuts, which is exactly when the
         # regions have to come off them.
         state.change("maximized_view")(self.refresh)
+
+        # The same point the console arms at: by the time this runs the volume
+        # and any segmentation have been read and drawn, so what is timed from
+        # here is the reading rather than the loading.
+        self.server.controller.finalize_mpr_initialization.add(self._on_opened)
+
+    def _on_opened(self, **kwargs):
+        """Start the clock: what came before was the app being built."""
+        self._opened = _now().isoformat()
 
     def seed(self):
         """The regions a config opened with, and the state the tracing keeps."""
@@ -146,6 +169,7 @@ class MeasurementController(Controller):
         self._cut = None
         self._view = ""
         self._tile = None
+        self._trace_started = ""
         self.server.state.measurement_pending = 0
         self.server.state.measurement_view = ""
 
@@ -263,6 +287,7 @@ class MeasurementController(Controller):
             self._view = view_name
             self._tile = tile
             self._at_frame = self._frame
+            self._trace_started = _now().isoformat()
         elif not (
             planimetry.same_plane(self._cut, cut) and self._frame == self._at_frame
         ):
@@ -331,6 +356,7 @@ class MeasurementController(Controller):
                 cut=self._cut,
                 pose=self._pose(),
                 tile=self._tile_cut(),
+                started=self._trace_started,
             )
         )
 
@@ -366,7 +392,7 @@ class MeasurementController(Controller):
         """
         pose = self.app.rotations.rotation_sequence()
         pose.mpr_origin = [float(value) for value in self.server.state.mpr_origin]
-        pose.metadata.timestamp = dt.datetime.now().astimezone().isoformat()
+        pose.metadata.timestamp = _now().isoformat()
         pose.metadata.volume_label = self.server.state.active_volume_label
         return pose
 
@@ -771,7 +797,7 @@ class MeasurementController(Controller):
         together, and a config pointed at a new study by changing one directory
         keeps finding both.
         """
-        timestamp = dt.datetime.now().astimezone()
+        timestamp = _now()
         label = self.server.state.active_volume_label
 
         if not label:
@@ -783,6 +809,7 @@ class MeasurementController(Controller):
             logger.warning("There are no measurements to save.")
             return
 
+        regions.metadata.opened = self._opened
         regions.metadata.timestamp = timestamp.isoformat()
         regions.metadata.volume_label = label
 

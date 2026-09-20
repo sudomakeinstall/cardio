@@ -8,6 +8,7 @@ against whatever the app last said.
 """
 
 # System
+import datetime as dt
 import itertools
 import pathlib as pl
 
@@ -1047,6 +1048,73 @@ def test_saving_nothing_writes_nothing(armed):
 
     assert saved_files(armed) == []
     assert armed.server.state.measurements_saved_at is None
+
+
+# --- how long it took ---------------------------------------------------------
+
+# A reading is two intervals: finding the plane, and tracing the region once it
+# is found. The set says when the app came up and each region says when its
+# first point landed, so both are a subtraction rather than a stopwatch
+# somebody remembered to press.
+
+
+def at(stamp: str) -> dt.datetime:
+    assert stamp, "an interval needs both of its ends"
+    return dt.datetime.fromisoformat(stamp)
+
+
+def test_a_region_says_when_its_first_point_was_placed(armed):
+    trace(armed, box(armed, 50.0))
+
+    region = regions(armed)[0]
+    assert at(region.started) <= at(region.timestamp)
+
+
+def test_the_set_says_when_the_session_came_up(armed):
+    trace(armed, box(armed, 50.0))
+
+    armed.do("save_measurements")
+
+    reopened = MeasurementSet.from_file(saved_files(armed)[0])
+    assert at(reopened.metadata.opened) <= at(reopened.measurements[0].started)
+    assert at(reopened.measurements[0].timestamp) <= at(reopened.metadata.timestamp)
+
+
+def test_a_session_that_never_came_up_times_nothing(tmp_path):
+    """``ready`` is what starts the clock, so a set saved before it says so."""
+    session = session_on(tmp_path)
+
+    assert session.logic.measurements._opened == ""
+
+
+def test_the_clock_starts_at_the_first_point_of_each_region(armed):
+    trace(armed, box(armed, 50.0))
+    trace(armed, box(armed, 30.0))
+
+    first, second = regions(armed)
+    assert at(second.started) >= at(first.timestamp)
+
+
+def test_a_trace_that_was_cancelled_does_not_time_the_one_that_follows(armed):
+    """The clock is the trace's, not the mode's: a false start is not a start."""
+    trace(armed, box(armed, 50.0), close=False)
+    armed.do("cancel_measurement")
+    abandoned = dt.datetime.now().astimezone()
+
+    trace(armed, box(armed, 30.0))
+
+    assert at(regions(armed)[0].started) >= abandoned
+
+
+def test_taking_back_every_point_starts_the_clock_again(armed):
+    armed.do("toggle_measuring")
+    armed.do("place_measurement_point", view_name="ul", x=10.0, y=10.0)
+    armed.do("undo_measurement_point")
+    emptied = dt.datetime.now().astimezone()
+
+    trace(armed, box(armed, 50.0))
+
+    assert at(regions(armed)[0].started) >= emptied
 
 
 # --- the tile grid ------------------------------------------------------------

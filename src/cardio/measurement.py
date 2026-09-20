@@ -86,8 +86,13 @@ class Measurement(pc.BaseModel):
     cut: Cut
     pose: RotationSequence = pc.Field(default_factory=RotationSequence)
     tile: TileCut | None = None
+    started: str = pc.Field(
+        default="",
+        description="When the first point of the region was placed",
+    )
     timestamp: str = pc.Field(
-        default_factory=lambda: dt.datetime.now().astimezone().isoformat()
+        default_factory=lambda: dt.datetime.now().astimezone().isoformat(),
+        description="When the region was closed",
     )
 
     @pc.computed_field
@@ -120,8 +125,13 @@ class MeasurementMetadata(pc.BaseModel):
 
     coordinate_system: str = "LPS"
     length_units: str = "mm"
+    opened: str = pc.Field(
+        default="",
+        description="When the session the regions were traced in came up",
+    )
     timestamp: str = pc.Field(
-        default_factory=lambda: dt.datetime.now().astimezone().isoformat()
+        default_factory=lambda: dt.datetime.now().astimezone().isoformat(),
+        description="When the set was written",
     )
     volume_label: str = ""
 

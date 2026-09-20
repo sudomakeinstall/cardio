@@ -176,6 +176,29 @@ def test_a_set_carries_a_stamp_of_when_it_was_taken():
     assert dt.datetime.fromisoformat(stamped).tzinfo is not None
 
 
+def test_the_two_ends_of_a_trace_survive_being_written_down():
+    """How long a region took is the pair, so a file holding one is no use."""
+    started = "2026-09-19T14:08:55-04:00"
+    region = MeasurementSet.from_toml(
+        MeasurementSet(measurements=[traced(started=started)]).to_toml()
+    ).measurements[0]
+
+    assert region.started == started
+    assert dt.datetime.fromisoformat(region.timestamp) >= dt.datetime.fromisoformat(
+        region.started
+    )
+
+
+def test_a_file_from_before_the_clock_reads_as_one_that_was_not_timed():
+    """A set written by an older version is opened rather than refused."""
+    older = MeasurementSet(measurements=[traced()]).to_toml()
+
+    reopened = MeasurementSet.from_toml(older)
+
+    assert reopened.metadata.opened == ""
+    assert reopened.measurements[0].started == ""
+
+
 # --- the pose it carries --------------------------------------------------
 
 

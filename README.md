@@ -426,6 +426,38 @@ it -- so a reader gets the number without recomputing it and `cardio` gets the
 plane back.  It is written in LPS throughout, whatever index order the session
 is spelled in.
 
+It says when, as well as what.  The set carries the moment the app finished
+coming up, and each region carries the moment its first point landed and the
+moment it was closed -- so finding the plane and tracing it are each a
+subtraction rather than a stopwatch somebody had to remember to press:
+
+```toml
+[metadata]
+opened    = "2026-09-19T14:02:11-04:00"   # the app was ready to be looked at
+timestamp = "2026-09-19T14:09:40-04:00"   # Save Measurements was pressed
+
+[[measurements]]
+started   = "2026-09-19T14:08:55-04:00"   # the first point landed
+timestamp = "2026-09-19T14:09:31-04:00"   # the region was closed
+```
+
+The clock starts once the volume and any segmentation have been read and drawn,
+so an arm of a study that loads more than the other is not timed for the
+loading.  A trace that was cancelled, or undone back to nothing, is not a
+start; the region that follows is stamped when its own first point lands.
+
+The file is named for the instant it was written, which is one file per save
+and no two alike.  A `timestamp_format` holding no directives comes back from
+`strftime` as itself, which is how a study that wants one file per reading and
+one glob over all of them asks for a fixed name instead:
+
+```bash
+$ cardio --timestamp_format aov ...   # measurements/<volume>/aov.toml
+```
+
+Saving twice then overwrites, which is what a fixed name means, and it names
+whatever else that session writes.
+
 As with rotations, a named file is read *over* whatever the config spelled, so
 **measurements traced in the app are not saved by saving the session** when a
 measurement file is named; *Save Measurements* is what writes them.  Unlike a
