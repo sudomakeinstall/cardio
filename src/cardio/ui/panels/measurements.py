@@ -109,6 +109,14 @@ CONTOUR_BUTTONS = (
     (ContourStyle.SPLINE.value, "Spline"),
 )
 
+# What a region is, as against what can be done to it. The label, and the
+# region's own property as the row reads it.
+FACTS = (
+    ("Area", "area.toFixed(1) + ' mm²'"),
+    ("Viewport", "view"),
+    ("Frame", "frame"),
+)
+
 
 def _traced_regions(server, scene):
     """One row per region: what it is, what it came to, and where it was taken."""
@@ -146,22 +154,10 @@ def _traced_regions(server, scene):
                             variant="plain",
                             **SWALLOW_KEYS,
                         )
-                    with vuetify.VCol(cols="auto"):
-                        html.Span(
-                            "{{ " + f"{REGIONS}[{i}].area.toFixed(1)" + " }} mm²",
-                            classes="text-caption font-weight-medium",
-                        )
 
-                with vuetify.VRow(no_gutters=True, classes="align-center mt-1"):
-                    with vuetify.VCol():
-                        html.Span(
-                            "{{ "
-                            + f"{REGIONS}[{i}].view"
-                            + " }} · frame {{ "
-                            + f"{REGIONS}[{i}].frame"
-                            + " }}",
-                            classes="text-caption text-medium-emphasis",
-                        )
+                with vuetify.VRow(
+                    no_gutters=True, justify="end", classes="align-center mt-1"
+                ):
                     with vuetify.VCol(cols="auto", classes="mr-1"):
                         # Spelled out rather than generated from the picker's
                         # items: there are two of them, and each carries its own
@@ -221,6 +217,9 @@ def _traced_regions(server, scene):
                             density="comfortable",
                         )
 
+                vuetify.VDivider(classes="my-2")
+                _facts(i)
+
                 _correcting(server, i)
 
     vuetify.VBtn(
@@ -261,6 +260,25 @@ def _traced_regions(server, scene):
         variant="text",
         prepend_icon="mdi-delete-sweep",
     )
+
+
+def _facts(i: int):
+    """What the region at ``i`` is, one labelled row apiece.
+
+    Below the controls rather than among them: these say what the region is,
+    and everything above acts on it.  A row each rather than a line of them
+    with dots between, so the number the region was traced for reads as a
+    number rather than as one more word in a caption.
+    """
+    for label, expression in FACTS:
+        with vuetify.VRow(no_gutters=True, classes="align-center"):
+            with vuetify.VCol(cols="5"):
+                html.Span(label, classes="text-caption text-medium-emphasis")
+            with vuetify.VCol():
+                html.Span(
+                    "{{ " + f"{REGIONS}[{i}].{expression}" + " }}",
+                    classes="text-caption",
+                )
 
 
 def _correcting(server, i: int):

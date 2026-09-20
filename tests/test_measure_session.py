@@ -24,7 +24,8 @@ from cardio.measurement import MeasurementSet
 from cardio.planimetry import ContourStyle
 from cardio.session import Session
 from cardio.tile import TileSource
-from tests.test_app_smoke import build_scene, write_volume
+from cardio.ui.panels import measurements as measurements_panel
+from tests.test_app_smoke import build_app, build_scene, connect, write_volume
 
 _names = itertools.count()
 
@@ -1115,6 +1116,43 @@ def test_taking_back_every_point_starts_the_clock_again(armed):
     trace(armed, box(armed, 50.0))
 
     assert at(regions(armed)[0].started) >= emptied
+
+
+# --- the panel that lists them ------------------------------------------------
+
+# What a region *is* and what can be *done* to it are different questions, and
+# the card answers them in that order: the name, the controls, then the facts
+# below them. Asserted on the markup because the arrangement is the claim.
+
+
+@pytest.fixture
+def card(tmp_path):
+    """The whole app's markup, as the drawer builds it."""
+    server, _, _, ui = build_app(build_scene(tmp_path, active_volume_label="vol"))
+    connect(server)
+    return ui.layout.html
+
+
+def test_the_card_says_what_the_region_is_below_what_can_be_done_to_it(card):
+    facts = card.find("Viewport")
+    for control in ("mdi-pencil", "mdi-target", "mdi-delete"):
+        assert -1 < card.find(control) < facts, f"{control} belongs above the facts"
+
+
+def test_every_fact_is_a_labelled_row(card):
+    for label, expression in measurements_panel.FACTS:
+        assert f'text-medium-emphasis">\n{label}\n</span>' in card
+        assert f"measurement_data.measurements[0].{expression}" in card
+
+
+def test_the_area_carries_its_units(card):
+    assert "area.toFixed(1) + ' mm\u00b2'" in card
+
+
+def test_the_facts_are_not_also_up_beside_the_name(card):
+    """They moved; they were not copied."""
+    assert card.count("measurement_data.measurements[0].view") == 1
+    assert card.count("measurement_data.measurements[0].area") == 1
 
 
 # --- the tile grid ------------------------------------------------------------
