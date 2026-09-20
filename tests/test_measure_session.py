@@ -18,6 +18,7 @@ import pytest
 # Internal
 import cardio.planimetry as planimetry
 from cardio.camera import cut_point, world_per_pixel
+from cardio.contour import EDITING_COLOR, SELECTED_COLOR
 from cardio.measurement import MeasurementSet
 from cardio.planimetry import ContourStyle
 from cardio.session import Session
@@ -1422,3 +1423,21 @@ def test_clearing_pushes_the_cuts_the_regions_left(armed, monkeypatch):
 
     assert regions(armed) == []
     assert seen == [["ul"]]
+
+
+def contour_color(session: Session, index: int = 0, view: str = "ul"):
+    """The colour the region at ``index`` is actually drawn in on ``view``."""
+    return (
+        session.logic.measurements._actors[(view, index)].line.GetProperty().GetColor()
+    )
+
+
+def test_reverting_a_correction_that_moved_nothing_still_repaints_it(armed):
+    trace(armed, box(armed, 50.0))
+    edit(armed)
+    assert contour_color(armed) == pytest.approx(EDITING_COLOR)
+
+    armed.do("revert_measurement_edit")
+
+    assert armed.server.state.measurement_editing is None
+    assert contour_color(armed) == pytest.approx(SELECTED_COLOR)

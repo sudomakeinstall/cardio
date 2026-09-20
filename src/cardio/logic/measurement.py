@@ -511,11 +511,23 @@ class MeasurementController(Controller):
 
     @action("revert_measurement_edit")
     def revert_measurement_edit(self):
-        """Put the region back as the edit found it, and close the edit."""
+        """Put the region back as the edit found it, and close the edit.
+
+        The redraw is the publish's listener, except when there is nothing to
+        publish: an edit that moved no point reverts to what the document
+        already says, and a write of an unchanged value is dropped before any
+        listener sees it. The contour still has to come out of its editing
+        colour, so that case asks for the redraw itself.
+        """
         index, before = self._editing, self._before
         self._leave_edit()
 
         if index is None or before is None:
+            self.refresh()
+            return
+
+        regions = self.regions.measurements
+        if 0 <= index < len(regions) and regions[index].points == before:
             self.refresh()
             return
 
