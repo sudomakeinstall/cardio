@@ -1125,6 +1125,10 @@ def test_taking_back_every_point_starts_the_clock_again(armed):
 # below them. Asserted on the markup because the arrangement is the claim.
 
 
+# The first region, as the rows address it.
+REGION = f"{measurements_panel.REGIONS}[0]"
+
+
 @pytest.fixture
 def card(tmp_path):
     """The whole app's markup, as the drawer builds it."""
@@ -1142,11 +1146,26 @@ def test_the_card_says_what_the_region_is_below_what_can_be_done_to_it(card):
 def test_every_fact_is_a_labelled_row(card):
     for label, expression in measurements_panel.FACTS:
         assert f'text-medium-emphasis">\n{label}\n</span>' in card
-        assert f"measurement_data.measurements[0].{expression}" in card
+        assert expression.format(region=REGION) in card
 
 
 def test_the_area_carries_its_units(card):
     assert "area.toFixed(1) + ' mm\u00b2'" in card
+
+
+def test_a_region_says_how_many_points_it_was_traced_from(card):
+    assert f"{REGION}.points.length" in card
+
+
+def test_a_region_says_how_long_the_tracing_took(card):
+    """The two ends the file carries, as the seconds between them."""
+    assert f"new Date({REGION}.timestamp) - new Date({REGION}.started)" in card
+
+
+def test_a_region_traced_before_the_stamps_shows_no_duration(card):
+    """Rather than every second since 1970, which is what a missing end gives."""
+    assert f"{REGION}.started ?" in card
+    assert "'--'" in card
 
 
 def test_the_facts_are_not_also_up_beside_the_name(card):

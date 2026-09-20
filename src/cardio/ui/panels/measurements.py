@@ -109,12 +109,27 @@ CONTOUR_BUTTONS = (
     (ContourStyle.SPLINE.value, "Spline"),
 )
 
-# What a region is, as against what can be done to it. The label, and the
-# region's own property as the row reads it.
+# What a region is, as against what can be done to it: what it came to, where
+# it was taken, and how long it took. The label, and the expression the row
+# reads, with ``{region}`` standing for the region the row is about -- spelled
+# that way because a duration names it twice.
 FACTS = (
-    ("Area", "area.toFixed(1) + ' mm²'"),
-    ("Viewport", "view"),
-    ("Frame", "frame"),
+    ("Area", "{region}.area.toFixed(1) + ' mm²'"),
+    ("Points", "{region}.points.length"),
+    ("Viewport", "{region}.view"),
+    ("Frame", "{region}.frame"),
+    # Both ends or nothing: a region traced before the app stamped them has a
+    # closing time and no start, and a duration counted from a missing end is
+    # every second since 1970.
+    (
+        "Traced in",
+        (
+            "{region}.started"
+            " ? ((new Date({region}.timestamp) - new Date({region}.started))"
+            " / 1000).toFixed(0) + ' s'"
+            " : '--'"
+        ),
+    ),
 )
 
 
@@ -276,7 +291,7 @@ def _facts(i: int):
                 html.Span(label, classes="text-caption text-medium-emphasis")
             with vuetify.VCol():
                 html.Span(
-                    "{{ " + f"{REGIONS}[{i}].{expression}" + " }}",
+                    "{{ " + expression.format(region=f"{REGIONS}[{i}]") + " }}",
                     classes="text-caption",
                 )
 
