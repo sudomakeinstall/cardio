@@ -121,6 +121,60 @@ def label_mask(image_data, labels: ty.Sequence[int]) -> np.ndarray | None:
     return np.isin(values, list(labels))
 
 
+def rank_by_size(labels: np.ndarray) -> np.ndarray:
+    """Renumber labelled components from 1 for the largest, background at 0.
+
+    Ranked here rather than by ITK's relabelling filter, which is only built
+    for outputs narrower than the labelling it consumes and raises once a mask
+    holds more components than one of those can count -- which is the speckle
+    this pass exists to thin. Equal sizes keep the order they were labelled in.
+    """
+    sizes = np.bincount(labels.ravel())
+    largest_first = np.argsort(-sizes[1:], kind="stable") + 1
+
+    ranks = np.zeros(sizes.size, dtype=np.int64)
+    ranks[largest_first] = np.arange(1, largest_first.size + 1)
+    return ranks[labels]
+
+
+def component_ranks(mask: np.ndarray) -> np.ndarray:
+    """Face-connected components of ``mask``, numbered from 1 for the largest.
+
+    ITK rather than an array library, because it has already read the images
+    and a segmentation pass should not pull in a second neighbourhood
+    implementation to disagree with it. The image carries no geometry:
+    connectivity is counted in index space, where spacing and direction
+    cannot change the answer.
+    """
+    image = itk.image_from_array(np.ascontiguousarray(mask, dtype=np.uint8))
+    connected = itk.connected_component_image_filter(image)
+    return rank_by_size(itk.array_from_image(connected))
+
+
+def keep_largest_components(
+    array: np.ndarray, counts: dict[int, int]
+) -> dict[int, int]:
+    """Erase all but the largest components of each label ``counts`` names.
+
+    Edits ``array`` in place, as the caller holds a view onto the image it read,
+    and hands back the voxels dropped per label so that the caller can say what
+    it did. A label with nothing to drop is left out of both.
+    """
+    dropped = {}
+    for label, keep in counts.items():
+        mask = array == label
+        if not mask.any():
+            continue
+
+        stray = mask & (component_ranks(mask) > keep)
+        if not stray.any():
+            continue
+
+        array[stray] = 0
+        dropped[label] = int(stray.sum())
+    return dropped
+
+
 def voxel_centroid(image_data, labels: ty.Sequence[int]) -> list[float] | None:
     """Centre of mass of the voxels carrying one of ``labels``, in world LPS.
 
@@ -418,6 +472,15 @@ class Segmentation(Object):
         default=False,
         description="Whether this segmentation is initially drawn over the MPR views",
     )
+    label_components: dict[int, pc.PositiveInt] = pc.Field(
+        default_factory=dict,
+        description=(
+            "How many connected components of a label to keep, largest first; "
+            "the rest are erased as the frames are read. A label named nowhere "
+            "here keeps every component it has, which is the default for all of "
+            'them. CLI usage: --segmentations \'[{..., "label_components": {"9": 1}}]\''
+        ),
+    )
     label_properties: dict[int, dict] = pc.Field(default_factory=dict)
 
     @pc.model_validator(mode="after")
@@ -434,6 +497,8 @@ class Segmentation(Object):
                     f"{self.label}: Loading segmentation frame {len(self._actors)}."
                 )
 
+                self._drop_stray_components(image, len(self._actors))
+
                 vtk_image = itk.vtk_image_from_image(image)
                 self._label_images.append(vtk_image)
 
@@ -442,6 +507,30 @@ class Segmentation(Object):
                 self._actors.append(self._create_segmentation_actor(mesh))
 
         return self
+
+    def _drop_stray_components(self, image, frame: int) -> None:
+        """Thin each configured label down to its largest components.
+
+        Done on the frame as it is read, so that everything downstream -- the
+        mesh, the overlay, the volumetry, and the planes fitted to a label
+        interface -- is measuring the same labels. An island far from the
+        structure it is named for barely shows on screen, and yet it is most of
+        what an area-weighted plane fit sees.
+
+        Said out loud rather than silently: a filter that is quietly removing
+        half a label is a thing to notice.
+        """
+        if not self.label_components:
+            return
+
+        dropped = keep_largest_components(
+            itk.array_view_from_image(image), self.label_components
+        )
+        for label, voxels in sorted(dropped.items()):
+            logger.info(
+                f"{self.label}: Frame {frame}: dropped {voxels} voxels outside the "
+                f"{self.label_components[label]} largest component(s) of label {label}."
+            )
 
     def _extract_mesh(self, vtk_image) -> vtk.vtkPolyData:
         """Extract a multi-label surface mesh with per-cell label scalars."""

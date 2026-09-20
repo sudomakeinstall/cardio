@@ -95,6 +95,44 @@ Reset returns to this configuration rather than to an empty panel.  A label that
 the segmentation does not contain is reported and dropped rather than refusing to
 start.
 
+### Labels an island away from themselves
+
+An interface plane is fitted to every cell of the surface between the two
+groups, weighted by area.  That makes it sensitive to a patch of label in the
+wrong place in a way that looking at the segmentation is not: a handful of
+voxels carrying a label 80 mm from the structure it names are invisible on
+screen, and yet they sit at the end of a long lever, so the plane fitted
+through them tilts to reach.  A `traverse` snap shows this as a cut that is
+square on at one interface and skewed by the time it arrives at the other.
+
+`label_components` is how many connected components of a label to keep, largest
+first, counted as the frames are read and applied to every frame alike:
+
+```toml
+[[segmentations]]
+label = "CCTASeg"
+directory = "./data/seg"
+label_components = {3 = 1, 9 = 1}   # one component each: no islands
+```
+
+```bash
+$ cardio --segmentations '[{"label": "CCTASeg", "directory": "./data/seg", "label_components": {"9": 1}}]'
+```
+
+A label named nowhere here keeps every component it has, which is what all of
+them do by default -- so this is a thing to turn on for the labels that should
+be one piece, rather than a cleanup to apply across the board.  Trabeculae,
+papillary muscles and a vessel that leaves and re-enters the field of view are
+all legitimately in several pieces, and thinning those to one would be throwing
+away anatomy.  What is dropped is written to the log, label by label and frame
+by frame, because a filter quietly removing half a structure is worth hearing
+about.
+
+The erasure happens on the way in, so everything downstream sees the same
+labels: the mesh, the overlay on the cuts, the volumetry, the zoom fit, and the
+planes a snap is aligned to.  It is the frames in memory that are thinned and
+never the files on disk.
+
 ### Opening in a particular view
 
 The three cut views are named for where they sit in the quad view -- `ul`, `ll`
