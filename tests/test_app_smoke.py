@@ -255,6 +255,7 @@ ACTIONS = {
     "toggle_measuring",
     "toggle_measurement_edit",
     "toggle_metadata",
+    "toggle_tile_focus",
     "undo_measurement_point",
     "revert_measurement_edit",
     "zoom_tiles",

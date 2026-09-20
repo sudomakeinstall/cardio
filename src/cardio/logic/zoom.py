@@ -174,7 +174,7 @@ class ZoomController(Controller):
         """
         tiles = self.scene.tile_views
         if self.app.tiles.active and tiles is not None and len(tiles):
-            return tiles.renderers[0], tiles.world_per_pixel()
+            return tiles.drawn[0], tiles.world_per_pixel()
 
         views = self.scene.mpr_views
         if views is None:

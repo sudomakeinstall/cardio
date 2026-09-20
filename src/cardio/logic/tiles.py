@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 # The value of ``maximized_view`` that puts the grid on screen.
 TILE_LAYOUT = "tile"
 
+# The value ``tile_focus`` carries when the whole grid is showing. An index
+# rather than None, because the state travels to the browser as JSON.
+NO_FOCUS = -1
+
 Pose = tuple[list[float], np.ndarray]
 PoseAt = ty.Callable[[float], Pose | None]
 
@@ -91,6 +95,7 @@ class TileController(Controller):
     def register(self):
         state = self.server.state
         state.change("tile_rows", "tile_cols")(self.refresh)
+        state.change("tile_focus")(self._on_focus_changed)
         state.change("active_volume_label")(self._on_volume_changed)
         state.change("maximized_view")(self.refresh)
         # The parallel sources are anchored to the origin, so they follow it the
@@ -126,6 +131,7 @@ class TileController(Controller):
             self.scene.tile.source if self.scene.segmentations else TileSource.SPACING
         )
         super().seed()
+        state.tile_focus = NO_FOCUS
         state.tile_sizes = list(range(1, MAX_ROWS + 1))
         state.tile_plane_items = [
             {"title": view.capitalize(), "value": view} for view in VIEWS
@@ -416,6 +422,30 @@ class TileController(Controller):
         views.zoom(factor)
         self.server.controller.view_update()
 
+    @action("toggle_tile_focus")
+    def toggle_tile_focus(self, x: float, y: float):
+        """Blow up the tile a point landed in, or give the grid back.
+
+        The toggle lives here rather than in the event handler for the reason
+        ``toggle_maximized`` gives: asking twice for the same tile is one thing
+        asked for twice, and only the state says what the second ask means.
+
+        A point outside every tile asks for nothing. That is not the same as
+        asking for the grid back: a grid with a gap around it would otherwise
+        un-focus itself on a click that missed.
+        """
+        views = self.scene.tile_views
+        if views is None or not self.active:
+            return
+
+        tile = views.tile_at(x, y)
+        if tile is None:
+            return
+
+        state = self.server.state
+        focused = getattr(state, "tile_focus", NO_FOCUS)
+        state.tile_focus = NO_FOCUS if focused == tile else tile
+
     @action("reset_tile_cameras")
     def reset_cameras(self, **kwargs):
         """Refit every tile, on demand.
@@ -429,6 +459,30 @@ class TileController(Controller):
         """A different path cuts a different shape, so refit to it."""
         self._fitted = False
         self.refresh()
+
+    def _on_focus_changed(self, **kwargs):
+        """Draw one tile or all of them, at the scale the grid was left at.
+
+        Deliberately no refit, for the reason ``MPRController._on_layout_changed``
+        gives for not refitting when a view is maximized: it would throw away
+        the zoom the grid was at. A parallel camera's scale is the world height
+        the viewport shows however many pixels it is drawn on, so a tile given
+        the whole window shows the slab it showed in its cell, at the size the
+        window is to the cell.
+
+        A held fit is the exception, and for the same reason: it is a share of
+        the viewport rather than a scale, so it is preserved by being measured
+        again against the viewport that is now on screen. ``refit`` is a no-op
+        unless it is held.
+        """
+        views = self.scene.tile_views
+        if views is None:
+            return
+
+        focus = int(getattr(self.server.state, "tile_focus", NO_FOCUS))
+        views.set_focus(None if focus == NO_FOCUS else focus)
+        self.refresh()
+        self.app.zoom.refit()
 
     def _on_volume_changed(self, **kwargs):
         self._tile_sets.clear()
@@ -454,6 +508,10 @@ class TileController(Controller):
         self._tile_sets.clear()
         self._grid = grid
         self._fitted = False
+        # A reshape the focused tile does not survive; ``set_grid`` has already
+        # let it go, and this is the state catching up with the grid.
+        if views.focus is None:
+            state.tile_focus = NO_FOCUS
 
     def _tile_set(self, obj, frame: int, count: int) -> TileSet:
         """The reslice pipelines for one object's tiles, built once per frame."""

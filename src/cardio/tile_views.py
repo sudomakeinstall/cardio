@@ -49,6 +49,7 @@ class TileViews:
         self._renderers: list[vtk.vtkRenderer] = []
         self.rows = 0
         self.cols = 0
+        self.focus: int | None = None
 
         self._window = vtk.vtkRenderWindow()
         self._window.SetOffScreenRendering(True)
@@ -68,6 +69,19 @@ class TileViews:
     def __len__(self) -> int:
         return len(self._renderers)
 
+    @property
+    def drawn(self) -> list[vtk.vtkRenderer]:
+        """The renderers the window is actually drawing.
+
+        Every tile, or the focused one alone. What the grid can say about
+        itself -- how much of a cut a tile shows, how many pixels it is drawn
+        on -- is asked of these rather than of the first renderer, which may be
+        one of the hidden ones.
+        """
+        if self.focus is None:
+            return list(self._renderers)
+        return [self._renderers[self.focus]]
+
     def set_grid(self, rows: int, cols: int):
         """Reshape the grid to ``rows`` by ``cols``, adding or dropping tiles."""
         rows = max(1, min(MAX_ROWS, int(rows)))
@@ -84,10 +98,40 @@ class TileViews:
             self._window.AddRenderer(renderer)
             self._renderers.append(renderer)
 
-        for index, renderer in enumerate(self._renderers):
-            renderer.SetViewport(*tile_viewport(index, rows, cols))
-
         self.rows, self.cols = rows, cols
+        if self.focus is not None and self.focus >= count:
+            self.focus = None
+        self._apply_viewports()
+
+    def set_focus(self, index: int | None):
+        """Give one tile the whole window, or give the grid back.
+
+        An index outside the grid focuses nothing, so a focus held across a
+        reshape that no longer has room for it falls away rather than raising.
+        """
+        if index is not None and not 0 <= index < len(self._renderers):
+            index = None
+
+        self.focus = index
+        self._apply_viewports()
+
+    def _apply_viewports(self):
+        """Give every renderer the rectangle its tile is drawn in.
+
+        A focused tile takes the window and the rest stop drawing. They keep
+        their own rectangles all the same: the grid comes back by drawing them
+        again, and nothing has to remember where they were.
+        """
+        for index, renderer in enumerate(self._renderers):
+            focused = index == self.focus
+            renderer.SetViewport(
+                *(
+                    (0.0, 0.0, 1.0, 1.0)
+                    if focused
+                    else tile_viewport(index, self.rows, self.cols)
+                )
+            )
+            renderer.SetDraw(self.focus is None or focused)
 
     def clear(self):
         """Drop every prop from all the tiles."""
@@ -118,8 +162,14 @@ class TileViews:
         is one window of viewports, not one window each -- so a tile is found
         by the rectangle it was given rather than by asking it. None before the
         window has been sized, when every tile is nothing by nothing.
+
+        A hidden tile keeps the rectangle it had in the grid, so the ones a
+        focus turned off are skipped: the point landed on what is drawn there
+        now, not on what used to be.
         """
         for index, renderer in enumerate(self._renderers):
+            if not renderer.GetDraw():
+                continue
             left, bottom = renderer.GetOrigin()
             width, height = renderer.GetSize()
             if not (width and height):
@@ -149,9 +199,9 @@ class TileViews:
         and share the window evenly, so every tile measures the same. Zero
         before the window has been sized, as the MPR views' does.
         """
-        if not self._renderers:
+        if not self.drawn:
             return 0.0
-        return world_per_pixel(self._renderers[0])
+        return world_per_pixel(self.drawn[0])
 
     def shown_rectangle(self):
         """What a tile is showing of its own cut, in world units.
@@ -162,9 +212,9 @@ class TileViews:
         before the window has been sized, when there is nothing for a capture
         to be framed like.
         """
-        if not self._renderers:
+        if not self.drawn:
             return None
-        return visible_rectangle(self._renderers[0])
+        return visible_rectangle(self.drawn[0])
 
     def shown_pixels(self):
         """How many pixels one tile is drawn on, as ``(columns, rows)``.
@@ -173,9 +223,9 @@ class TileViews:
         resampled to fill: the mosaic is that many pixels again in each
         direction.  None before the window has been sized.
         """
-        if not self._renderers:
+        if not self.drawn:
             return None
-        return visible_pixels(self._renderers[0])
+        return visible_pixels(self.drawn[0])
 
     def reset_cameras(self):
         """Refit the tiles, then put them all on one scale.
@@ -183,6 +233,12 @@ class TileViews:
         ``AutoCropOutputOn`` gives each oblique cut its own extent, so fitting
         each tile independently would zoom every tile differently and defeat the
         comparison the grid exists for.
+
+        Every tile rather than only the ones being drawn, so that a refit taken
+        while one tile fills the window does not hand the grid back with that
+        tile at a scale of its own. A hidden tile keeps its props and its cell,
+        so it fits the way it always did, and the shared maximum frames every
+        tile in whichever viewport it is drawn into.
         """
         if not self._renderers:
             return

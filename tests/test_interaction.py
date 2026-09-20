@@ -17,13 +17,16 @@ import pytest
 
 # Internal
 import cardio.ui.interaction as interaction_module
+from cardio.planimetry import CLICK_SLOP
 from cardio.ui.interaction import (
     CROSSHAIR_KEY,
+    DOUBLE_CLICK_MS,
     FRAME_KEYS,
     HANDLED_EVENTS,
     HELP_KEY,
     MAXIMIZE_KEYS,
     SLICE_KEYS,
+    VIEW_LAYOUTS,
     Interaction,
 )
 
@@ -55,9 +58,13 @@ class RecordingMPR:
 class RecordingTiles:
     def __init__(self):
         self.zooms = []
+        self.focused = []
 
     def zoom_tiles(self, factor):
         self.zooms.append(factor)
+
+    def toggle_tile_focus(self, x, y):
+        self.focused.append((x, y))
 
 
 class FakeServer:
@@ -840,3 +847,140 @@ def test_a_right_drag_while_correcting_takes_no_point_away(interaction):
     click(editing(interaction), "ul", 120, 90, button="Right", travel=40)
 
     assert "delete_measurement_point" not in interaction.logic.names
+
+
+# Double clicking a view
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    """A clock the test moves, since a double click is two clicks and a gap."""
+    now = [1000.0]
+    monkeypatch.setattr(
+        interaction_module, "time", types.SimpleNamespace(time=lambda: now[0])
+    )
+    return now
+
+
+def wait(clock, milliseconds):
+    clock[0] += milliseconds / 1000.0
+
+
+@pytest.mark.parametrize("view, layout", sorted(VIEW_LAYOUTS.items()))
+def test_a_double_click_maximizes_the_view_it_landed_in(
+    interaction, clock, view, layout
+):
+    """Whether a second double click restores is the action's business, as it
+    is for the key that does the same thing."""
+    click(interaction, view, 50, 50)
+    click(interaction, view, 50, 50)
+
+    assert interaction.logic.arguments("toggle_maximized") == [{"view": layout}]
+
+
+def test_the_two_volume_panes_maximize_the_same_layout():
+    """The quad view's pane and the maximized view are two widgets on one
+    render window, and a double click on either means the same thing."""
+    assert VIEW_LAYOUTS["volume_mpr"] == VIEW_LAYOUTS["volume"]
+
+
+def test_one_click_maximizes_nothing(interaction, clock):
+    click(interaction, "ul", 50, 50)
+
+    assert interaction.logic.calls == []
+
+
+def test_a_slow_second_click_is_a_second_click(interaction, clock):
+    click(interaction, "ul", 50, 50)
+    wait(clock, DOUBLE_CLICK_MS + 1)
+    click(interaction, "ul", 50, 50)
+
+    assert interaction.logic.calls == []
+
+
+def test_a_second_click_somewhere_else_is_a_second_click(interaction, clock):
+    click(interaction, "ul", 50, 50)
+    click(interaction, "ul", 50 + 4 * CLICK_SLOP, 50)
+
+    assert interaction.logic.calls == []
+
+
+def test_a_click_in_each_of_two_views_is_not_a_double_click(interaction, clock):
+    """Otherwise a hand crossing the quad view maximizes what it passes over."""
+    click(interaction, "ul", 50, 50)
+    click(interaction, "ll", 50, 50)
+
+    assert interaction.logic.calls == []
+
+
+def test_a_third_click_starts_a_new_gesture(interaction, clock):
+    """Three clicks are one double click and one click, not two double clicks."""
+    for _ in range(3):
+        click(interaction, "ul", 50, 50)
+
+    assert interaction.logic.arguments("toggle_maximized") == [{"view": "ul"}]
+
+
+def test_four_clicks_are_two_double_clicks(interaction, clock):
+    for _ in range(4):
+        click(interaction, "ul", 50, 50)
+
+    assert interaction.logic.arguments("toggle_maximized") == [{"view": "ul"}] * 2
+
+
+def test_a_drag_is_not_a_double_click(interaction, clock):
+    """Both the window/level drag and the double click are the left button, so
+    the one that travels must not be read as the one that does not."""
+    for _ in range(2):
+        click(interaction, "ul", 50, 50, travel=40)
+
+    assert "toggle_maximized" not in interaction.logic.names
+
+
+def test_a_double_click_over_a_tile_blows_up_that_tile(interaction, clock):
+    """The grid is one view holding many, so the tile is named by where the
+    click landed rather than by the view it landed in."""
+    click(interaction, "tile", 120, 80)
+    click(interaction, "tile", 120, 80)
+
+    assert interaction.logic.arguments("toggle_tile_focus") == [{"x": 120, "y": 80}]
+    assert interaction.logic.tiles.focused == [(120, 80)]
+
+
+@pytest.mark.parametrize("mode", ["measuring", "measurement_editing"])
+def test_a_double_click_on_a_cut_is_ignored_while_a_region_is_open(
+    interaction, clock, mode
+):
+    """The clicks belong to the region: tracing takes the click, and a layout
+    that moved under a hand placing points would take the region with it."""
+    setattr(interaction.logic.server.state, mode, True)
+
+    click(interaction, "ul", 50, 50)
+    click(interaction, "ul", 50, 50)
+
+    assert "toggle_maximized" not in interaction.logic.names
+
+
+def test_a_double_click_off_the_cuts_still_maximizes_while_tracing(interaction, clock):
+    """A click on the volume rendering was never going to be a point."""
+    interaction.logic.server.state.measuring = True
+
+    click(interaction, "volume_mpr", 50, 50)
+    click(interaction, "volume_mpr", 50, 50)
+
+    assert interaction.logic.arguments("toggle_maximized") == [{"view": "volume"}]
+
+
+def test_the_volumetry_charts_hear_nothing(interaction, clock):
+    """They are given no interactor events at all, so `y` is their only way in
+    and out; this says so where a reader of the table would look."""
+    click(interaction, "volumetry", 50, 50)
+    click(interaction, "volumetry", 50, 50)
+
+    assert interaction.logic.calls == []
+
+
+def test_the_help_sheet_writes_the_double_click_down():
+    """The mouse table is written out by hand, like the key table above it."""
+    source = (pl.Path(interaction_module.__file__).parent / "help.py").read_text()
+    assert "Double Click" in source

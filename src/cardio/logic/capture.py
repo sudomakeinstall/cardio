@@ -257,17 +257,27 @@ class CaptureController(Controller):
         return visible_rectangle(renderer), visible_pixels(renderer)
 
     def _mosaic_plane(self, viewport: str, volume, frame: int):
-        """The tile grid's cuts, composed into one image."""
+        """The tile grid's cuts, composed into one image.
+
+        A blown-up tile composes to itself alone, since the data capture is
+        written to match the picture taken beside it and the picture is that
+        one cut filling the window.
+        """
         views = self.scene.tile_views
         poses = self.app.tiles.tile_poses(frame)
         if views is None or poses is None:
             return None
+
+        rows, columns = views.rows, views.cols
+        if views.focus is not None:
+            poses, rows, columns = [poses[views.focus]], 1, 1
+
         return compose(
             volume.mpr_image_data(frame),
             poses,
             VIEW_TRANSFORMS["ul"],
-            views.rows,
-            views.cols,
+            rows,
+            columns,
             views.shown_rectangle(),
             views.shown_pixels(),
         )

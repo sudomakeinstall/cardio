@@ -355,3 +355,137 @@ def test_a_refit_replaces_the_zoom(views):
     views.reset_cameras()
 
     assert scales(views) == pytest.approx(before)
+
+
+# Focus
+
+
+def test_no_tile_is_focused_to_begin_with(views):
+    assert views.focus is None
+    assert all(r.GetDraw() for r in views.renderers)
+
+
+def test_a_focused_tile_takes_the_whole_window(views):
+    views.set_focus(5)
+
+    assert views.renderers[5].GetViewport() == (0.0, 0.0, 1.0, 1.0)
+
+
+def test_the_other_tiles_stop_drawing(views):
+    views.set_focus(5)
+
+    drawn = [index for index, r in enumerate(views.renderers) if r.GetDraw()]
+    assert drawn == [5]
+
+
+def test_letting_the_focus_go_gives_every_tile_its_cell_back(views):
+    views.set_focus(5)
+    views.set_focus(None)
+
+    assert all(r.GetDraw() for r in views.renderers)
+    for index, renderer in enumerate(views.renderers):
+        assert renderer.GetViewport() == pytest.approx(tile_viewport(index, 3, 4))
+
+
+def test_a_tile_outside_the_grid_focuses_nothing(views):
+    views.set_focus(99)
+
+    assert views.focus is None
+    assert all(r.GetDraw() for r in views.renderers)
+
+
+def test_a_reshape_drops_a_focus_it_no_longer_has_room_for(views):
+    views.set_focus(11)
+
+    views.set_grid(2, 2)
+
+    assert views.focus is None
+    assert all(r.GetDraw() for r in views.renderers)
+
+
+def test_a_reshape_keeps_a_focus_it_still_holds(views):
+    views.set_focus(2)
+
+    views.set_grid(2, 2)
+
+    assert views.focus == 2
+    assert views.renderers[2].GetViewport() == (0.0, 0.0, 1.0, 1.0)
+
+
+def test_the_focused_tile_is_what_a_point_lands_on(views):
+    """The hidden tiles keep their own rectangles, so a point over where the
+    first tile used to be has to answer with the tile drawn there now."""
+    views.window.SetSize(400, 300)
+    views.set_focus(5)
+
+    assert views.tile_at(10, 290) == 5
+    assert views.tile_at(390, 10) == 5
+
+
+def test_the_grid_locates_points_again_once_the_focus_is_let_go(views):
+    views.window.SetSize(400, 300)
+    views.set_focus(5)
+    views.set_focus(None)
+
+    assert views.tile_at(10, 290) == 0
+
+
+def test_a_focus_leaves_every_camera_where_it_was(views):
+    """A blown-up tile keeps the zoom the grid was at: the parallel scale is
+    the world height a viewport shows however many pixels it is drawn on."""
+    fitted(views)
+    before = scales(views)
+
+    views.set_focus(5)
+
+    assert scales(views) == pytest.approx(before)
+
+
+def test_letting_the_focus_go_leaves_them_where_they_were_too(views):
+    fitted(views)
+    views.zoom(3.0)
+    zoomed = scales(views)
+
+    views.set_focus(5)
+    views.set_focus(None)
+
+    assert scales(views) == pytest.approx(zoomed)
+
+
+def test_a_focused_tile_shows_the_same_cut_on_more_pixels(views):
+    """Which is what makes it bigger: the same slab of the cut, drawn on the
+    window rather than on a cell of it."""
+    fitted(views)
+    _, (low, high) = views.shown_rectangle()
+    _, tall = views.shown_pixels()
+
+    views.set_focus(5)
+
+    _, (focused_low, focused_high) = views.shown_rectangle()
+    _, focused_tall = views.shown_pixels()
+    assert (focused_low, focused_high) == pytest.approx((low, high))
+    assert focused_tall > tall
+
+
+def test_the_grid_answers_for_the_focused_tile(views):
+    fitted(views)
+    views.set_focus(5)
+    views.reset_cameras()
+
+    width, height = views.renderers[5].GetSize()
+    scale = views.world_per_pixel()
+
+    assert views.shown_pixels() == (width, height)
+    (low_x, high_x), _ = views.shown_rectangle()
+    assert high_x - low_x == pytest.approx(scale * width, rel=1e-3)
+
+
+def test_a_refit_while_focused_keeps_every_tile_on_one_scale(views):
+    """Otherwise the grid comes back with the tile that was blown up zoomed
+    differently from its neighbours, which is the comparison it exists for."""
+    fitted(views)
+
+    views.set_focus(5)
+    views.reset_cameras()
+
+    assert len({round(scale, 9) for scale in scales(views)}) == 1

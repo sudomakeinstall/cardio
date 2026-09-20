@@ -32,13 +32,18 @@ MPR_VIEWS = {"ul", "lr", "ll"}
 # trackball. Nothing tells us it moved, so the release is when we go and look.
 TRACKBALL_VIEW = "volume"
 
+# The grid of cuts, which is one view holding many: the tile a gesture means is
+# whichever one it landed on, so it is the view whose events carry a position
+# that something else has to read.
+TILE_VIEW = "tile"
+
 # Views a drag means something in. The tile grid takes window/level but not the
 # slice scroll, which has no single slice to move.
-DRAG_VIEWS = MPR_VIEWS | {"tile"}
+DRAG_VIEWS = MPR_VIEWS | {TILE_VIEW}
 
 # Views a click means something in, which is every view showing a cut: a click
 # places a point of a region, and a region is traced on a cut.
-CUT_VIEWS = MPR_VIEWS | {"tile"}
+CUT_VIEWS = MPR_VIEWS | {TILE_VIEW}
 
 # The console's key. A backtick because every letter that reads as "console"
 # already names a view, and because it is where a console usually is.
@@ -98,6 +103,28 @@ MAXIMIZE_KEYS = {
     "y": "volumetry",
 }
 
+# The layout a double click over each view maximizes, which is the key press
+# said with the mouse. Two names for the volume rendering because the quad view
+# and the maximized view are two widgets on one render window, and only the
+# first of them has a pane around it.
+#
+# The tile grid is absent: its tiles are not views and no layout names one, so a
+# double click there asks the grid to blow up the tile it landed on instead. So
+# are the volumetry charts, which are handed no interactor events at all and so
+# have nothing to hear a click with.
+VIEW_LAYOUTS = {
+    "ul": "ul",
+    "ll": "ll",
+    "lr": "lr",
+    "volume": "volume",
+    "volume_mpr": "volume",
+}
+
+# How long after a click the next one is still the same gesture. Long enough
+# for a double click to be deliberate rather than fast, and short enough that
+# two separate clicks in the same spot are two clicks.
+DOUBLE_CLICK_MS = 400
+
 
 class Interaction:
     """Drag and keypress handling for the render views."""
@@ -127,6 +154,10 @@ class Interaction:
 
         self.last_keypress_time = {}
         self.keypress_debounce_ms = 100
+
+        # When and where the last click landed, per view, so the next one can
+        # say whether the two are a double click.
+        self.last_click = {}
 
     @property
     def handled_events(self):
@@ -165,13 +196,16 @@ class Interaction:
                 self.left_dragging = False
                 self._note_camera(view_name)
                 clicked = self._was_click("left", view_name, event)
+                cutting = clicked and view_name in CUT_VIEWS
                 if self.grabbed:
                     self.grabbed = False
                     self.logic.dispatch("drop_measurement_point")
-                elif clicked and self._editing:
+                elif cutting and self._editing:
                     self._at("insert_measurement_point", view_name, event)
-                elif clicked and self._measuring:
+                elif cutting and self._measuring:
                     self._at("place_measurement_point", view_name, event)
+                elif clicked and self._was_double_click(view_name, event):
+                    self._maximize(view_name, event)
 
             case "RightButtonPress":
                 self.right_dragging = True
@@ -181,7 +215,9 @@ class Interaction:
             case "RightButtonRelease":
                 self.right_dragging = False
                 self._note_camera(view_name)
-                clicked = self._was_click("right", view_name, event)
+                clicked = self._was_click("right", view_name, event) and (
+                    view_name in CUT_VIEWS
+                )
                 if clicked and self._editing:
                     self._at("delete_measurement_point", view_name, event)
                 elif clicked and self._measuring:
@@ -357,8 +393,12 @@ class Interaction:
         )
 
     def _note_press(self, button: str, view_name, event):
-        """Remember where a button went down, so its release can be judged."""
-        if view_name in CUT_VIEWS and "position" in event:
+        """Remember where a button went down, so its release can be judged.
+
+        In every view rather than only where a click means something, since a
+        double click means the same thing in all of them.
+        """
+        if view_name and "position" in event:
             self.press_pos[(button, view_name)] = [
                 event["position"]["x"],
                 event["position"]["y"],
@@ -372,14 +412,62 @@ class Interaction:
         thing none of them is, and can be given to the tracing without taking
         anything away from the rest. The slop is for a hand that is not quite
         still, not for a short drag.
+
+        What a click *means* is the caller's, since it differs by view: only a
+        cut takes a point, while any view can be maximized.
         """
         press = self.press_pos.pop((button, view_name), None)
-        if press is None or view_name not in CUT_VIEWS or "position" not in event:
+        if press is None or "position" not in event:
             return False
 
         return is_click(
             press, [event["position"]["x"], event["position"]["y"]], CLICK_SLOP
         )
+
+    def _was_double_click(self, view_name, event) -> bool:
+        """Whether this click finishes a double click, and remember it either way.
+
+        Synthesized rather than listened for: the views forward the interactor
+        events vtk.js knows, and a double click is not one of them. Two clicks
+        in one view, close together in time and in place, are the gesture --
+        the same two questions the single click already answers, asked of the
+        click before rather than of the press.
+
+        The pair is forgotten once it has been claimed, so a third click starts
+        a new gesture rather than finishing a second one.
+        """
+        position = [event["position"]["x"], event["position"]["y"]]
+        now = time.time() * 1000
+        previous = self.last_click.get(view_name)
+        self.last_click[view_name] = (now, position)
+
+        if previous is None:
+            return False
+
+        when, where = previous
+        if now - when > DOUBLE_CLICK_MS or not is_click(where, position, CLICK_SLOP):
+            return False
+
+        del self.last_click[view_name]
+        return True
+
+    def _maximize(self, view_name, event):
+        """Blow up what was double clicked, or put it back.
+
+        Which of the two it is belongs to the action, as it does for the keys:
+        the state is what says whether this view is already the one on screen.
+        """
+        if view_name == TILE_VIEW:
+            # Not through ``_at``: the grid is the one view whose name says
+            # nothing about which cut was clicked, so the action asks the grid
+            # rather than being told, and has no view to be given.
+            self.logic.dispatch(
+                "toggle_tile_focus",
+                x=event["position"]["x"],
+                y=event["position"]["y"],
+            )
+        elif view_name in VIEW_LAYOUTS:
+            self.logic.dispatch("toggle_maximized", view=VIEW_LAYOUTS[view_name])
 
     def _store_mouse_position(self, view_name, event):
         """Remember where a drag started, so the next move has a delta."""

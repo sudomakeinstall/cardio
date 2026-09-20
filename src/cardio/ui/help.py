@@ -130,6 +130,12 @@ def help_dialog():
                     html.Td("Right + Middle Drag ↑/↓")
                     html.Td("Zoom every view in/out together")
                 with html.Tr():
+                    html.Td("Double Click")
+                    html.Td("Blow up the view under the cursor, or put it back")
+                with html.Tr():
+                    html.Td("Double Click (tile view)")
+                    html.Td("Blow up the tile under the cursor, or bring the grid back")
+                with html.Tr():
                     html.Td("Left Click (tracing)")
                     html.Td("Place a point of the region")
                 with html.Tr():
@@ -144,6 +150,17 @@ def help_dialog():
                 with html.Tr():
                     html.Td("Right Click (correcting)")
                     html.Td("Take away the point that was clicked")
+
+        html.P(
+            "A double click is the maximize keys said with the mouse, and a "
+            "blown-up tile is the one thing they cannot say: the tile keeps "
+            "the cut and the zoom it had in the grid, drawn at the size the "
+            "window is to its cell. The volumetry charts hear no "
+            "mouse at all, so they are reached and left with their key. On a "
+            "cut, a double click is ignored while a region is being traced or "
+            "corrected, where the clicks belong to the region.",
+            classes="text-caption mt-3",
+        )
 
         html.P(
             "A region is drawn only while the cuts are on the plane it was "

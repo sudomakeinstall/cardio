@@ -7,7 +7,7 @@ import pytest
 import vtk
 
 from cardio.logic.snap import ALIGN_STEP_NAME, alignment_rotation
-from cardio.logic.tiles import poses_along, sample_fractions
+from cardio.logic.tiles import NO_FOCUS, poses_along, sample_fractions
 from cardio.orientation import (
     euler_angle_to_rotation_matrix,
     minimal_rotation,
@@ -766,3 +766,163 @@ def test_an_enabled_overlay_lands_on_every_tile(tmp_path):
     for renderer in logic.scene.tile_views.renderers:
         # the volume cut and the overlay on top of it
         assert renderer.GetViewProps().GetNumberOfItems() == 2
+
+
+# Blowing up one tile
+
+
+def focusable(logic: FakeApp) -> FakeApp:
+    """A tiled app whose window is sized, so a point lands on a tile."""
+    logic.scene.tile_views.window.SetSize(400, 300)
+    logic.tiles.update_tiles(0)
+    return logic
+
+
+def point_in(logic: FakeApp, tile: int) -> tuple[float, float]:
+    """The middle of one tile, in the window's display pixels."""
+    renderer = logic.scene.tile_views.renderers[tile]
+    left, bottom = renderer.GetOrigin()
+    width, height = renderer.GetSize()
+    return left + width / 2, bottom + height / 2
+
+
+def test_a_double_click_blows_up_the_tile_it_landed_on(tmp_path):
+    logic = focusable(tiled(stacked_segmentation(tmp_path)))
+
+    logic.tiles.toggle_tile_focus(*point_in(logic, 4))
+
+    assert logic.server.state.tile_focus == 4
+
+
+def test_asking_for_the_same_tile_again_gives_the_grid_back(tmp_path):
+    logic = focusable(tiled(stacked_segmentation(tmp_path)))
+    where = point_in(logic, 4)
+
+    logic.tiles.toggle_tile_focus(*where)
+    logic.tiles._on_focus_changed()
+    logic.tiles.toggle_tile_focus(*where)
+
+    assert logic.server.state.tile_focus == NO_FOCUS
+
+
+def test_a_focused_grid_draws_the_tile_that_was_asked_for(tmp_path):
+    logic = focusable(tiled(stacked_segmentation(tmp_path)))
+
+    logic.tiles.toggle_tile_focus(*point_in(logic, 4))
+    logic.tiles._on_focus_changed()
+
+    views = logic.scene.tile_views
+    assert views.focus == 4
+    assert [i for i, r in enumerate(views.renderers) if r.GetDraw()] == [4]
+
+
+def test_a_point_outside_every_tile_asks_for_nothing(tmp_path):
+    logic = focusable(tiled(stacked_segmentation(tmp_path)))
+
+    logic.tiles.toggle_tile_focus(-10.0, -10.0)
+
+    assert logic.server.state.tile_focus == NO_FOCUS
+
+
+def test_a_missed_click_does_not_let_a_focused_tile_go(tmp_path):
+    logic = focusable(tiled(stacked_segmentation(tmp_path)))
+    logic.tiles.toggle_tile_focus(*point_in(logic, 4))
+    logic.tiles._on_focus_changed()
+
+    logic.tiles.toggle_tile_focus(-10.0, -10.0)
+
+    assert logic.server.state.tile_focus == 4
+
+
+def test_the_grid_is_not_focused_while_it_is_off_screen(tmp_path):
+    logic = focusable(tiled(stacked_segmentation(tmp_path)))
+    where = point_in(logic, 4)
+    logic.server.state.maximized_view = ""
+
+    logic.tiles.toggle_tile_focus(*where)
+
+    assert logic.server.state.tile_focus == NO_FOCUS
+
+
+def test_a_blown_up_tile_keeps_the_zoom_the_grid_was_at(tmp_path):
+    """The cut is the size it was in its cell times the window, rather than
+    refitted to the whole reformat."""
+    logic = focusable(tiled(stacked_segmentation(tmp_path)))
+    logic.scene.tile_views.zoom(3.0)
+    zoomed = scales(logic)
+
+    logic.tiles.toggle_tile_focus(*point_in(logic, 4))
+    logic.tiles._on_focus_changed()
+
+    assert scales(logic) == pytest.approx(zoomed)
+
+
+def test_the_round_trip_leaves_the_grid_as_it_was(tmp_path):
+    logic = focusable(tiled(stacked_segmentation(tmp_path)))
+    logic.scene.tile_views.zoom(3.0)
+    zoomed = scales(logic)
+    where = point_in(logic, 4)
+
+    for _ in range(2):
+        logic.tiles.toggle_tile_focus(*where)
+        logic.tiles._on_focus_changed()
+
+    assert logic.scene.tile_views.focus is None
+    assert scales(logic) == pytest.approx(zoomed)
+
+
+def test_a_reshape_the_focus_does_not_survive_gives_the_grid_back(tmp_path):
+    logic = focusable(tiled(stacked_segmentation(tmp_path)))
+    logic.tiles.toggle_tile_focus(*point_in(logic, 8))
+    logic.tiles._on_focus_changed()
+
+    logic.server.state.tile_rows = 1
+    logic.server.state.tile_cols = 2
+    logic.tiles.refresh()
+
+    assert logic.server.state.tile_focus == NO_FOCUS
+    assert logic.scene.tile_views.focus is None
+
+
+def label_share(logic: FakeApp) -> tuple[float, float]:
+    """The share of the viewport on screen the fitted labels take up.
+
+    ``tests/test_zoom.py``'s ``filled`` measures an MPR view the same way; the
+    grid is measured through whichever renderer is being drawn, which is the
+    blown-up tile while there is one.
+    """
+    views = logic.scene.tile_views
+    width, height = views.drawn[0].GetSize()
+    per_pixel = views.world_per_pixel()
+    centre, half_span, _ = logic.zoom.shadow()
+    edge = np.abs(centre) + half_span
+    return edge[0] / (per_pixel * width / 2), edge[1] / (per_pixel * height / 2)
+
+
+def locked(segmentation, **overrides) -> FakeApp:
+    """A tiled app whose zoom is held at a share of whatever is on screen."""
+    return tiled(
+        segmentation,
+        tile_rows=1,
+        tile_cols=6,
+        zoom_locked=True,
+        zoom_seg_label="",
+        zoom_labels=[1, 2, 3],
+        zoom_plane="ul",
+        zoom_fill=80.0,
+        **overrides,
+    )
+
+
+def test_a_held_fit_is_measured_again_against_the_tile_that_was_blown_up(tmp_path):
+    """A lock is a share of the viewport rather than a scale, so it is kept by
+    being measured again rather than by being left alone."""
+    logic = focusable(locked(stacked_segmentation(tmp_path)))
+    logic.zoom.refit()
+    assert max(label_share(logic)) == pytest.approx(0.80)
+
+    logic.tiles.toggle_tile_focus(*point_in(logic, 3))
+    logic.tiles._on_focus_changed()
+
+    assert logic.scene.tile_views.focus == 3
+    assert max(label_share(logic)) == pytest.approx(0.80)

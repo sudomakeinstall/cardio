@@ -246,6 +246,10 @@ SESSION = _declare(
     script_saved_at="written when the log is exported as a script",
     script_summary="the one line the console shows about the last export",
     snap_no_interface="derived from whether the selection has an interface",
+    tile_focus=(
+        "which tile is blown up is a thing a hand is doing to the grid it is "
+        "looking at, not one the app is opened in"
+    ),
     trame__busy="trame's own, raised while a round trip is in flight",
     volumetry_ok="whether the last export wrote anything",
     volumetry_structure="which structure's page is showing is browsing state",
