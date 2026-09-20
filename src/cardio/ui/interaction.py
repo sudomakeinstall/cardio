@@ -57,6 +57,23 @@ CANCEL_TRACE_KEY = "x"
 # keypress is worse than one that has to be given up through a button.
 EDIT_KEY = "e"
 
+# Stepping through the study with vim's hjkl: the frame under the fingers that
+# move left and right, the slice under the ones that move up and down. Both
+# letters were spoken for -- ``h`` opened the help and ``l`` toggled the
+# crosshairs -- and those moved to the keys below rather than the other way
+# round, being reached for once a session against once a second.
+FRAME_KEYS = {"h": "decrement_frame", "l": "increment_frame"}
+
+# Which way one press travels, in the units the wheel turns in: a notch each,
+# signed as the wheel is, so ``k`` goes the way an upward drag does.
+SLICE_KEYS = {"k": 1.0, "j": -1.0}
+
+# Where hjkl sent the two it displaced. ``?`` is the help key most things
+# already use, and ``+`` is a picture of what it draws; both are punctuation,
+# so neither can collide with a letter a view or a mode wants later.
+HELP_KEY = "?"
+CROSSHAIR_KEY = "+"
+
 # Keys that maximize a view, and the view each one names. The cut views kept
 # their anatomical letters when they were renamed for where they sit, since
 # the keys are what fingers know and no pane letter is free anyway.
@@ -93,6 +110,7 @@ class Interaction:
         self.level_sensitivity = 2.0
         self.slice_sensitivity = 1.0
         self.wheel_sensitivity = 1.0
+        self.key_slice_sensitivity = 1.0
         self.zoom_sensitivity = 0.005
 
         self.last_keypress_time = {}
@@ -117,7 +135,7 @@ class Interaction:
 
         match event["type"]:
             case "KeyPress":
-                self._on_key(event["key"])
+                self._on_key(event["key"], view_name)
 
             case "LeftButtonPress":
                 self.left_dragging = True
@@ -240,8 +258,13 @@ class Interaction:
         elif view_name in MPR_VIEWS:
             self.logic.dispatch("zoom_views", factor=factor)
 
-    def _on_key(self, key):
-        """Apply a keyboard shortcut, ignoring repeats inside the debounce."""
+    def _on_key(self, key, view_name=None):
+        """Apply a keyboard shortcut, ignoring repeats inside the debounce.
+
+        ``view_name`` is the view the key was pressed over, which only the
+        slice keys need: they move one cut, the way the wheel does, and the one
+        they move is the one under the cursor.
+        """
         now = time.time() * 1000
         if now - self.last_keypress_time.get(key, 0) < self.keypress_debounce_ms:
             return
@@ -249,9 +272,17 @@ class Interaction:
 
         if key.isdigit() and int(key) in presets:
             self.logic.dispatch("set_window_level_preset", preset=int(key))
-        elif key == "l":
+        elif key in FRAME_KEYS:
+            self.logic.dispatch(FRAME_KEYS[key])
+        elif key in SLICE_KEYS and view_name in MPR_VIEWS:
+            self.logic.dispatch(
+                "scroll_slice",
+                view_name=view_name,
+                distance=SLICE_KEYS[key] * self.key_slice_sensitivity,
+            )
+        elif key == CROSSHAIR_KEY:
             self.logic.dispatch("toggle_crosshairs")
-        elif key == "h":
+        elif key == HELP_KEY:
             self.logic.dispatch("toggle_help")
         elif key == "i":
             self.logic.dispatch("toggle_metadata")

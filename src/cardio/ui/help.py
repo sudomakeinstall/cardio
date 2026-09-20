@@ -10,7 +10,7 @@ from .common import sheet_dialog
 
 
 def help_dialog():
-    """The shortcut reference, toggled with the `h` key."""
+    """The shortcut reference, toggled with the `?` key."""
     with sheet_dialog("help_overlay_visible", "Keyboard Shortcuts & Controls"):
         html.H3("Keyboard Shortcuts", classes="text-h6 mb-3")
         with vuetify.VTable(density="compact", classes="mb-4"):
@@ -20,7 +20,7 @@ def help_dialog():
                     html.Th("Action")
             with html.Tbody():
                 with html.Tr():
-                    html.Td("h")
+                    html.Td("?")
                     html.Td("Toggle this help window")
                 with html.Tr():
                     html.Td("i")
@@ -47,8 +47,20 @@ def help_dialog():
                     html.Td("y")
                     html.Td("Toggle volumetry charts")
                 with html.Tr():
-                    html.Td("l")
+                    html.Td("+")
                     html.Td("Toggle crosshairs")
+                with html.Tr():
+                    html.Td("h")
+                    html.Td("Step back one frame")
+                with html.Tr():
+                    html.Td("l")
+                    html.Td("Step forward one frame")
+                with html.Tr():
+                    html.Td("j")
+                    html.Td("Scroll back one slice")
+                with html.Tr():
+                    html.Td("k")
+                    html.Td("Scroll forward one slice")
                 with html.Tr():
                     html.Td("m")
                     html.Td("Trace a region on a cut")
@@ -61,6 +73,14 @@ def help_dialog():
                 with html.Tr():
                     html.Td("e")
                     html.Td("Correct the region the drawer has highlighted")
+
+        html.P(
+            "The slice keys move the cut under the cursor, as the wheel does, "
+            "and in traverse mode they travel the path instead. The frame "
+            "keys are for a study standing still: neither one moves while "
+            "playback is running.",
+            classes="text-caption mb-4",
+        )
 
         html.H3("Window/Level Presets", classes="text-h6 mb-3")
         with vuetify.VTable(density="compact", classes="mb-4"):

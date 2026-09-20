@@ -17,7 +17,15 @@ import pytest
 
 # Internal
 import cardio.ui.interaction as interaction_module
-from cardio.ui.interaction import HANDLED_EVENTS, MAXIMIZE_KEYS, Interaction
+from cardio.ui.interaction import (
+    CROSSHAIR_KEY,
+    FRAME_KEYS,
+    HANDLED_EVENTS,
+    HELP_KEY,
+    MAXIMIZE_KEYS,
+    SLICE_KEYS,
+    Interaction,
+)
 
 
 class RecordingMPR:
@@ -107,8 +115,8 @@ def interaction():
     return Interaction(FakeLogic())
 
 
-def press(interaction, key):
-    interaction.on_event({"type": "KeyPress", "key": key})
+def press(interaction, key, view=None):
+    interaction.on_event({"type": "KeyPress", "key": key}, view_name=view)
     # defeat the debounce, so a test can press twice
     interaction.last_keypress_time.clear()
 
@@ -132,6 +140,12 @@ def wheel(interaction, view, spin_y):
         {"type": "MouseWheel", "spinY": spin_y, "position": {"x": 50, "y": 50}},
         view_name=view,
     )
+
+
+def listed_keys() -> set[str]:
+    """Every key the shortcut sheet writes down, as it writes it."""
+    source = (pl.Path(interaction_module.__file__).parent / "help.py").read_text()
+    return set(re.findall(r'html\.Td\("(\S)"\)', source))
 
 
 def test_listeners_cover_every_handled_event(interaction):
@@ -163,16 +177,66 @@ def test_the_help_sheet_lists_every_key_that_maximizes_a_view():
     sheet that is the only place it is written down -- which is not something
     anybody notices, because the key works.
     """
-    source = (pl.Path(interaction_module.__file__).parent / "help.py").read_text()
-    listed = set(re.findall(r'html\.Td\("(\w)"\)', source))
-
-    assert set(MAXIMIZE_KEYS) <= listed
+    assert set(MAXIMIZE_KEYS) <= listed_keys()
 
 
-def test_l_toggles_crosshairs_and_h_toggles_help(interaction):
-    press(interaction, "l")
-    press(interaction, "h")
+def test_the_help_sheet_lists_every_key_that_is_bound():
+    """Same reason, for the keys that are not about maximizing a view.
+
+    ``?`` and ``+`` are here because hjkl displaced them, and a reference that
+    still says ``h`` opens the help is worse than no reference at all.
+    """
+    bound = set(FRAME_KEYS) | set(SLICE_KEYS) | {HELP_KEY, CROSSHAIR_KEY}
+
+    assert bound <= listed_keys()
+
+
+def test_plus_toggles_crosshairs_and_question_toggles_help(interaction):
+    """Both were letters until hjkl wanted them."""
+    press(interaction, CROSSHAIR_KEY)
+    press(interaction, HELP_KEY)
     assert interaction.logic.names == ["toggle_crosshairs", "toggle_help"]
+
+
+@pytest.mark.parametrize(
+    "key, action",
+    [("h", "decrement_frame"), ("l", "increment_frame")],
+)
+def test_h_and_l_step_the_frame(interaction, key, action):
+    press(interaction, key, view="ul")
+    assert interaction.logic.names == [action]
+
+
+def test_the_frame_keys_do_not_need_a_view(interaction):
+    """A frame belongs to the study rather than to any one cut, so a press
+    over the volume or the tiles steps it too."""
+    press(interaction, "l", view="volume")
+    assert interaction.logic.names == ["increment_frame"]
+
+
+@pytest.mark.parametrize("key, distance", [("k", 1.0), ("j", -1.0)])
+def test_j_and_k_scroll_the_slice_under_the_cursor(interaction, key, distance):
+    press(interaction, key, view="lr")
+    assert interaction.logic.arguments("scroll_slice") == [
+        {"view_name": "lr", "distance": distance}
+    ]
+
+
+def test_k_travels_the_way_an_upward_wheel_does(interaction):
+    """The key and the wheel are the same gesture, so they are signed alike."""
+    press(interaction, "k", view="ul")
+    wheel(interaction, "ul", 1)
+
+    distances = [
+        call["distance"] for call in interaction.logic.arguments("scroll_slice")
+    ]
+    assert len(distances) == 2 and distances[0] > 0 and distances[1] > 0
+
+
+@pytest.mark.parametrize("view", ["volume", "tile", "volumetry", None])
+def test_the_slice_keys_are_ignored_where_there_is_no_slice(interaction, view):
+    press(interaction, "j", view=view)
+    assert interaction.logic.calls == []
 
 
 def test_i_toggles_the_metadata_sheet(interaction):
