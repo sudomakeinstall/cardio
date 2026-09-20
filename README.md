@@ -341,9 +341,9 @@ files differently moves an entry between them.
 
 ### Measuring an area on a cut
 
-Press `m`, click round the thing you want the area of, and right-click to close
-it.  The region is drawn on the cut with the area it encloses beside it, and
-listed in the Measurements panel.
+Press `m`, click round the thing you want the area of, and right-click or
+press Enter to close it.  The region is drawn on the cut with the area it
+encloses beside it, and listed in the Measurements panel.
 
 An area measured on a cut means nothing without the cut, so each region carries
 the plane it was traced in and the pose that produced it.  It is drawn only
@@ -355,6 +355,7 @@ it on screen, because none of those leaves the plane.
 | Key | Does |
 | --- | --- |
 | `m` | Start or stop tracing |
+| Enter | Close the region and measure it |
 | `u` | Take back the last point |
 | `x` | Give up on the region being traced |
 | `e` | Correct the region the drawer has highlighted |

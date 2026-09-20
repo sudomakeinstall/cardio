@@ -670,6 +670,7 @@ def test_a_press_in_one_view_and_a_release_in_another_is_not_a_click(interaction
     "key, action",
     [
         ("m", "toggle_measuring"),
+        ("Enter", "close_measurement"),
         ("u", "undo_measurement_point"),
         ("x", "cancel_measurement"),
         ("e", "toggle_measurement_edit"),
@@ -681,9 +682,11 @@ def test_the_measuring_keys_reach_their_actions(interaction, key, action):
     assert (action, {}) in interaction.logic.calls
 
 
-def test_the_measuring_keys_are_printable(interaction):
-    """They have to be: the views forward the DOM ``keypress`` event, which
-    does not fire for Escape or Backspace."""
+def test_the_measuring_keys_are_ones_a_keypress_fires_for(interaction):
+    """The views forward the DOM ``keypress`` event, which does not fire for
+    Escape or Backspace. Every printable key fires it; Enter is the one key
+    that fires it without being printable, and is spelled as the DOM spells
+    it."""
     for key in (
         interaction_module.MEASURE_KEY,
         interaction_module.UNDO_POINT_KEY,
@@ -691,6 +694,8 @@ def test_the_measuring_keys_are_printable(interaction):
         interaction_module.EDIT_KEY,
     ):
         assert len(key) == 1 and key.isprintable()
+
+    assert interaction_module.CLOSE_TRACE_KEY == "Enter"
 
 
 # --- correcting a region ------------------------------------------------------

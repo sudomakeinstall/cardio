@@ -52,6 +52,13 @@ MEASURE_KEY = "m"
 UNDO_POINT_KEY = "u"
 CANCEL_TRACE_KEY = "x"
 
+# Closing the region, alongside the right click that has always done it: a
+# hand on the keyboard finishes a region the way it finishes anything else.
+# The one measuring key that is not printable and does not have to be, since
+# ``keypress`` does fire for Enter -- it carries a character where Escape and
+# Backspace carry none -- and spelled as the DOM event spells it.
+CLOSE_TRACE_KEY = "Enter"
+
 # Correcting a region already closed. Deliberately not given up to ``x``, which
 # means give up on the trace in progress: a correction discarded to a stray
 # keypress is worse than one that has to be given up through a button.
@@ -294,6 +301,8 @@ class Interaction:
             self.logic.dispatch("undo_measurement_point")
         elif key == CANCEL_TRACE_KEY:
             self.logic.dispatch("cancel_measurement")
+        elif key == CLOSE_TRACE_KEY:
+            self.logic.dispatch("close_measurement")
         elif key == EDIT_KEY:
             self.logic.dispatch("toggle_measurement_edit")
         elif key in MAXIMIZE_KEYS:
