@@ -2,6 +2,7 @@ import functools
 import logging
 import pathlib as pl
 import re
+import string
 import typing as ty
 
 import pydantic as pc
@@ -34,7 +35,7 @@ class Object(pc.BaseModel):
     label: str = pc.Field(description="Object identifier (only [a-zA-Z0-9_] allowed)")
     directory: pl.Path = pc.Field(description="Directory containing object files")
     pattern: str | None = pc.Field(
-        default=None, description="Filename pattern with ${frame} placeholder"
+        default=None, description="Filename pattern with {frame} placeholder"
     )
     frame_start: pc.NonNegativeInt = 0
     frame_interval: pc.PositiveInt = 1
@@ -102,11 +103,16 @@ class Object(pc.BaseModel):
         if not isinstance(v, str):
             raise ValueError("pattern must be a string")
 
-        if not re.match(r"^[a-zA-Z0-9_\-.${}:]+$", v):
+        if not re.match(r"^[a-zA-Z0-9_\-.{}:]+$", v):
             raise ValueError("Pattern contains unsafe characters")
 
-        if "frame" not in v:
-            raise ValueError("Pattern must contain $frame placeholder")
+        fields = {
+            name for _, name, _, _ in string.Formatter().parse(v) if name is not None
+        }
+        if fields != {"frame"}:
+            raise ValueError(
+                f"pattern must contain a {{frame}} placeholder and no other fields; got {v!r}"
+            )
 
         return v
 

@@ -51,7 +51,7 @@ class Mesh(Object):
     kind: ty.ClassVar[str] = "mesh"
 
     pattern: str = pc.Field(
-        default="{frame}.obj", description="Filename pattern with $frame placeholder"
+        default="{frame}.obj", description="Filename pattern with {frame} placeholder"
     )
     _actors: list[vtk.vtkActor] = pc.PrivateAttr(default_factory=list)
     properties: vtkPropertyConfig = pc.Field(

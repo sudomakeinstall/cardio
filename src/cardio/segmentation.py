@@ -454,7 +454,7 @@ class Segmentation(Object):
 
     pattern: str = pc.Field(
         default="{frame}.nii.gz",
-        description="Filename pattern with $frame placeholder",
+        description="Filename pattern with {frame} placeholder",
     )
     _actors: list[vtk.vtkActor] = pc.PrivateAttr(default_factory=list)
     _meshes: list[vtk.vtkPolyData] = pc.PrivateAttr(default_factory=list)

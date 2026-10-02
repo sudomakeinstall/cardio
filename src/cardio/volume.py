@@ -21,7 +21,7 @@ class Volume(Object):
 
     pattern: str = pc.Field(
         default="{frame}.nii.gz",
-        description="Filename pattern with $frame placeholder",
+        description="Filename pattern with {frame} placeholder",
     )
     transfer_function_preset: str = pc.Field(
         default="bone", description="Transfer function preset key"
