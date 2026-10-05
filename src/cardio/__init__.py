@@ -23,7 +23,6 @@ from .scene import Scene
 from .scripting import script
 from .segmentation import Segmentation
 from .session import Session
-from .ui import UI
 from .volume import Volume
 from .volume_property_presets import (
     list_volume_property_presets,
@@ -44,3 +43,12 @@ __all__ = [
     "script",
     "window_level",
 ]
+
+
+def __getattr__(name: str):
+    """``UI`` on first use, so a headless install needs none of the widgets."""
+    if name == "UI":
+        from .ui import UI
+
+        return UI
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

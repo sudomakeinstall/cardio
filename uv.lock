@@ -103,7 +103,6 @@ version = "2026.9.20"
 source = { editable = "." }
 dependencies = [
     { name = "highdicom" },
-    { name = "imageio-ffmpeg" },
     { name = "itk" },
     { name = "numpy" },
     { name = "pillow" },
@@ -120,21 +119,32 @@ dependencies = [
     { name = "trame" },
     { name = "trame-client" },
     { name = "trame-server" },
-    { name = "trame-vtk" },
-    { name = "trame-vuetify" },
     { name = "vtk" },
 ]
 
 [package.optional-dependencies]
 dev = [
+    { name = "imageio-ffmpeg" },
     { name = "pytest" },
     { name = "ruff" },
+    { name = "trame-vtk" },
+    { name = "trame-vuetify" },
+]
+ui = [
+    { name = "imageio-ffmpeg" },
+    { name = "trame-vtk" },
+    { name = "trame-vuetify" },
+]
+video = [
+    { name = "imageio-ffmpeg" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "cardio", extras = ["ui"], marker = "extra == 'dev'" },
+    { name = "cardio", extras = ["video"], marker = "extra == 'ui'" },
     { name = "highdicom", specifier = ">=0.28.1" },
-    { name = "imageio-ffmpeg", specifier = ">=0.6.0" },
+    { name = "imageio-ffmpeg", marker = "extra == 'video'", specifier = ">=0.6.0" },
     { name = "itk", specifier = ">=5.4.4.post1" },
     { name = "numpy", specifier = ">=2.3.2" },
     { name = "pillow", specifier = ">=11.3.0" },
@@ -152,11 +162,11 @@ requires-dist = [
     { name = "trame", specifier = ">=3.12.0" },
     { name = "trame-client", specifier = ">=3.12.1" },
     { name = "trame-server", specifier = ">=3.12.0" },
-    { name = "trame-vtk", specifier = ">=2.11.16" },
-    { name = "trame-vuetify", specifier = ">=3.2.2" },
+    { name = "trame-vtk", marker = "extra == 'ui'", specifier = ">=2.11.16" },
+    { name = "trame-vuetify", marker = "extra == 'ui'", specifier = ">=3.2.2" },
     { name = "vtk", specifier = ">=9.5.0" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["ui", "video", "dev"]
 
 [[package]]
 name = "colorama"

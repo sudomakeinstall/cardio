@@ -5,7 +5,6 @@ import pathlib as pl
 import tempfile
 
 # Third Party
-import imageio_ffmpeg as iio
 import numpy as np
 import PIL.Image
 import vtk
@@ -154,6 +153,12 @@ class Mp4Writer(AnimationWriter):
         rgb = rgb[: rows - rows % 2, : columns - columns % 2]
 
         if self._pipe is None:
+            try:
+                import imageio_ffmpeg as iio
+            except ModuleNotFoundError as error:
+                raise ModuleNotFoundError(
+                    "mp4 capture needs ffmpeg: pip install 'cardio[video]'"
+                ) from error
             self._pipe = iio.write_frames(
                 str(self.path),
                 (rgb.shape[1], rgb.shape[0]),

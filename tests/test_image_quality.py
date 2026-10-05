@@ -7,9 +7,9 @@ raising into the state flush that called it.
 
 # Third Party
 import pytest
+import trame_vtk.modules.vtk as tvtk
 
 # Internal
-import cardio.image_quality as image_quality
 from cardio.image_quality import (
     DEFAULT_PLAYBACK_QUALITY,
     DEFAULT_PLAYBACK_RESOLUTION,
@@ -53,7 +53,7 @@ class RecordingHelper:
 @pytest.fixture
 def helper(monkeypatch) -> RecordingHelper:
     recorder = RecordingHelper()
-    monkeypatch.setattr(image_quality.tvtk, "get_helper", lambda server: recorder)
+    monkeypatch.setattr(tvtk, "get_helper", lambda server: recorder)
     return recorder
 
 
@@ -125,7 +125,7 @@ def test_nothing_happens_before_a_client_connects(helper):
 
 
 def test_nothing_happens_without_a_render_helper(monkeypatch):
-    monkeypatch.setattr(image_quality.tvtk, "get_helper", lambda server: None)
+    monkeypatch.setattr(tvtk, "get_helper", lambda server: None)
 
     assert set_image_quality(FakeServer(), FakeScene(), 40) is False
 

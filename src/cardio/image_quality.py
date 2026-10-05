@@ -10,9 +10,6 @@ whenever the ratio is not 1, so a resolution below full costs a resize on every
 play and pause -- which is why it defaults to full and is opted into.
 """
 
-# Third Party
-import trame_vtk.modules.vtk as tvtk
-
 FULL_QUALITY = 100
 FULL_RESOLUTION = 100
 DEFAULT_PLAYBACK_QUALITY = 60
@@ -49,8 +46,15 @@ def set_image_quality(server, scene, quality: int, ratio: float = 1.0) -> bool:
     False when there is nothing to set it on: the render helper and the
     protocol both arrive with the first connected client.
     """
+    if not server.protocol:
+        return False
+
+    # Deferred: trame-vtk comes with the ui extra, and only a connected browser
+    # is pushed images.
+    import trame_vtk.modules.vtk as tvtk
+
     helper = tvtk.get_helper(server)
-    if helper is None or not server.protocol:
+    if helper is None:
         return False
 
     for window in render_windows(scene):

@@ -17,9 +17,13 @@ configuration file, or a combination of the two.
 ```bash
 $ cd /path/to/your/project
 $ uv init
-$ uv add cardio
+$ uv add 'cardio[ui]'
 $ . ./.venv/bin/activate
 ```
+
+The `ui` extra brings the browser interface and mp4 capture. A headless
+deployment that only scripts captures can `uv add cardio`, adding
+`'cardio[video]'` if it writes mp4.
 
 ### Reading DICOM
 
