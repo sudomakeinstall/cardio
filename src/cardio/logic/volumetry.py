@@ -24,7 +24,16 @@ import pydicom as pd
 # Internal
 from .. import dicom
 from ..action import action
-from ..capture import Context, WindowFrames, preflight, seg, sr, wants_alpha, writer_for
+from ..capture import (
+    Context,
+    WindowFrames,
+    preflight,
+    seg,
+    sr,
+    wants_alpha,
+    writer_for,
+    writes_series,
+)
 from ..volumetry import (
     STRUCTURES,
     Result,
@@ -439,6 +448,7 @@ class VolumetryController(Controller):
         groups = [measurement.group for measurement in result.measurements]
         equipment = self.scene.capture_equipment
         uid_root = self.scene.uid_root
+        naming = self.scene.capture_series
 
         segmentations = []
         if segmentation is not None:
@@ -449,6 +459,9 @@ class VolumetryController(Controller):
                 groups=groups,
                 equipment=equipment,
                 uid_root=uid_root,
+                series_number=naming.segmentation.number,
+                series_description=naming.segmentation.description
+                or seg.DEFAULT_DESCRIPTION,
             )
             segmentations = [pd.dcmread(path) for path in paths]
 
@@ -459,6 +472,9 @@ class VolumetryController(Controller):
             segmentations=segmentations,
             equipment=equipment,
             uid_root=uid_root,
+            series_number=naming.measurements.number,
+            series_description=naming.measurements.description
+            or sr.DEFAULT_DESCRIPTION,
         )
         return len(segmentations) + 1
 
@@ -485,6 +501,14 @@ class VolumetryController(Controller):
             views.window.SetSize(*self.scene.headless_size)
 
         fmt = self.app.capture.capture_format
+        identity = self.app.capture.identity()
+        if writes_series(fmt):
+            # The pages are a capture, and refused on the terms every capture is.
+            refused = self.app.capture.refusal(identity)
+            if refused:
+                logger.warning(f"{refused}. The pages were not written.")
+                return 0
+
         number, description = self.app.capture.series_for(VOLUMETRY_LAYOUT)
         context = Context(
             directory=directory,
@@ -492,7 +516,7 @@ class VolumetryController(Controller):
             frame_duration=self.app.capture.frame_duration(),
             window=self.server.state.mpr_window,
             level=self.server.state.mpr_level,
-            identity=self.app.capture.identity(),
+            identity=identity,
             series_number=number,
             series_description=description or REPORT,
             # A chart has no cut behind it, so a data capture of one records

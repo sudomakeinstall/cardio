@@ -10,7 +10,7 @@ import pydicom as pd
 import pytest
 
 # Internal
-from cardio.capture import seg, sr
+from cardio.capture import Series, SeriesTags, seg, sr
 from cardio.capture.equipment import Equipment
 from cardio.volumetry import StructureGroup, measure
 from tests.test_seg import PHASES, drawn_on, groups
@@ -314,3 +314,45 @@ def test_the_written_report_points_at_the_written_segmentation(tmp_path):
 
     assert cited == {written.SOPInstanceUID}
     assert document.StudyInstanceUID == written.StudyInstanceUID
+
+
+def test_the_segmentation_and_report_are_filed_under_configured_series(tmp_path):
+    _server, scene, logic = dicom_backed_app(tmp_path)
+    scene.capture_series = SeriesTags(
+        segmentation=Series(number=9006, description="3DQ: Segmentation"),
+        measurements=Series(number=9007, description="3DQ: Measurements"),
+    )
+
+    logic.volumetry.save_volumetry()
+
+    directory = max(scene.volumetry_directory.iterdir())
+    segmentation = pd.dcmread(min((directory / "segmentation").glob("*.dcm")))
+    document = pd.dcmread(directory / "measurements.dcm")
+
+    assert (segmentation.SeriesNumber, segmentation.SeriesDescription) == (
+        9006,
+        "3DQ: Segmentation",
+    )
+    assert (document.SeriesNumber, document.SeriesDescription) == (
+        9007,
+        "3DQ: Measurements",
+    )
+
+
+def test_unnamed_segmentation_and_report_keep_their_defaults(tmp_path):
+    _server, scene, logic = dicom_backed_app(tmp_path)
+
+    logic.volumetry.save_volumetry()
+
+    directory = max(scene.volumetry_directory.iterdir())
+    segmentation = pd.dcmread(min((directory / "segmentation").glob("*.dcm")))
+    document = pd.dcmread(directory / "measurements.dcm")
+
+    assert (segmentation.SeriesNumber, segmentation.SeriesDescription) == (
+        300,
+        seg.DEFAULT_DESCRIPTION,
+    )
+    assert (document.SeriesNumber, document.SeriesDescription) == (
+        301,
+        sr.DEFAULT_DESCRIPTION,
+    )

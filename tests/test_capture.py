@@ -2205,6 +2205,21 @@ def test_a_refusal_says_what_is_missing_before_it_refuses(tmp_path, caplog):
     assert "Refused" in logic.capture.server.state.capture_summary
 
 
+def test_a_refusal_is_logged_for_a_session_with_no_drawer(tmp_path, caplog):
+    """A script reads the log, not the summary the drawer shows."""
+    _server, _scene, logic = built(
+        tmp_path, "ul", capture_format="dicom-data", research=False
+    )
+
+    with caplog.at_level(logging.WARNING):
+        capture(logic)
+
+    assert any(
+        record.levelno == logging.WARNING and record.message.startswith("Refused")
+        for record in caplog.records
+    )
+
+
 def test_a_picture_capture_is_not_pre_flighted(tmp_path):
     """The checks are about what a receiver wants; a PNG has no receiver."""
     _server, _scene, logic = built(tmp_path, "ul", capture_format="png", research=False)

@@ -94,6 +94,22 @@ class SeriesTags(pc.BaseModel):
         default_factory=lambda: _numbered("volumetry"),
         description="The volumetry chart's series.",
     )
+    # Not viewports: the objects a volumetry export writes beside its pages,
+    # named here so a deployment can file them with the rest of its series.
+    segmentation: Series = pc.Field(
+        default_factory=lambda: Series(number=300),
+        description=(
+            "The volumetry export's DICOM Segmentation; an empty description "
+            "writes 'cardio segmentation'."
+        ),
+    )
+    measurements: Series = pc.Field(
+        default_factory=lambda: Series(number=301),
+        description=(
+            "The volumetry export's Structured Report; an empty description "
+            "writes 'cardio volumetry'."
+        ),
+    )
 
     def of(self, viewport: str) -> Series:
         """How ``viewport``'s series is named."""

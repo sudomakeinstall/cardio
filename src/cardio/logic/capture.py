@@ -414,7 +414,9 @@ class CaptureController(Controller):
             refused = self.refusal(identity)
             if refused:
                 # Before any writer and any frame: a refused capture should not
-                # first spend a cardiac cycle turning the camera.
+                # first spend a cardiac cycle turning the camera.  Logged as
+                # well as reported, since a script has no drawer to read.
+                logger.warning(f"{refused}.")
                 self.report(refused, False)
                 return
             self.report_series(windows)

@@ -15,6 +15,7 @@ the reader back where they were afterwards.
 # System
 import csv
 import itertools as it
+import logging
 
 # Third Party
 import pydicom as pd
@@ -505,6 +506,8 @@ def test_an_export_writes_its_pages_in_the_format_the_capture_is_set_to(app):
     """The report is a sequence, which is what the capture writers take: asking
     for dicom-rendered is what makes it a Secondary Capture series."""
     server, scene, logic = app
+    # Research, since the phantom was read from a file and has no patient.
+    scene.research = True
     with server.state:
         server.state.capture_format = "dicom-rendered"
 
@@ -517,6 +520,8 @@ def test_the_report_pages_are_written_under_the_configured_identity(tmp_path):
     hands the writer the root and the equipment the scene configures.  A page
     written under a library's root says a library made it."""
     server, scene, logic = built(tmp_path)
+    # Research, since the phantom was read from a file and has no patient.
+    scene.research = True
     scene.uid_root = "1.2.826.0.1.3680043.10.888"
     scene.capture_equipment = Equipment(institution_name="St Elsewhere")
     with server.state:
@@ -617,3 +622,26 @@ def test_an_export_does_not_need_the_charts_to_be_on_screen(tmp_path):
     directory = exported(logic, scene)
 
     assert len(list((directory / "pages").iterdir())) == 2
+
+
+def test_the_report_pages_are_refused_on_the_terms_a_capture_is(tmp_path, caplog):
+    """A page under a patient this app made up is as wrong as a screenshot."""
+    server, scene, logic = built(tmp_path)
+    scene.uid_root = "1.2.826.0.1.3680043.10.888"
+    with server.state:
+        server.state.capture_format = "dicom-rendered"
+
+    with caplog.at_level(logging.WARNING):
+        directory = exported(logic, scene)
+
+    assert not (directory / "pages").exists()
+    assert (directory / "timeseries.csv").exists()
+    assert "The pages were not written" in caplog.text
+
+
+def test_picture_pages_are_not_pre_flighted(tmp_path):
+    server, scene, logic = built(tmp_path)
+    with server.state:
+        server.state.capture_format = "png"
+
+    assert list((exported(logic, scene) / "pages").iterdir())
