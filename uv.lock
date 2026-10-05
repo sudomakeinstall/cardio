@@ -99,7 +99,7 @@ wheels = [
 
 [[package]]
 name = "cardio"
-version = "2026.9.20"
+version = "2026.10.5"
 source = { editable = "." }
 dependencies = [
     { name = "highdicom" },
